@@ -64,4 +64,4 @@ core_patches/
 *.txt
 cleanup_*.ps1
 stop_services*.ps1
-lux_installed_backup.exe
+lux_installed_backup.exeoldchat.md
