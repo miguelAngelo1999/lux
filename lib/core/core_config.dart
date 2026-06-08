@@ -165,11 +165,11 @@ class ProxyItem {
       : id = (json['id'] as String),
         name = (json['name'] as String),
         type = (json['type'] as String),
-        server = (json['server'] as String),
+        server = (json['server'] is String ? json['server'] as String : null),
         subscription = (json['subscription'] is String
             ? json['subscription'] as String
             : null),
-        port = (json['port'] as int),
+        port = (json['port'] is int ? json['port'] as int : null),
         password = (json['password'] is String ? json['password'] : null),
         passwordLocked = (json['passwordLocked'] is bool ? json['passwordLocked'] : false);
 
