@@ -13,7 +13,7 @@ import 'package:lux/tr.dart';
 import 'package:lux/tray.dart';
 import 'package:lux/util/notifier.dart';
 import 'package:lux/util/process_manager.dart';
-import 'package:lux/widget/proxy_edit_dialog.dart';
+import 'package:lux/widget/quick_edit_window.dart';
 import 'package:lux/util/utils.dart';
 import 'package:lux/widget/progress_indicator.dart';
 import 'package:path/path.dart' as path;
@@ -54,6 +54,7 @@ class _HomeState extends State<Home>
   late final AppLifecycleListener _listener;
   var needRestart = false;
   dynamic coreError;
+  bool _quickEditMode = false;
 
   // Reload proxy list and connection state into tray menu
   Future<void> _refreshTray() async {
@@ -249,25 +250,15 @@ class _HomeState extends State<Home>
       await coreManager?.selectProxy(proxyId);
       _refreshTray();
     } else if (key.startsWith('proxy_edit_')) {
-      // Quick edit — show window and open edit dialog
-      final proxyId = key.replaceFirst('proxy_edit_', '');
+      // Quick edit — show mini floating window near menubar
       await windowManager.setSkipTaskbar(false);
+      // Position near top-right of screen (near menubar)
+      await windowManager.setSize(const Size(340, 310));
+      await windowManager.setPosition(const Offset(9999, 28)); // top-right
       await windowManager.show();
       await windowManager.focus();
-      // Small delay to let window render
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted && coreManager != null) {
-        final detail = await coreManager!.getProxyDetail(proxyId);
-        if (mounted && detail != null) {
-          showDialog(
-            context: context,
-            builder: (_) => ProxyEditDialog(
-              coreManager: coreManager!,
-              initialValue: detail,
-              onSaved: () => _refreshTray(),
-            ),
-          );
-        }
+      if (mounted) {
+        setState(() => _quickEditMode = true);
       }
     } else if (key == 'exit_app') {
       await coreManager?.exitCore();
@@ -340,6 +331,20 @@ class _HomeState extends State<Home>
     }
     if (coreManager == null || !isCoreReady.value) {
       return Scaffold(body: AppProgressIndicator());
+    }
+    if (_quickEditMode) {
+      return QuickEditWindow(
+        coreManager: coreManager!,
+        onDone: () async {
+          setState(() => _quickEditMode = false);
+          // Restore full window size and hide back to tray
+          await windowManager.setSize(const Size(800, 650));
+          await windowManager.center();
+          await windowManager.hide();
+          await windowManager.setSkipTaskbar(true);
+          _refreshTray();
+        },
+      );
     }
     return Dashboard(homeDir, baseUrl, urlStr, coreManager!);
   }
