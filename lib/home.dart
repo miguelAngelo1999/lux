@@ -87,7 +87,7 @@ class _HomeState extends State<Home>
       urlStr = curUrlStr;
     });
 
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isMacOS) {
       initSystemTray();
     }
 
@@ -200,6 +200,7 @@ class _HomeState extends State<Home>
 
   @override
   void onTrayIconMouseDown() {
+    windowManager.setSkipTaskbar(false);
     windowManager.show();
     windowManager.focus();
   }
@@ -212,8 +213,15 @@ class _HomeState extends State<Home>
   @override
   void onTrayMenuItemClick(MenuItem menuItem) async {
     if (menuItem.key == 'open_dashboard') {
-      final Uri url = Uri.parse(urlStr);
-      launchUrl(url);
+      await windowManager.setSkipTaskbar(false);
+      await windowManager.show();
+      await windowManager.focus();
+    } else if (menuItem.key == 'connect') {
+      await coreManager?.start();
+      initSystemTray(isConnected: true);
+    } else if (menuItem.key == 'disconnect') {
+      await coreManager?.stop();
+      initSystemTray(isConnected: false);
     } else if (menuItem.key == 'exit_app') {
       await coreManager?.exitCore();
       exit(0);
