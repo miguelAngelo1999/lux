@@ -13,6 +13,7 @@ import 'package:lux/tr.dart';
 import 'package:lux/tray.dart';
 import 'package:lux/util/notifier.dart';
 import 'package:lux/util/process_manager.dart';
+import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/util/utils.dart';
 import 'package:lux/widget/progress_indicator.dart';
 import 'package:path/path.dart' as path;
@@ -54,6 +55,22 @@ class _HomeState extends State<Home>
   var needRestart = false;
   dynamic coreError;
 
+  // Reload proxy list and connection state into tray menu
+  Future<void> _refreshTray() async {
+    if (coreManager == null) return;
+    try {
+      final isStarted = await coreManager!.getIsStarted();
+      final proxyList = await coreManager!.getProxyList();
+      initSystemTray(
+        isConnected: isStarted,
+        proxies: proxyList.proxies,
+        selectedProxyId: proxyList.id,
+      );
+    } catch (_) {
+      initSystemTray();
+    }
+  }
+
   void _init(AppStateModel appState) async {
     trayManager.addListener(this);
     await windowManager.setPreventClose(true);
@@ -89,11 +106,13 @@ class _HomeState extends State<Home>
 
     if (Platform.isWindows || Platform.isMacOS) {
       initSystemTray();
+      _refreshTray();
     }
 
     isCoreReady.addListener(() {
       if (isCoreReady.value) {
         initClient(coreManager);
+        _refreshTray();
       }
     });
     coreManager?.run().catchError((e) {
@@ -212,17 +231,45 @@ class _HomeState extends State<Home>
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) async {
-    if (menuItem.key == 'open_dashboard') {
+    final key = menuItem.key ?? '';
+
+    if (key == 'open_dashboard') {
       await windowManager.setSkipTaskbar(false);
       await windowManager.show();
       await windowManager.focus();
-    } else if (menuItem.key == 'connect') {
+    } else if (key == 'connect') {
       await coreManager?.start();
-      initSystemTray(isConnected: true);
-    } else if (menuItem.key == 'disconnect') {
+      _refreshTray();
+    } else if (key == 'disconnect') {
       await coreManager?.stop();
-      initSystemTray(isConnected: false);
-    } else if (menuItem.key == 'exit_app') {
+      _refreshTray();
+    } else if (key.startsWith('proxy_select_')) {
+      // Switch to selected proxy
+      final proxyId = key.replaceFirst('proxy_select_', '');
+      await coreManager?.selectProxy(proxyId);
+      _refreshTray();
+    } else if (key.startsWith('proxy_edit_')) {
+      // Quick edit — show window and open edit dialog
+      final proxyId = key.replaceFirst('proxy_edit_', '');
+      await windowManager.setSkipTaskbar(false);
+      await windowManager.show();
+      await windowManager.focus();
+      // Small delay to let window render
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted && coreManager != null) {
+        final detail = await coreManager!.getProxyDetail(proxyId);
+        if (mounted && detail != null) {
+          showDialog(
+            context: context,
+            builder: (_) => ProxyEditDialog(
+              coreManager: coreManager!,
+              initialValue: detail,
+              onSaved: () => _refreshTray(),
+            ),
+          );
+        }
+      }
+    } else if (key == 'exit_app') {
       await coreManager?.exitCore();
       exit(0);
     }
