@@ -49,8 +49,10 @@ class _DashboardState extends State<Dashboard> with WindowListener {
         await Future.delayed(const Duration(seconds: 1));
       }
       await windowManager.hide();
+      await windowManager.setSkipTaskbar(true);
     } else {
       await windowManager.hide();
+      await windowManager.setSkipTaskbar(true);
     }
   }
 
