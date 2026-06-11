@@ -235,6 +235,11 @@ class _HomeState extends State<Home>
     final key = menuItem.key ?? '';
 
     if (key == 'open_dashboard') {
+      if (_quickEditMode) {
+        setState(() => _quickEditMode = false);
+        await windowManager.setSize(const Size(800, 650));
+        await windowManager.center();
+      }
       await windowManager.setSkipTaskbar(false);
       await windowManager.show();
       await windowManager.focus();
@@ -252,14 +257,15 @@ class _HomeState extends State<Home>
     } else if (key.startsWith('proxy_edit_')) {
       // Quick edit — show mini floating window near menubar
       await windowManager.setSkipTaskbar(false);
-      // Position near top-right of screen (near menubar)
       await windowManager.setSize(const Size(340, 310));
       await windowManager.setPosition(const Offset(9999, 28)); // top-right
-      await windowManager.show();
-      await windowManager.focus();
+      // Set quick edit mode BEFORE showing window so it renders correctly
       if (mounted) {
         setState(() => _quickEditMode = true);
       }
+      await Future.delayed(const Duration(milliseconds: 50));
+      await windowManager.show();
+      await windowManager.focus();
     } else if (key == 'exit_app') {
       await coreManager?.exitCore();
       exit(0);
