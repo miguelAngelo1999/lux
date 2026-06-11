@@ -83,12 +83,33 @@ class MainFlutterWindow: NSWindow {
       self?.quickEditPanel?.close()
     }
 
-    // Position near top-right (below menubar)
-    let screenFrame = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-    let panelWidth: CGFloat = 316
-    let panelHeight: CGFloat = 220
-    let panelX = screenFrame.maxX - panelWidth - 8
-    let panelY = screenFrame.maxY - 24 - panelHeight // 24 = menubar height
+    let panelWidth: CGFloat = 300
+    let panelHeight: CGFloat = 200
+
+    // Try to find the tray icon button position
+    var panelX: CGFloat = 0
+    var panelY: CGFloat = 0
+    var foundTrayButton = false
+
+    // Walk all status items to find our icon
+    for window in NSApp.windows {
+      if NSStringFromClass(type(of: window)) == "NSStatusBarWindow" {
+        // Get frame in screen coordinates
+        let windowFrame = window.frame
+        // Position panel below this status bar window
+        panelX = windowFrame.midX - panelWidth / 2
+        panelY = windowFrame.minY - panelHeight
+        foundTrayButton = true
+        break
+      }
+    }
+
+    if !foundTrayButton {
+      // Fallback: position near top-right
+      let screenFrame = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+      panelX = screenFrame.maxX - panelWidth - 8
+      panelY = screenFrame.maxY - 24 - panelHeight
+    }
 
     let panel = NSPanel(
       contentRect: NSRect(x: panelX, y: panelY, width: panelWidth, height: panelHeight),
