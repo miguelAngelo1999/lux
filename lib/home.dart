@@ -64,12 +64,18 @@ class _HomeState extends State<Home>
       final proxyId = args['proxyId'] as String;
       final username = args['username'] as String;
       final password = args['password'] as String;
+      final passwordMode = args['passwordMode'] as String? ?? 'persistent';
+      final ttlMinutes = args['ttlMinutes'] as int? ?? 60;
       try {
         final detail = await coreManager!.getProxyDetail(proxyId);
         if (detail == null) return;
         final updated = Map<String, dynamic>.from(detail.raw);
         updated['username'] = username;
         updated['password'] = password;
+        updated['passwordMode'] = passwordMode;
+        if (passwordMode == 'timed') {
+          updated['passwordTTLMinutes'] = ttlMinutes;
+        }
         await coreManager!.updateProxy(proxyId, updated);
         _refreshTray();
       } catch (e) {
@@ -293,6 +299,8 @@ class _HomeState extends State<Home>
               'name': p.name,
               'username': detail?.raw['username'] ?? '',
               'password': detail?.password ?? '',
+              'passwordMode': detail?.raw['passwordMode'] ?? 'persistent',
+              'ttlMinutes': detail?.raw['passwordTTLMinutes'] ?? 60,
             });
           }
           await _quickEditChannel.invokeMethod('showNearMenubar', {
