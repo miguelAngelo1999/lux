@@ -12,6 +12,7 @@ import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/tray.dart';
 import 'package:lux/util/notifier.dart';
+import 'package:flutter/services.dart';
 import 'package:lux/util/process_manager.dart';
 import 'package:lux/widget/quick_edit_window.dart';
 import 'package:lux/util/utils.dart';
@@ -55,6 +56,27 @@ class _HomeState extends State<Home>
   var needRestart = false;
   dynamic coreError;
   bool _quickEditMode = false;
+  final _quickEditChannel = const MethodChannel('lux_quick_edit');
+
+  Future<void> _handleNativeQuickEdit(MethodCall call) async {
+    if (call.method == 'onSave' && coreManager != null) {
+      final args = Map<String, dynamic>.from(call.arguments as Map);
+      final proxyId = args['proxyId'] as String;
+      final username = args['username'] as String;
+      final password = args['password'] as String;
+      try {
+        final detail = await coreManager!.getProxyDetail(proxyId);
+        if (detail == null) return;
+        final updated = Map<String, dynamic>.from(detail.raw);
+        updated['username'] = username;
+        updated['password'] = password;
+        await coreManager!.updateProxy(proxyId, updated);
+        _refreshTray();
+      } catch (e) {
+        debugPrint('Quick edit save error: $e');
+      }
+    }
+  }
 
   // Reload proxy list and connection state into tray menu
   Future<void> _refreshTray() async {
@@ -199,6 +221,8 @@ class _HomeState extends State<Home>
     _listener = AppLifecycleListener(onExitRequested: _handleExitRequest);
     windowManager.addListener(this);
     powerMonitor.addListener(this);
+    // Listen for save callbacks from native quick edit panel
+    _quickEditChannel.setMethodCallHandler(_handleNativeQuickEdit);
     _init(Provider.of<AppStateModel>(context, listen: false));
   }
 
@@ -255,17 +279,30 @@ class _HomeState extends State<Home>
       await coreManager?.selectProxy(proxyId);
       _refreshTray();
     } else if (key.startsWith('proxy_edit_')) {
-      // Quick edit — show mini floating window near menubar
-      await windowManager.setSkipTaskbar(false);
-      await windowManager.setSize(const Size(340, 310));
-      await windowManager.setPosition(const Offset(9999, 28)); // top-right
-      // Set quick edit mode BEFORE showing window so it renders correctly
-      if (mounted) {
-        setState(() => _quickEditMode = true);
+      // Show native Swift floating panel near menubar
+      if (Platform.isMacOS && coreManager != null) {
+        try {
+          final proxyList = await coreManager!.getProxyList();
+          // Build a simple list with credentials for the native panel
+          final proxiesWithCreds = <Map<String, dynamic>>[];
+          for (final p in proxyList.proxies) {
+            if (p.type == 'direct') continue;
+            final detail = await coreManager!.getProxyDetail(p.id);
+            proxiesWithCreds.add({
+              'id': p.id,
+              'name': p.name,
+              'username': detail?.raw['username'] ?? '',
+              'password': detail?.password ?? '',
+            });
+          }
+          await _quickEditChannel.invokeMethod('showNearMenubar', {
+            'proxies': proxiesWithCreds,
+            'selectedId': proxyList.id,
+          });
+        } catch (e) {
+          debugPrint('Native quick edit error: $e');
+        }
       }
-      await Future.delayed(const Duration(milliseconds: 50));
-      await windowManager.show();
-      await windowManager.focus();
     } else if (key == 'exit_app') {
       await coreManager?.exitCore();
       exit(0);
