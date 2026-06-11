@@ -71,12 +71,14 @@ class MainFlutterWindow: NSWindow {
     let vc = QuickEditViewController()
     vc.proxies = proxies
     vc.selectedProxyId = selectedId
-    vc.onSave = { [weak self] proxyId, username, password in
+    vc.onSave = { [weak self] proxyId, username, password, passwordMode, ttlMinutes in
       self?.quickEditPanel?.close()
       self?.quickEditChannel?.invokeMethod("onSave", arguments: [
         "proxyId": proxyId,
         "username": username,
-        "password": password
+        "password": password,
+        "passwordMode": passwordMode,
+        "ttlMinutes": ttlMinutes
       ])
     }
     vc.onCancel = { [weak self] in
@@ -124,7 +126,26 @@ class MainFlutterWindow: NSWindow {
     panel.backgroundColor = NSColor.windowBackgroundColor
     panel.isReleasedWhenClosed = false
     panel.contentViewController = vc
+
+    // Close when focus lost (click outside)
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didResignKeyNotification,
+      object: panel,
+      queue: .main
+    ) { [weak panel] _ in
+      panel?.close()
+    }
+
+    // Animate in: slide down from menubar
+    panel.setFrame(NSRect(x: panelX, y: panelY + 12, width: panelWidth, height: panelHeight), display: false)
+    panel.alphaValue = 0
     panel.makeKeyAndOrderFront(nil)
+    NSAnimationContext.runAnimationGroup { ctx in
+      ctx.duration = 0.2
+      ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+      panel.animator().setFrame(NSRect(x: panelX, y: panelY, width: panelWidth, height: panelHeight), display: true)
+      panel.animator().alphaValue = 1.0
+    }
     self.quickEditPanel = panel
   }
 
