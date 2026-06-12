@@ -304,6 +304,48 @@ class RuleList {
   Map<String, dynamic> toJson() => {'rules': rules};
 }
 
+class CustomizedRuleItem {
+  final String ruleType;
+  final String payload;
+  final String policy;
+  final bool disabled;
+  final String raw;
+
+  const CustomizedRuleItem({
+    required this.ruleType,
+    required this.payload,
+    required this.policy,
+    required this.disabled,
+    required this.raw,
+  });
+
+  factory CustomizedRuleItem.fromJson(Map<String, dynamic> json) =>
+      CustomizedRuleItem(
+        ruleType: json['ruleType'] as String? ?? '',
+        payload: json['payload'] as String? ?? '',
+        policy: json['policy'] as String? ?? '',
+        disabled: json['disabled'] as bool? ?? false,
+        raw: json['raw'] as String? ?? '',
+      );
+
+  CustomizedRuleItem copyWith({
+    String? ruleType,
+    String? payload,
+    String? policy,
+    bool? disabled,
+    String? raw,
+  }) =>
+      CustomizedRuleItem(
+        ruleType: ruleType ?? this.ruleType,
+        payload: payload ?? this.payload,
+        policy: policy ?? this.policy,
+        disabled: disabled ?? this.disabled,
+        raw: raw ?? this.raw,
+      );
+
+  String toRawString() => '$ruleType,$payload,$policy';
+}
+
 // Define the data classes
 class Speed {
   final Proxy proxy;
