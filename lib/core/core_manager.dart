@@ -313,9 +313,51 @@ class CoreManager {
     await dio.post('$baseHttpUrl/proxies/$id', data: proxy);
   }
 
-  /// Save full settings.
+  /// Save settings — reads current raw config and merges only the changed fields.
+  /// Never overwrites DNS server lists or other fields not managed by the settings page.
   Future<void> saveSetting(Setting setting) async {
-    await dio.put('$baseHttpUrl/setting', data: setting.toJson());
+    final current = await dio.get('$baseHttpUrl/setting');
+    final raw = Map<String, dynamic>.from(current.data['setting'] as Map);
+
+    // Only update fields the settings page manages
+    raw['mode'] = setting.mode == ProxyMode.tun
+        ? 'tun'
+        : setting.mode == ProxyMode.system
+            ? 'system'
+            : 'mixed';
+    raw['autoLaunch'] = setting.autoLaunch;
+    raw['autoConnect'] = setting.autoConnect;
+    raw['defaultInterface'] = setting.defaultInterface;
+
+    // Local server — preserve existing structure
+    final ls = Map<String, dynamic>.from(raw['localServer'] as Map? ?? {});
+    ls['port'] = setting.localServerPort;
+    ls['allowLan'] = setting.allowLan;
+    raw['localServer'] = ls;
+
+    if (setting.blockQuic != null) raw['blockQuic'] = setting.blockQuic;
+    if (setting.shouldFindProcess != null) raw['shouldFindProcess'] = setting.shouldFindProcess;
+    if (setting.sensitiveInfoMode != null) raw['sensitiveInfoMode'] = setting.sensitiveInfoMode;
+
+    // DNS — only update fakeIp and disableCache, NEVER touch server lists
+    final dns = Map<String, dynamic>.from(raw['dns'] as Map? ?? {});
+    if (setting.fakeIp != null) dns['fakeIp'] = setting.fakeIp;
+    if (setting.disableDnsCache != null) dns['disableCache'] = setting.disableDnsCache;
+    raw['dns'] = dns;
+
+    // HijackDns — preserve networkService and alwaysReset
+    final hd = Map<String, dynamic>.from(raw['hijackDns'] as Map? ?? {});
+    hd['enabled'] = setting.hijackDns;
+    raw['hijackDns'] = hd;
+
+    // AutoMode
+    final am = Map<String, dynamic>.from(raw['autoMode'] as Map? ?? {});
+    am['enabled'] = setting.autoModeEnabled;
+    am['type'] = setting.autoModeType;
+    am['url'] = setting.autoModeUrl;
+    raw['autoMode'] = am;
+
+    await dio.put('$baseHttpUrl/setting', data: raw);
   }
 
   /// Get available network interfaces.
@@ -333,20 +375,16 @@ class CoreManager {
     }
   }
 
-  /// Get log WebSocket channel.
-  WebSocketChannel? _logChannel;
-  Future<WebSocketChannel?> getLogChannel() async {
-    _logChannel ??= WebSocketChannel.connect(
-        Uri.parse('$baseWsUrl/log?token=$token&level=debug'));
-    return _logChannel;
+  /// Get log WebSocket channel (reconnectable).
+  Future<WebSocketChannel> getLogChannel() async {
+    return WebSocketChannel.connect(
+        Uri.parse('$baseWsUrl/log?token=$token'));
   }
 
-  /// Get connections WebSocket channel.
-  WebSocketChannel? _connectionsChannel;
-  Future<WebSocketChannel?> getConnectionsChannel() async {
-    _connectionsChannel ??= WebSocketChannel.connect(
+  /// Get connections WebSocket channel (reconnectable).
+  Future<WebSocketChannel> getConnectionsChannel() async {
+    return WebSocketChannel.connect(
         Uri.parse('$baseWsUrl/connection?token=$token'));
-    return _connectionsChannel;
   }
 
   /// Close all active connections.

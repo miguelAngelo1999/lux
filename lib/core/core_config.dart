@@ -452,10 +452,11 @@ class Setting {
         'localServer': {'port': localServerPort, 'allowLan': allowLan},
         if (blockQuic != null) 'blockQuic': blockQuic,
         if (shouldFindProcess != null) 'shouldFindProcess': shouldFindProcess,
-        'dns': {
-          if (fakeIp != null) 'fakeIp': fakeIp,
-          if (disableDnsCache != null) 'disableCache': disableDnsCache,
-        },
+        if (fakeIp != null || disableDnsCache != null)
+          'dns': {
+            if (fakeIp != null) 'fakeIp': fakeIp,
+            if (disableDnsCache != null) 'disableCache': disableDnsCache,
+          },
         'hijackDns': {'enabled': hijackDns},
         'autoMode': {
           'enabled': autoModeEnabled,
