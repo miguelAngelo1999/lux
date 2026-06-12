@@ -1,9 +1,12 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:lux/pages/connections_page.dart';
+import 'package:lux/pages/log_page.dart';
+import 'package:lux/pages/proxies_page.dart';
+import 'package:lux/pages/rules_page.dart';
+import 'package:lux/pages/settings_page.dart';
 import 'package:lux/util/utils.dart';
-import 'package:lux/widget/app_body.dart';
 import 'package:lux/widget/app_bottom_bar.dart';
 import 'package:lux/widget/app_header_bar.dart';
 import 'package:window_manager/window_manager.dart';
@@ -25,8 +28,15 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> with WindowListener {
   String curProxyInfo = "";
+  int _selectedTab = 0;
 
-  _DashboardState();
+  final _tabs = [
+    (icon: Icons.swap_horiz, label: 'Proxies'),
+    (icon: Icons.rule, label: 'Rules'),
+    (icon: Icons.device_hub, label: 'Connections'),
+    (icon: Icons.article_outlined, label: 'Log'),
+    (icon: Icons.settings_outlined, label: 'Settings'),
+  ];
 
   @override
   void initState() {
@@ -57,27 +67,63 @@ class _DashboardState extends State<Dashboard> with WindowListener {
   }
 
   void onCurProxyInfoChange(String info) {
-    setState(() {
-      curProxyInfo = info;
-    });
+    setState(() => curProxyInfo = info);
+  }
+
+  Widget _buildPage() {
+    switch (_selectedTab) {
+      case 0:
+        return ProxiesPage(
+          coreManager: widget.coreManager,
+          curProxyInfo: curProxyInfo,
+          onCurProxyInfoChange: onCurProxyInfoChange,
+          dashboardUrl: widget.urlStr,
+        );
+      case 1:
+        return RulesPage(coreManager: widget.coreManager);
+      case 2:
+        return ConnectionsPage(coreManager: widget.coreManager);
+      case 3:
+        return LogPage(coreManager: widget.coreManager);
+      case 4:
+        return SettingsPage(coreManager: widget.coreManager);
+      default:
+        return const SizedBox();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: PreferredSize(
-          preferredSize: Size.fromHeight(50),
-          child: AppHeaderBar(
-            coreManager: widget.coreManager,
-            urlStr: widget.urlStr,
-            curProxyInfo: curProxyInfo,
-            onCurProxyInfoChange: onCurProxyInfoChange,
-          )),
-      body: AppBody(
-        coreManager: widget.coreManager,
-        curProxyInfo: curProxyInfo,
-        onCurProxyInfoChange: onCurProxyInfoChange,
-        dashboardUrl: widget.urlStr,
+        preferredSize: const Size.fromHeight(50),
+        child: AppHeaderBar(
+          coreManager: widget.coreManager,
+          urlStr: widget.urlStr,
+          curProxyInfo: curProxyInfo,
+          onCurProxyInfoChange: onCurProxyInfoChange,
+        ),
+      ),
+      body: Row(
+        children: [
+          // Left navigation rail
+          NavigationRail(
+            selectedIndex: _selectedTab,
+            onDestinationSelected: (i) => setState(() => _selectedTab = i),
+            labelType: NavigationRailLabelType.all,
+            minWidth: 64,
+            destinations: _tabs
+                .map((t) => NavigationRailDestination(
+                      icon: Icon(t.icon, size: 20),
+                      label: Text(t.label,
+                          style: const TextStyle(fontSize: 10)),
+                    ))
+                .toList(),
+          ),
+          const VerticalDivider(width: 1, thickness: 1),
+          // Main content
+          Expanded(child: _buildPage()),
+        ],
       ),
       bottomNavigationBar: AppBottomBar(widget.coreManager),
     );
