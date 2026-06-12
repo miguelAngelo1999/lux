@@ -196,6 +196,32 @@ class CoreManager {
     return RuleList.fromJson(rulesRes.data);
   }
 
+  Future<List<CustomizedRuleItem>> getCustomizedRules() async {
+    final res = await dio.get('$baseHttpUrl/rules/customized');
+    final items = res.data['items'] as List? ?? [];
+    return items.map((e) => CustomizedRuleItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> addCustomizedRules(List<String> rules) async {
+    await dio.put('$baseHttpUrl/rules/customized', data: {'rules': rules});
+  }
+
+  Future<void> editCustomizedRule(String oldRule, String newRule) async {
+    await dio.post('$baseHttpUrl/rules/customized', data: {'oldRule': oldRule, 'newRule': newRule});
+  }
+
+  Future<void> deleteCustomizedRules(List<String> rules) async {
+    await dio.delete('$baseHttpUrl/rules/customized', data: {'rules': rules});
+  }
+
+  Future<void> reorderCustomizedRules(List<String> rules) async {
+    await dio.post('$baseHttpUrl/rules/customized/reorder', data: {'rules': rules});
+  }
+
+  Future<void> toggleCustomizedRule(String rule) async {
+    await dio.post('$baseHttpUrl/rules/customized/toggle', data: {'rule': rule});
+  }
+
   Future<void> selectProxy(String id) async {
     await dio.post('$baseHttpUrl/selected/proxy', data: {'id': id});
   }
