@@ -190,11 +190,9 @@ class _State extends State<AppHeaderBar> with WindowListener {
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
         leading: IconButton(
-            tooltip: tr().goWebDashboardTip,
+            tooltip: 'Open web dashboard (advanced)',
             onPressed: openWebDashboard,
-            icon: const Icon(
-              Icons.settings,
-            )),
+            icon: const Icon(Icons.open_in_browser, size: 18)),
         title: Row(
           children: [
             SizedBox(
