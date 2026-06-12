@@ -312,4 +312,45 @@ class CoreManager {
   Future<void> updateProxy(String id, Map<String, dynamic> proxy) async {
     await dio.post('$baseHttpUrl/proxies/$id', data: proxy);
   }
+
+  /// Save full settings.
+  Future<void> saveSetting(Setting setting) async {
+    await dio.put('$baseHttpUrl/setting', data: setting.toJson());
+  }
+
+  /// Get available network interfaces.
+  Future<List<String>> getSettingInterfaces() async {
+    try {
+      final res = await dio.get('$baseHttpUrl/setting/interfaces');
+      final ifaces = res.data['interfaces'] as List? ?? [];
+      return ifaces.map((e) {
+        final name = (e as Map)['Name'] as String? ?? '';
+        final friendly = e['FriendlyName'] as String? ?? '';
+        return friendly.isNotEmpty ? '$friendly ($name)' : name;
+      }).where((s) => s.isNotEmpty).toList().cast<String>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Get log WebSocket channel.
+  WebSocketChannel? _logChannel;
+  Future<WebSocketChannel?> getLogChannel() async {
+    _logChannel ??= WebSocketChannel.connect(
+        Uri.parse('$baseWsUrl/log?token=$token&level=debug'));
+    return _logChannel;
+  }
+
+  /// Get connections WebSocket channel.
+  WebSocketChannel? _connectionsChannel;
+  Future<WebSocketChannel?> getConnectionsChannel() async {
+    _connectionsChannel ??= WebSocketChannel.connect(
+        Uri.parse('$baseWsUrl/connection?token=$token'));
+    return _connectionsChannel;
+  }
+
+  /// Close all active connections.
+  Future<void> closeAllConnections() async {
+    await dio.delete('$baseHttpUrl/connection');
+  }
 }

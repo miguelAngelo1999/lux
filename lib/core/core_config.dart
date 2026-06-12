@@ -393,15 +393,116 @@ class RuntimeStatus {
 }
 
 class Setting {
-  late final ProxyMode mode;
+  final ProxyMode mode;
+  final bool autoLaunch;
+  final bool autoConnect;
+  final String defaultInterface;
+  final int localServerPort;
+  final bool allowLan;
+  final bool? blockQuic;
+  final bool? shouldFindProcess;
+  final bool? fakeIp;
+  final bool? disableDnsCache;
+  final bool hijackDns;
+  final bool autoModeEnabled;
+  final String autoModeType;
+  final String autoModeUrl;
+  final bool? sensitiveInfoMode;
 
-  Setting(this.mode);
+  const Setting({
+    this.mode = ProxyMode.mixed,
+    this.autoLaunch = false,
+    this.autoConnect = true,
+    this.defaultInterface = '',
+    this.localServerPort = 1090,
+    this.allowLan = false,
+    this.blockQuic,
+    this.shouldFindProcess,
+    this.fakeIp,
+    this.disableDnsCache,
+    this.hijackDns = false,
+    this.autoModeEnabled = false,
+    this.autoModeType = 'fallback',
+    this.autoModeUrl = 'https://google.com',
+    this.sensitiveInfoMode,
+  });
 
-  Setting.fromJson(Map<String, dynamic> json) {
-    mode = (json.containsKey('mode') && json['mode'] is String)
-        ? (json['mode'] == 'tun'
-            ? ProxyMode.tun
-            : (json['mode'] == 'system' ? ProxyMode.system : ProxyMode.mixed))
-        : ProxyMode.mixed;
+  Setting.fromJson(Map<String, dynamic> json)
+      : mode = _parseMode(json['mode'] as String? ?? 'mixed'),
+        autoLaunch = json['autoLaunch'] as bool? ?? false,
+        autoConnect = json['autoConnect'] as bool? ?? true,
+        defaultInterface = json['defaultInterface'] as String? ?? '',
+        localServerPort = (json['localServer'] as Map?)?['port'] as int? ?? 1090,
+        allowLan = (json['localServer'] as Map?)?['allowLan'] as bool? ?? false,
+        blockQuic = json['blockQuic'] as bool?,
+        shouldFindProcess = json['shouldFindProcess'] as bool?,
+        fakeIp = (json['dns'] as Map?)?['fakeIp'] as bool?,
+        disableDnsCache = (json['dns'] as Map?)?['disableCache'] as bool?,
+        hijackDns = (json['hijackDns'] as Map?)?['enabled'] as bool? ?? false,
+        autoModeEnabled = (json['autoMode'] as Map?)?['enabled'] as bool? ?? false,
+        autoModeType = (json['autoMode'] as Map?)?['type'] as String? ?? 'fallback',
+        autoModeUrl = (json['autoMode'] as Map?)?['url'] as String? ?? 'https://google.com',
+        sensitiveInfoMode = json['sensitiveInfoMode'] as bool?;
+
+  Map<String, dynamic> toJson() => {
+        'mode': mode == ProxyMode.tun ? 'tun' : mode == ProxyMode.system ? 'system' : 'mixed',
+        'autoLaunch': autoLaunch,
+        'autoConnect': autoConnect,
+        'defaultInterface': defaultInterface,
+        'localServer': {'port': localServerPort, 'allowLan': allowLan},
+        if (blockQuic != null) 'blockQuic': blockQuic,
+        if (shouldFindProcess != null) 'shouldFindProcess': shouldFindProcess,
+        'dns': {
+          if (fakeIp != null) 'fakeIp': fakeIp,
+          if (disableDnsCache != null) 'disableCache': disableDnsCache,
+        },
+        'hijackDns': {'enabled': hijackDns},
+        'autoMode': {
+          'enabled': autoModeEnabled,
+          'type': autoModeType,
+          'url': autoModeUrl,
+        },
+        if (sensitiveInfoMode != null) 'sensitiveInfoMode': sensitiveInfoMode,
+      };
+
+  Setting copyWith({
+    ProxyMode? mode,
+    bool? autoLaunch,
+    bool? autoConnect,
+    String? defaultInterface,
+    int? localServerPort,
+    bool? allowLan,
+    bool? blockQuic,
+    bool? shouldFindProcess,
+    bool? fakeIp,
+    bool? disableDnsCache,
+    bool? hijackDns,
+    bool? autoModeEnabled,
+    String? autoModeType,
+    String? autoModeUrl,
+    bool? sensitiveInfoMode,
+  }) =>
+      Setting(
+        mode: mode ?? this.mode,
+        autoLaunch: autoLaunch ?? this.autoLaunch,
+        autoConnect: autoConnect ?? this.autoConnect,
+        defaultInterface: defaultInterface ?? this.defaultInterface,
+        localServerPort: localServerPort ?? this.localServerPort,
+        allowLan: allowLan ?? this.allowLan,
+        blockQuic: blockQuic ?? this.blockQuic,
+        shouldFindProcess: shouldFindProcess ?? this.shouldFindProcess,
+        fakeIp: fakeIp ?? this.fakeIp,
+        disableDnsCache: disableDnsCache ?? this.disableDnsCache,
+        hijackDns: hijackDns ?? this.hijackDns,
+        autoModeEnabled: autoModeEnabled ?? this.autoModeEnabled,
+        autoModeType: autoModeType ?? this.autoModeType,
+        autoModeUrl: autoModeUrl ?? this.autoModeUrl,
+        sensitiveInfoMode: sensitiveInfoMode ?? this.sensitiveInfoMode,
+      );
+
+  static ProxyMode _parseMode(String s) {
+    if (s == 'tun') return ProxyMode.tun;
+    if (s == 'system') return ProxyMode.system;
+    return ProxyMode.mixed;
   }
 }
