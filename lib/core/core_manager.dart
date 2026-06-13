@@ -225,8 +225,7 @@ class CoreManager {
   /// Test proxy latency. Returns delay in ms or -1 on failure.
   Future<int> testProxyDelay(String id) async {
     try {
-      final res = await dio.get('$baseHttpUrl/proxies/$id/delay',
-          queryParameters: {'url': 'https://www.google.com', 'timeout': 5000},
+      final res = await dio.get('$baseHttpUrl/proxies/delay/$id',
           options: Options(receiveTimeout: const Duration(seconds: 10)));
       return res.data['delay'] as int? ?? -1;
     } catch (_) {
