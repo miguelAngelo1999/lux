@@ -239,6 +239,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                         {handleCollapse(proxyListGroup.groups[index])},
                     onItemChange: _handleItemChange,
                     subscriptionList: subscriptionList,
+                    coreManager: widget.coreManager,
                   );
                 },
               ));
