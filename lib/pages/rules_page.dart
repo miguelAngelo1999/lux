@@ -300,11 +300,11 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: const Row(
             children: [
-              SizedBox(width: 32),
+              SizedBox(width: 12),
               SizedBox(width: 100, child: Text('Type', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               Expanded(child: Text('Payload', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               SizedBox(width: 80, child: Text('Policy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 96),
+              SizedBox(width: 80),
             ],
           ),
         ),
@@ -326,13 +326,28 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                     ],
                   ),
                 )
-              : ListView.builder(
+              : ReorderableListView.builder(
                   itemCount: filtered.length,
-                  itemExtent: 36,
+                  onReorder: (oldIdx, newIdx) async {
+                    if (newIdx > oldIdx) newIdx--;
+                    // Find actual indices in full list
+                    final item = filtered[oldIdx];
+                    final fullOld = _rules.indexOf(item);
+                    final targetItem = filtered[newIdx];
+                    final fullNew = _rules.indexOf(targetItem);
+                    setState(() {
+                      _rules.removeAt(fullOld);
+                      _rules.insert(fullNew, item);
+                    });
+                    await widget.coreManager.reorderCustomizedRules(
+                        _rules.map((r) => r.raw).toList());
+                  },
                   itemBuilder: (ctx, i) {
                     final rule = filtered[i];
                     final isDisabled = rule.disabled;
                     return Container(
+                      key: ValueKey(rule.raw),
+                      height: 36,
                       decoration: BoxDecoration(
                         color: isDisabled
                             ? Theme.of(ctx).colorScheme.surface.withAlpha(128)
@@ -344,13 +359,17 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                       ),
                       child: Row(
                         children: [
-                          // Enabled toggle
+                          // Disabled indicator (small dot instead of checkbox to save space)
                           SizedBox(
-                            width: 32,
-                            child: Checkbox(
-                              value: !isDisabled,
-                              onChanged: (_) => _toggle(rule),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            width: 12,
+                            child: Container(
+                              width: 6,
+                              height: 6,
+                              margin: const EdgeInsets.only(left: 3),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isDisabled ? Colors.grey.withAlpha(100) : Theme.of(ctx).colorScheme.primary,
+                              ),
                             ),
                           ),
                           // Type
@@ -398,25 +417,22 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                               ),
                             ),
                           ),
-                          // Actions
+                          // Actions - use compact overflow menu
                           SizedBox(
-                            width: 96,
+                            width: 80,
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.arrow_upward, size: 14),
-                                  onPressed: i > 0 ? () => _moveUp(i) : null,
+                                  icon: Icon(
+                                    isDisabled ? Icons.check_box_outline_blank : Icons.check_box,
+                                    size: 16,
+                                    color: isDisabled ? Colors.grey : Theme.of(ctx).colorScheme.primary,
+                                  ),
+                                  onPressed: () => _toggle(rule),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                  tooltip: 'Move up',
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.arrow_downward, size: 14),
-                                  onPressed: i < filtered.length - 1 ? () => _moveDown(i) : null,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                  tooltip: 'Move down',
+                                  tooltip: isDisabled ? 'Enable' : 'Disable',
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.edit, size: 14),
@@ -432,6 +448,11 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                                   tooltip: 'Delete',
+                                ),
+                                // Drag handle
+                                ReorderableDragStartListener(
+                                  index: i,
+                                  child: const Icon(Icons.drag_handle, size: 16, color: Colors.grey),
                                 ),
                               ],
                             ),
