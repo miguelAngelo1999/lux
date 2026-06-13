@@ -139,8 +139,20 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
           SizedBox(width: 4),
           Tooltip(
             message: tr().proxyModeTooltip,
-            child: Text(
-              getModeLabel(proxyMode),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                getModeLabel(proxyMode),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
             ),
           ),
         ],
