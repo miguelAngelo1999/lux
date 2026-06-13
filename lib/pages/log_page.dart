@@ -47,6 +47,7 @@ class _LogPageState extends State<LogPage> {
   String _searchText = '';
   final _scrollCtrl = ScrollController();
   bool _connected = false;
+  String? _error;
 
   final _levels = ['debug', 'info', 'warning', 'error'];
 
@@ -69,26 +70,40 @@ class _LogPageState extends State<LogPage> {
       channel.stream.listen(
         (raw) {
           try {
-            final data =
-                json.decode(raw as String) as Map<String, dynamic>;
-            final entry = LogEntry.fromJson(data);
-            if (mounted) {
-              setState(() {
-                _logs.add(entry);
-                if (_logs.length > 2000) _logs.removeAt(0);
-              });
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (_scrollCtrl.hasClients) {
-                  _scrollCtrl
-                      .jumpTo(_scrollCtrl.position.maxScrollExtent);
+            // Log endpoint sends an array of JSON-encoded log strings
+            final batch = json.decode(raw as String) as List<dynamic>;
+            for (final item in batch) {
+              try {
+                final data = json.decode(item as String) as Map<String, dynamic>;
+                // Convert ms timestamp to ISO string
+                final ts = data['time'];
+                final timeStr = ts is int
+                    ? DateTime.fromMillisecondsSinceEpoch(ts).toIso8601String()
+                    : ts?.toString() ?? '';
+                final entry = LogEntry(
+                  level: data['level'] as String? ?? 'info',
+                  time: timeStr,
+                  message: data['msg'] as String? ?? '',
+                );
+                if (mounted) {
+                  setState(() {
+                    _logs.add(entry);
+                    if (_logs.length > 2000) _logs.removeAt(0);
+                  });
                 }
-              });
+              } catch (_) {}
             }
+            // Auto-scroll
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollCtrl.hasClients) {
+                _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+              }
+            });
           } catch (_) {}
         },
         onError: (e) {
           debugPrint('Log WS error: $e');
-          if (mounted) setState(() => _connected = false);
+          if (mounted) setState(() { _connected = false; _error = e.toString(); });
           Future.delayed(
               const Duration(seconds: 3), () { if (mounted) _connect(); });
         },
@@ -103,7 +118,7 @@ class _LogPageState extends State<LogPage> {
     } catch (e) {
       debugPrint('Log connect error: $e');
       if (mounted) {
-        setState(() => _connected = false);
+        setState(() { _connected = false; _error = e.toString(); });
         Future.delayed(
             const Duration(seconds: 3), () { if (mounted) _connect(); });
       }
@@ -128,7 +143,7 @@ class _LogPageState extends State<LogPage> {
           '${t.minute.toString().padLeft(2, '0')}:'
           '${t.second.toString().padLeft(2, '0')}';
     } catch (_) {
-      return iso;
+      return iso.length > 8 ? iso.substring(0, 8) : iso;
     }
   }
 
@@ -207,7 +222,20 @@ class _LogPageState extends State<LogPage> {
         ),
         const Divider(height: 1),
         Expanded(
-          child: filtered.isEmpty
+          child: _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Connection error:', style: TextStyle(color: Colors.red, fontSize: 12)),
+                      const SizedBox(height: 4),
+                      SelectableText(_error!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      const SizedBox(height: 8),
+                      TextButton(onPressed: () { setState(() => _error = null); _connect(); }, child: const Text('Retry')),
+                    ],
+                  ),
+                )
+              : filtered.isEmpty
               ? Center(
                   child: Text(
                     _connected ? 'Waiting for logs...' : 'Connecting...',
