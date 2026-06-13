@@ -327,6 +327,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   ),
                 )
               : ReorderableListView.builder(
+                  padding: const EdgeInsets.only(right: 16), // space for scrollbar
                   itemCount: filtered.length,
                   onReorder: (oldIdx, newIdx) async {
                     if (newIdx > oldIdx) newIdx--;

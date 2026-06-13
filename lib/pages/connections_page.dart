@@ -65,8 +65,6 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
     try {
       final channel = await widget.coreManager.getConnectionsChannel();
       if (!mounted) return;
-      await channel.ready;
-      if (!mounted) return;
       setState(() => _channel = channel);
       channel.stream.listen(
         (raw) {

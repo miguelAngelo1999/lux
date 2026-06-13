@@ -62,9 +62,6 @@ class _LogPageState extends State<LogPage> {
     try {
       final channel = await widget.coreManager.getLogChannel();
       if (!mounted) return;
-      // Await readiness before subscribing
-      await channel.ready;
-      if (!mounted) return;
       setState(() {
         _channel = channel;
         _connected = true;
