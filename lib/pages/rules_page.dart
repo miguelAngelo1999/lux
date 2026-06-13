@@ -172,9 +172,13 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   value: _proxyNames.contains(policy) ? policy : _proxyNames.first,
                   decoration: const InputDecoration(
                       labelText: 'Policy', isDense: true),
-                  items: _proxyNames
-                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                      .toList(),
+                  items: [
+                    // Include current policy even if not in list
+                    if (!_proxyNames.contains(policy))
+                      DropdownMenuItem(value: policy, child: Text(policy)),
+                    ..._proxyNames.map((p) =>
+                        DropdownMenuItem(value: p, child: Text(p))),
+                  ],
                   onChanged: (v) => setDialogState(() => policy = v!),
                 ),
               ],

@@ -222,6 +222,18 @@ class CoreManager {
     await dio.post('$baseHttpUrl/rules/customized/toggle', data: {'rule': rule});
   }
 
+  /// Test proxy latency. Returns delay in ms or -1 on failure.
+  Future<int> testProxyDelay(String id) async {
+    try {
+      final res = await dio.get('$baseHttpUrl/proxies/$id/delay',
+          queryParameters: {'url': 'https://www.google.com', 'timeout': 5000},
+          options: Options(receiveTimeout: const Duration(seconds: 10)));
+      return res.data['delay'] as int? ?? -1;
+    } catch (_) {
+      return -1;
+    }
+  }
+
   Future<void> selectProxy(String id) async {
     await dio.post('$baseHttpUrl/selected/proxy', data: {'id': id});
   }
