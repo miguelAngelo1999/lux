@@ -61,26 +61,42 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
     _searchCtrl.addListener(() => setState(() => _search = _searchCtrl.text.toLowerCase()));
   }
 
-  void _connect() {
-    widget.coreManager.getConnectionsChannel().then((channel) {
-      _channel = channel;
-      _channel?.stream.listen((raw) {
-        try {
-          final data = json.decode(raw as String) as Map<String, dynamic>;
-          final conns = (data['connections'] as List? ?? [])
-              .map((e) => ConnectionEntry.fromJson(e as Map<String, dynamic>))
-              .toList();
-          if (mounted) {
-            setState(() {
-              _conns
-                ..clear()
-                ..addAll(conns);
-              _total = data['downloadTotal'] as int? ?? 0;
-            });
-          }
-        } catch (_) {}
-      });
-    });
+  Future<void> _connect() async {
+    try {
+      final channel = await widget.coreManager.getConnectionsChannel();
+      if (!mounted) return;
+      await channel.ready;
+      if (!mounted) return;
+      setState(() => _channel = channel);
+      channel.stream.listen(
+        (raw) {
+          try {
+            final data = json.decode(raw as String) as Map<String, dynamic>;
+            final conns = (data['connections'] as List? ?? [])
+                .map((e) => ConnectionEntry.fromJson(e as Map<String, dynamic>))
+                .toList();
+            if (mounted) {
+              setState(() {
+                _conns
+                  ..clear()
+                  ..addAll(conns);
+                _total = data['downloadTotal'] as int? ?? 0;
+              });
+            }
+          } catch (_) {}
+        },
+        onError: (e) {
+          debugPrint('Connections WS error: $e');
+          Future.delayed(const Duration(seconds: 3), () { if (mounted) _connect(); });
+        },
+        onDone: () {
+          Future.delayed(const Duration(seconds: 3), () { if (mounted) _connect(); });
+        },
+      );
+    } catch (e) {
+      debugPrint('Connections connect error: $e');
+      Future.delayed(const Duration(seconds: 3), () { if (mounted) _connect(); });
+    }
   }
 
   List<ConnectionEntry> get _filtered {

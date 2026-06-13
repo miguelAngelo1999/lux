@@ -11,13 +11,11 @@ class LogEntry {
   final String message;
   LogEntry({required this.level, required this.time, required this.message});
 
-  factory LogEntry.fromJson(Map<String, dynamic> json) {
-    return LogEntry(
-      level: json['level'] as String? ?? 'info',
-      time: json['time'] as String? ?? '',
-      message: json['msg'] as String? ?? '',
-    );
-  }
+  factory LogEntry.fromJson(Map<String, dynamic> json) => LogEntry(
+        level: json['level'] as String? ?? 'info',
+        time: json['time'] as String? ?? '',
+        message: json['msg'] as String? ?? '',
+      );
 
   Color levelColor(BuildContext context) {
     switch (level) {
@@ -48,6 +46,7 @@ class _LogPageState extends State<LogPage> {
   final _searchCtrl = TextEditingController();
   String _searchText = '';
   final _scrollCtrl = ScrollController();
+  bool _connected = false;
 
   final _levels = ['debug', 'info', 'warning', 'error'];
 
@@ -55,33 +54,63 @@ class _LogPageState extends State<LogPage> {
   void initState() {
     super.initState();
     _connect();
-    _searchCtrl.addListener(() {
-      setState(() => _searchText = _searchCtrl.text.toLowerCase());
-    });
+    _searchCtrl.addListener(
+        () => setState(() => _searchText = _searchCtrl.text.toLowerCase()));
   }
 
-  void _connect() {
-    widget.coreManager.getLogChannel().then((channel) {
-      _channel = channel;
-      _channel?.stream.listen((raw) {
-        try {
-          final data = json.decode(raw as String) as Map<String, dynamic>;
-          final entry = LogEntry.fromJson(data);
-          if (mounted) {
-            setState(() {
-              _logs.add(entry);
-              if (_logs.length > 2000) _logs.removeAt(0);
-            });
-            // Auto-scroll to bottom
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_scrollCtrl.hasClients) {
-                _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-              }
-            });
-          }
-        } catch (_) {}
+  Future<void> _connect() async {
+    try {
+      final channel = await widget.coreManager.getLogChannel();
+      if (!mounted) return;
+      // Await readiness before subscribing
+      await channel.ready;
+      if (!mounted) return;
+      setState(() {
+        _channel = channel;
+        _connected = true;
       });
-    });
+      channel.stream.listen(
+        (raw) {
+          try {
+            final data =
+                json.decode(raw as String) as Map<String, dynamic>;
+            final entry = LogEntry.fromJson(data);
+            if (mounted) {
+              setState(() {
+                _logs.add(entry);
+                if (_logs.length > 2000) _logs.removeAt(0);
+              });
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_scrollCtrl.hasClients) {
+                  _scrollCtrl
+                      .jumpTo(_scrollCtrl.position.maxScrollExtent);
+                }
+              });
+            }
+          } catch (_) {}
+        },
+        onError: (e) {
+          debugPrint('Log WS error: $e');
+          if (mounted) setState(() => _connected = false);
+          Future.delayed(
+              const Duration(seconds: 3), () { if (mounted) _connect(); });
+        },
+        onDone: () {
+          if (mounted) {
+            setState(() => _connected = false);
+            Future.delayed(
+                const Duration(seconds: 3), () { if (mounted) _connect(); });
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('Log connect error: $e');
+      if (mounted) {
+        setState(() => _connected = false);
+        Future.delayed(
+            const Duration(seconds: 3), () { if (mounted) _connect(); });
+      }
+    }
   }
 
   List<LogEntry> get _filtered {
@@ -124,7 +153,11 @@ class _LogPageState extends State<LogPage> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
             children: [
-              // Level filter
+              // Connection status dot
+              Icon(Icons.circle,
+                  size: 8,
+                  color: _connected ? Colors.green : Colors.orange),
+              const SizedBox(width: 6),
               DropdownButton<String>(
                 value: _levelFilter,
                 isDense: true,
@@ -141,7 +174,6 @@ class _LogPageState extends State<LogPage> {
                 },
               ),
               const SizedBox(width: 8),
-              // Search
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
@@ -157,13 +189,11 @@ class _LogPageState extends State<LogPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Clear
               IconButton(
                 tooltip: 'Clear logs',
                 icon: const Icon(Icons.delete_outline, size: 18),
                 onPressed: () => setState(() => _logs.clear()),
               ),
-              // Copy all
               IconButton(
                 tooltip: 'Copy all',
                 icon: const Icon(Icons.copy, size: 18),
@@ -179,11 +209,14 @@ class _LogPageState extends State<LogPage> {
           ),
         ),
         const Divider(height: 1),
-        // Log list
         Expanded(
           child: filtered.isEmpty
-              ? const Center(
-                  child: Text('No logs', style: TextStyle(color: Colors.grey)))
+              ? Center(
+                  child: Text(
+                    _connected ? 'Waiting for logs...' : 'Connecting...',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                )
               : ListView.builder(
                   controller: _scrollCtrl,
                   itemCount: filtered.length,
@@ -195,7 +228,6 @@ class _LogPageState extends State<LogPage> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Time
                           SizedBox(
                             width: 68,
                             child: Text(
@@ -204,13 +236,13 @@ class _LogPageState extends State<LogPage> {
                                   fontSize: 11, color: Colors.grey),
                             ),
                           ),
-                          // Level badge
                           Container(
                             width: 54,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 4, vertical: 1),
                             decoration: BoxDecoration(
-                              color: e.levelColor(ctx).withOpacity(0.12),
+                              color:
+                                  e.levelColor(ctx).withAlpha(30),
                               borderRadius: BorderRadius.circular(3),
                             ),
                             child: Text(
@@ -222,12 +254,12 @@ class _LogPageState extends State<LogPage> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          // Message
                           Expanded(
                             child: SelectableText(
                               e.message,
                               style: TextStyle(
-                                  fontSize: 12, color: e.levelColor(ctx)),
+                                  fontSize: 12,
+                                  color: e.levelColor(ctx)),
                             ),
                           ),
                         ],
