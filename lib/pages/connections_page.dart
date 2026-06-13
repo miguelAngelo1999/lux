@@ -25,14 +25,19 @@ class ConnectionEntry {
 
   factory ConnectionEntry.fromJson(Map<String, dynamic> j) {
     final meta = j['metadata'] as Map<String, dynamic>? ?? {};
+    final domain = j['domain'] as String? ?? '';
+    final host = domain.isNotEmpty
+        ? domain
+        : (meta['host'] as String? ?? '').isNotEmpty
+            ? '${meta['host']}:${meta['destinationPort'] ?? ''}'
+            : '${meta['destinationIP'] ?? ''}:${meta['destinationPort'] ?? ''}';
+    final rule = j['rule'] as Map<String, dynamic>? ?? {};
     return ConnectionEntry(
-      id: j['id'] as String? ?? '',
+      id: (j['id'] as String? ?? '').toString(),
       network: meta['network'] as String? ?? '',
-      host: (meta['host'] as String? ?? '').isNotEmpty
-          ? meta['host'] as String
-          : '${meta['destinationIP'] ?? ''}:${meta['destinationPort'] ?? ''}',
-      rule: '${j['rule'] ?? ''} ${j['rulePayload'] ?? ''}'.trim(),
-      process: meta['processPath'] as String? ?? '',
+      host: host,
+      rule: '${rule['ruleType'] ?? rule['type'] ?? ''} ${rule['payload'] ?? ''}'.trim(),
+      process: (meta['processPath'] as String? ?? '').split('/').last,
       upload: (j['upload'] as num? ?? 0).toInt(),
       download: (j['download'] as num? ?? 0).toInt(),
     );
@@ -69,16 +74,21 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
       channel.stream.listen(
         (raw) {
           try {
-            final data = json.decode(raw as String) as Map<String, dynamic>;
-            final conns = (data['connections'] as List? ?? [])
+            final data = json.decode(raw as String);
+            List<dynamic> connList;
+            if (data is List) {
+              connList = data;
+            } else if (data is Map) {
+              connList = data['connections'] as List? ?? [];
+            } else {
+              return;
+            }
+            final conns = connList
                 .map((e) => ConnectionEntry.fromJson(e as Map<String, dynamic>))
                 .toList();
             if (mounted) {
               setState(() {
-                _conns
-                  ..clear()
-                  ..addAll(conns);
-                _total = data['downloadTotal'] as int? ?? 0;
+                _conns..clear()..addAll(conns);
               });
             }
           } catch (_) {}
