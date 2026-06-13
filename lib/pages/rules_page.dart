@@ -229,7 +229,12 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       });
       try {
         await widget.coreManager.editCustomizedRule(item.raw, newRaw);
-      } catch (_) {
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Edit failed: $e'), backgroundColor: Colors.red),
+          );
+        }
         _load();
       }
     }
