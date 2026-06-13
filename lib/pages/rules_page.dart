@@ -14,6 +14,7 @@ class RulesPage extends StatefulWidget {
 class _RulesPageState extends State<RulesPage> with WindowListener {
   List<CustomizedRuleItem> _rules = [];
   bool _isLoading = true;
+  bool _isMutating = false; // prevent reload during mutations
   String _search = '';
   final _searchCtrl = TextEditingController();
 
@@ -39,7 +40,9 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   }
 
   @override
-  void onWindowFocus() => _load();
+  void onWindowFocus() {
+    if (!_isMutating) _load();
+  }
 
   @override
   void dispose() {
@@ -78,8 +81,8 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   }
 
   Future<void> _toggle(CustomizedRuleItem item) async {
-    // Optimistic update
     setState(() {
+      _isMutating = true;
       final idx = _rules.indexOf(item);
       if (idx >= 0) {
         _rules[idx] = item.copyWith(
@@ -90,18 +93,27 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     });
     try {
       await widget.coreManager.toggleCustomizedRule(item.raw);
-    } catch (_) {
-      _load(); // rollback on error
+    } catch (e) {
+      debugPrint('Toggle error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Toggle failed: $e'), backgroundColor: Colors.red),
+        );
+        _load();
+      }
+    } finally {
+      if (mounted) setState(() => _isMutating = false);
     }
   }
 
   Future<void> _delete(CustomizedRuleItem item) async {
-    // Optimistic update
-    setState(() => _rules.remove(item));
+    setState(() { _isMutating = true; _rules.remove(item); });
     try {
       await widget.coreManager.deleteCustomizedRules([item.raw]);
     } catch (_) {
       _load();
+    } finally {
+      if (mounted) setState(() => _isMutating = false);
     }
   }
 
