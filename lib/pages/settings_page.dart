@@ -23,6 +23,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   bool _isSaving = false;
   List<String> _interfaces = [];
 
+  // DNS server lists (loaded from raw config)
+  List<String> _dnsRemote = [];
+  List<String> _dnsLocal = [];
+  List<String> _dnsBoost = [];
+
   @override
   void initState() {
     super.initState();
@@ -43,10 +48,28 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     try {
       final setting = await widget.coreManager.getSetting();
       final ifaces = await widget.coreManager.getSettingInterfaces();
+      // Load raw DNS server lists from backend
+      List<String> remote = [];
+      List<String> local = [];
+      List<String> boost = [];
+      try {
+        final rawRes = await widget.coreManager.dio.get(
+            'http://${widget.coreManager.baseUrl}/setting');
+        final rawSetting = rawRes.data['setting'] as Map<String, dynamic>? ?? {};
+        final dns = rawSetting['dns'] as Map<String, dynamic>? ?? {};
+        final server = dns['server'] as Map<String, dynamic>? ?? {};
+        remote = List<String>.from(server['remote'] as List? ?? []);
+        local = List<String>.from(server['local'] as List? ?? []);
+        boost = List<String>.from(server['boost'] as List? ?? []);
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _setting = setting;
           _interfaces = ifaces;
+          _dnsRemote = remote;
+          _dnsLocal = local;
+          _dnsBoost = boost;
           _isLoading = false;
         });
       }
@@ -170,6 +193,18 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 s.fakeIp ?? false,
                 (v) => _save(s.copyWith(fakeIp: v)),
               ),
+
+              // ── DNS Servers ──
+              const SizedBox(height: 8),
+              if (s.fakeIp != true)
+                _dnsListTile('Remote DNS', 'Resolve foreign domains', _dnsRemote,
+                    (v) => _saveDnsList('remote', v)),
+              _dnsListTile('Local DNS', 'Resolve domestic domains', _dnsLocal,
+                  (v) => _saveDnsList('local', v)),
+              _dnsListTile('Boost DNS', 'Initial bootstrap resolution', _dnsBoost,
+                  (v) => _saveDnsList('boost', v)),
+              const SizedBox(height: 8),
+
               _switchTile(
                 'Disable DNS Cache',
                 'Always get latest DNS responses',
@@ -228,6 +263,119 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
       ],
     );
+  }
+
+  // ── DNS editing helpers ──────────────────────────────────────────────────
+
+  Future<void> _saveDnsList(String key, List<String> servers) async {
+    setState(() => _isSaving = true);
+    try {
+      final rawRes = await widget.coreManager.dio.get(
+          'http://${widget.coreManager.baseUrl}/setting');
+      final raw = Map<String, dynamic>.from(rawRes.data['setting'] as Map);
+      final dns = Map<String, dynamic>.from(raw['dns'] as Map? ?? {});
+      final server = Map<String, dynamic>.from(dns['server'] as Map? ?? {});
+      server[key] = servers;
+      dns['server'] = server;
+      raw['dns'] = dns;
+      await widget.coreManager.dio.put(
+          'http://${widget.coreManager.baseUrl}/setting', data: raw);
+      // Update local state
+      if (mounted) {
+        setState(() {
+          switch (key) {
+            case 'remote': _dnsRemote = servers;
+            case 'local': _dnsLocal = servers;
+            case 'boost': _dnsBoost = servers;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save DNS: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Widget _dnsListTile(String title, String subtitle, List<String> servers,
+      void Function(List<String>) onSave) {
+    return ListTile(
+      dense: true,
+      title: Text(title, style: const TextStyle(fontSize: 14)),
+      subtitle: Text(
+        servers.isEmpty ? subtitle : servers.join(', '),
+        style: const TextStyle(fontSize: 11),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.edit, size: 18),
+        onPressed: _isSaving ? null : () => _showDnsEditDialog(title, servers, onSave),
+      ),
+    );
+  }
+
+  Future<void> _showDnsEditDialog(String title, List<String> current,
+      void Function(List<String>) onSave) async {
+    final controller = TextEditingController(text: current.join('\n'));
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit $title', style: const TextStyle(fontSize: 16)),
+        content: SizedBox(
+          width: 400,
+          height: 200,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'One server per line. Supported prefixes: tcp://, https://, dhcp://, udp://, system://',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  maxLines: null,
+                  expands: true,
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(8),
+                    hintText: 'tcp://8.8.8.8:53\nhttps://dns.google/dns-query',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final lines = controller.text
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .where((l) => l.isNotEmpty)
+                  .toList();
+              Navigator.of(ctx).pop(lines);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null) {
+      onSave(result);
+    }
   }
 
   // ── Language / Theme helpers ─────────────────────────────────────────────
