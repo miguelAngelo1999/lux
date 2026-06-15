@@ -321,58 +321,45 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   Future<void> _showDnsEditDialog(String title, List<String> current,
       void Function(List<String>) onSave) async {
-    final controller = TextEditingController(text: current.join('\n'));
+    // Preset options per category (matching web UI)
+    List<String> presets;
+    if (title.contains('Remote')) {
+      presets = [
+        'tcp://8.8.8.8:53',
+        'tcp://1.1.1.1:53',
+        'https://dns.google/dns-query',
+        'https://cloudflare-dns.com/dns-query',
+      ];
+    } else if (title.contains('Boost')) {
+      presets = [
+        'tcp://114.114.114.114:53',
+        'tcp://119.29.29.29:53',
+        'dhcp://auto',
+        'system://auto',
+      ];
+    } else {
+      // Local
+      presets = [
+        'tcp://114.114.114.114:53',
+        'tcp://119.29.29.29:53',
+        'https://doh.pub/dns-query',
+        'dhcp://auto',
+        'system://auto',
+      ];
+    }
+
+    // Merge presets + any custom entries already selected
+    final allOptions = <String>{...presets, ...current}.toList();
+    final selected = Set<String>.from(current);
+
     final result = await showDialog<List<String>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Edit $title', style: const TextStyle(fontSize: 16)),
-        content: SizedBox(
-          width: 400,
-          height: 200,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'One server per line. Supported prefixes: tcp://, https://, dhcp://, udp://, system://',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  maxLines: null,
-                  expands: true,
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.all(8),
-                    hintText: 'tcp://8.8.8.8:53\nhttps://dns.google/dns-query',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final lines = controller.text
-                  .split('\n')
-                  .map((l) => l.trim())
-                  .where((l) => l.isNotEmpty)
-                  .toList();
-              Navigator.of(ctx).pop(lines);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (ctx) => _DnsPickerDialog(
+        title: title,
+        allOptions: allOptions,
+        initialSelected: selected,
       ),
     );
-    controller.dispose();
     if (result != null) {
       onSave(result);
     }
@@ -601,5 +588,154 @@ String getModeLabel(ProxyMode m) {
       return 'System';
     default:
       return 'Mixed';
+  }
+}
+
+// ── DNS Picker Dialog ─────────────────────────────────────────────────────────
+
+class _DnsPickerDialog extends StatefulWidget {
+  final String title;
+  final List<String> allOptions;
+  final Set<String> initialSelected;
+
+  const _DnsPickerDialog({
+    required this.title,
+    required this.allOptions,
+    required this.initialSelected,
+  });
+
+  @override
+  State<_DnsPickerDialog> createState() => _DnsPickerDialogState();
+}
+
+class _DnsPickerDialogState extends State<_DnsPickerDialog> {
+  late Set<String> _selected;
+  late List<String> _options;
+  final _customController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set<String>.from(widget.initialSelected);
+    _options = List<String>.from(widget.allOptions);
+  }
+
+  @override
+  void dispose() {
+    _customController.dispose();
+    super.dispose();
+  }
+
+  void _addCustom() {
+    final value = _customController.text.trim();
+    if (value.isEmpty) return;
+    // Basic validation — must start with a known protocol
+    final validPrefixes = ['tcp://', 'https://', 'udp://', 'dhcp://', 'system://'];
+    if (!validPrefixes.any((p) => value.startsWith(p))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Must start with: ${validPrefixes.join(", ")}')),
+      );
+      return;
+    }
+    setState(() {
+      if (!_options.contains(value)) _options.add(value);
+      _selected.add(value);
+    });
+    _customController.clear();
+  }
+
+  /// Short display label for known DNS addresses
+  String _label(String s) {
+    const labels = {
+      'tcp://8.8.8.8:53': 'Google (8.8.8.8)',
+      'tcp://1.1.1.1:53': 'Cloudflare (1.1.1.1)',
+      'tcp://114.114.114.114:53': '114 DNS',
+      'tcp://119.29.29.29:53': 'DNSPod (119)',
+      'https://dns.google/dns-query': 'Google DoH',
+      'https://cloudflare-dns.com/dns-query': 'Cloudflare DoH',
+      'https://doh.pub/dns-query': 'DNSPod DoH',
+      'dhcp://auto': 'DHCP Auto',
+      'system://auto': 'System Auto',
+    };
+    return labels[s] ?? s;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Edit ${widget.title}', style: const TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tap to select/deselect. At least one server is required.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _options.map((opt) {
+                final isOn = _selected.contains(opt);
+                return FilterChip(
+                  label: Text(_label(opt), style: const TextStyle(fontSize: 11)),
+                  selected: isOn,
+                  onSelected: (v) {
+                    setState(() {
+                      if (v) {
+                        _selected.add(opt);
+                      } else {
+                        _selected.remove(opt);
+                      }
+                    });
+                  },
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _customController,
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      border: OutlineInputBorder(),
+                      hintText: 'tcp://custom:53 or https://...',
+                      hintStyle: TextStyle(fontSize: 11),
+                    ),
+                    onSubmitted: (_) => _addCustom(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline, size: 20),
+                  onPressed: _addCustom,
+                  tooltip: 'Add custom server',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(_selected.toList()),
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
