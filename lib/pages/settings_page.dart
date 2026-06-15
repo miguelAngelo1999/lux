@@ -1,6 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
+import 'package:lux/model/app.dart';
+import 'package:lux/util/utils.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -80,6 +86,20 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           children: [
             // ── General ──
             _sectionHeader('General'),
+            _dropdownTile<String>(
+              'Language',
+              _currentLanguage(),
+              ['system', 'en', 'zh-CN'],
+              (v) => _languageLabel(v),
+              (v) => _saveLanguage(v),
+            ),
+            _dropdownTile<String>(
+              'Theme',
+              _currentTheme(),
+              ['system', 'dark', 'light'],
+              (v) => _themeLabel(v),
+              (v) => _saveTheme(v),
+            ),
             _switchTile(
               'Auto Launch',
               'Start Lux when you log in',
@@ -189,6 +209,10 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               ),
             ],
 
+            const SizedBox(height: 16),
+            _sectionHeader('Advanced'),
+            _configFileTile(),
+
             const SizedBox(height: 32),
           ],
         ),
@@ -204,6 +228,140 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
       ],
     );
+  }
+
+  // ── Language / Theme helpers ─────────────────────────────────────────────
+
+  String _currentLanguage() {
+    final appState = Provider.of<AppStateModel>(context, listen: false);
+    final locale = appState.locale;
+    if (locale.languageCode == 'zh') return 'zh-CN';
+    if (locale.languageCode == 'en') return 'en';
+    return 'system';
+  }
+
+  String _languageLabel(String v) {
+    switch (v) {
+      case 'en': return 'English';
+      case 'zh-CN': return '中文';
+      default: return 'System';
+    }
+  }
+
+  Future<void> _saveLanguage(String v) async {
+    final appState = Provider.of<AppStateModel>(context, listen: false);
+    appState.updateLocale(convertLocale(v));
+    // Persist via the backend setting API
+    try {
+      final current = await widget.coreManager.dio.get(
+          'http://${widget.coreManager.baseUrl}/setting');
+      final raw = Map<String, dynamic>.from(current.data['setting'] as Map);
+      raw['language'] = v;
+      await widget.coreManager.dio.put(
+          'http://${widget.coreManager.baseUrl}/setting', data: raw);
+    } catch (e) {
+      debugPrint('Failed to save language: $e');
+    }
+  }
+
+  String _currentTheme() {
+    final appState = Provider.of<AppStateModel>(context, listen: false);
+    switch (appState.theme) {
+      case ThemeMode.dark: return 'dark';
+      case ThemeMode.light: return 'light';
+      default: return 'system';
+    }
+  }
+
+  String _themeLabel(String v) {
+    switch (v) {
+      case 'dark': return 'Dark';
+      case 'light': return 'Light';
+      default: return 'System';
+    }
+  }
+
+  Future<void> _saveTheme(String v) async {
+    final appState = Provider.of<AppStateModel>(context, listen: false);
+    appState.updateTheme(convertTheme(v));
+    try {
+      final current = await widget.coreManager.dio.get(
+          'http://${widget.coreManager.baseUrl}/setting');
+      final raw = Map<String, dynamic>.from(current.data['setting'] as Map);
+      raw['theme'] = v;
+      await widget.coreManager.dio.put(
+          'http://${widget.coreManager.baseUrl}/setting', data: raw);
+    } catch (e) {
+      debugPrint('Failed to save theme: $e');
+    }
+  }
+
+  // ── Config File tile ────────────────────────────────────────────────────────
+
+  Widget _configFileTile() {
+    return ListTile(
+      dense: true,
+      title: const Text('Config File', style: TextStyle(fontSize: 14)),
+      subtitle: const Text('Open or reset your configuration', style: TextStyle(fontSize: 12)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: () async {
+              final homeDir = await getHomeDir();
+              launchUrl(Uri.file(homeDir));
+            },
+            child: const Text('Open Dir', style: TextStyle(fontSize: 12)),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: _isSaving ? null : () => _confirmResetConfig(),
+            child: const Text('Reset', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmResetConfig() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Configuration'),
+        content: const Text(
+          'This will reset all settings to defaults. The app will restart. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await widget.coreManager.dio.post(
+          'http://${widget.coreManager.baseUrl}/setting/reset');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Config reset. Restart the app.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Reset failed: $e')),
+        );
+      }
+    }
   }
 
   Widget _sectionHeader(String title) => Padding(
