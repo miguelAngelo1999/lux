@@ -96,6 +96,13 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   Future<void> _installCert() async {
+    final status = _sslStatus;
+    if (status == null || !status.hasCert) return;
+
+    // Show cert details + explicit confirmation before doing anything
+    final confirmed = await _showCertConfirmDialog(status.certInfo);
+    if (!confirmed || !mounted) return;
+
     setState(() {
       _sslInstalling = true;
       _installResult = null;
@@ -134,6 +141,135 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     } finally {
       if (mounted) setState(() => _sslInstalling = false);
     }
+  }
+
+  /// Shows a dialog with the intercepting cert's details and asks the user
+  /// to explicitly confirm before trusting it system-wide.
+  Future<bool> _showCertConfirmDialog(CertInfo? info) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
+                SizedBox(width: 8),
+                Flexible(child: Text('Trust this certificate?', style: TextStyle(fontSize: 16))),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your proxy is intercepting HTTPS traffic. Installing this CA '
+                    'will make your system trust all certificates it signs — only '
+                    'do this if you trust the organization that controls this proxy.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  if (info != null) ...[
+                    const SizedBox(height: 16),
+                    _certDetailTable(info),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Certificate details unavailable.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      border: Border.all(color: Colors.orange.shade200),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, size: 14, color: Colors.orange),
+                        SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'This grants the proxy the ability to decrypt and read '
+                            'all your HTTPS traffic. Only proceed if this is your '
+                            'corporate or personal proxy.',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('I trust this — install'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Widget _certDetailTable(CertInfo info) {
+    final rows = [
+      if (info.subject.isNotEmpty) ('Subject', info.subject),
+      if (info.organizationName.isNotEmpty) ('Organization', info.organizationName),
+      if (info.issuer.isNotEmpty && info.issuer != info.subject) ('Issuer', info.issuer),
+      ('Valid from', info.notBefore),
+      ('Valid until', info.notAfter),
+      if (info.sha256Fingerprint.isNotEmpty) ('SHA-256', info.sha256Fingerprint),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        children: rows.map((r) {
+          final isLast = r == rows.last;
+          return Container(
+            decoration: BoxDecoration(
+              border: isLast
+                  ? null
+                  : Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 88,
+                  child: Text(r.$1,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500)),
+                ),
+                Expanded(
+                  child: Text(r.$2,
+                      style: const TextStyle(
+                          fontSize: 11, fontFamily: 'monospace'),
+                      softWrap: true),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 
   @override
@@ -282,6 +418,38 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
   }
 
+  /// Compact inline cert preview shown in the settings page (not the dialog).
+  Widget _certPreviewCard(CertInfo? info) {
+    if (info == null) return const SizedBox.shrink();
+    final display = info.organizationName.isNotEmpty ? info.organizationName : info.subject;
+    final fp = info.sha256Fingerprint.length > 29
+        ? '${info.sha256Fingerprint.substring(0, 29)}…'
+        : info.sha256Fingerprint;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.amber.shade300),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.amber.shade50.withValues(alpha: 0.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Intercepting CA',
+              style: TextStyle(fontSize: 10, color: Colors.amber.shade800, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          if (display.isNotEmpty)
+            Text(display, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          if (fp.isNotEmpty)
+            Text('SHA-256: $fp',
+                style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey.shade700)),
+          Text('Valid: ${info.notBefore} → ${info.notAfter}',
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+        ],
+      ),
+    );
+  }
+
   Widget _sectionHeader(String title) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(title,
@@ -368,16 +536,22 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             child: statusChip,
           ),
           if (status.detected && status.hasCert) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _certPreviewCard(status.certInfo),
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
                 icon: _sslInstalling
                     ? const SizedBox(
                         width: 14, height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.verified_user, size: 16),
                 label: Text(
-                  _sslInstalling ? 'Installing…' : 'Install Certificate',
+                  _sslInstalling ? 'Installing…' : 'Install Certificate…',
                   style: const TextStyle(fontSize: 13),
                 ),
                 onPressed: _sslInstalling ? null : _installCert,
@@ -423,8 +597,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         ),
         borderRadius: BorderRadius.circular(8),
         color: result.success
-            ? Colors.green.shade50.withOpacity(0.3)
-            : Colors.orange.shade50.withOpacity(0.3),
+            ? Colors.green.shade50.withValues(alpha: 0.3)
+            : Colors.orange.shade50.withValues(alpha: 0.3),
       ),
       padding: const EdgeInsets.all(10),
       child: Column(
