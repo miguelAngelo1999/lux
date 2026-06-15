@@ -370,6 +370,39 @@ class CustomizedRuleItem {
 // Sentinel for copyWith optional nullable field
 const Object _sentinel = Object();
 
+/// Human-readable fields extracted from an intercepting CA certificate.
+class CertInfo {
+  final String subject;
+  final String issuer;
+  final String organizationName;
+  final String notBefore;
+  final String notAfter;
+  final String sha256Fingerprint;
+  final bool isCA;
+
+  const CertInfo({
+    required this.subject,
+    required this.issuer,
+    required this.organizationName,
+    required this.notBefore,
+    required this.notAfter,
+    required this.sha256Fingerprint,
+    required this.isCA,
+  });
+
+  factory CertInfo.fromJson(Map<String, dynamic> json) {
+    return CertInfo(
+      subject: json['subject'] as String? ?? '',
+      issuer: json['issuer'] as String? ?? '',
+      organizationName: json['organizationName'] as String? ?? '',
+      notBefore: json['notBefore'] as String? ?? '',
+      notAfter: json['notAfter'] as String? ?? '',
+      sha256Fingerprint: json['sha256Fingerprint'] as String? ?? '',
+      isCA: json['isCA'] as bool? ?? false,
+    );
+  }
+}
+
 /// Result of the SSL bump detection probe from the backend.
 class SslBumpStatus {
   /// Whether an intercepting/inspecting proxy was detected.
@@ -384,11 +417,15 @@ class SslBumpStatus {
   /// Error message if the probe failed.
   final String? error;
 
+  /// Parsed metadata about the intercepting CA cert, if available.
+  final CertInfo? certInfo;
+
   const SslBumpStatus({
     required this.detected,
     required this.hasCert,
     this.checkedAt = '',
     this.error,
+    this.certInfo,
   });
 
   factory SslBumpStatus.fromJson(Map<String, dynamic> json) {
@@ -397,6 +434,9 @@ class SslBumpStatus {
       hasCert: json['hasCert'] as bool? ?? false,
       checkedAt: json['checkedAt'] as String? ?? '',
       error: json['error'] as String?,
+      certInfo: json['certInfo'] is Map<String, dynamic>
+          ? CertInfo.fromJson(json['certInfo'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
