@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 /// Installs a PEM-encoded CA certificate into the platform's trusted root
-/// store and into popular terminal tool stores (curl, git, Node.js, Python).
+/// store and into popular terminal tool stores (curl, git, Node.js, Python)
+/// as well as app-bundled cert stores (conda, video editors, etc.).
 class CertInstaller {
   /// Installs [pemBytes] as a trusted root CA on the current platform.
   /// Returns an [InstallResult] describing what succeeded and what failed.
@@ -22,13 +23,12 @@ class CertInstaller {
   static Future<InstallResult> _installMacOS(List<int> pemBytes) async {
     final steps = <InstallStep>[];
 
-    // Write PEM to a stable temp location
     const certPath = '/tmp/lux_intercept_ca.pem';
     await File(certPath).writeAsBytes(pemBytes);
 
     try {
-      // Build a single admin script that does all root-requiring operations
-      // in one shot — user gets only ONE password prompt.
+      // Build a single admin script for all root-requiring operations.
+      // User gets ONE password prompt.
       final adminScript = File('/tmp/lux_cert_install.sh');
       final scriptLines = [
         '#!/bin/bash',
@@ -74,7 +74,6 @@ class CertInstaller {
       await adminScript.writeAsString(scriptLines.join('\n'));
       await Process.run('chmod', ['+x', adminScript.path]);
 
-      // Run with ONE admin prompt via osascript
       final adminExit = await _runMacOSAdminScript(adminScript.path);
       await adminScript.delete().catchError((_) => adminScript);
 
@@ -97,13 +96,13 @@ class CertInstaller {
             note: 'Admin script failed'));
       }
 
-      // 4. Homebrew openssl@3 (user-writable on Apple Silicon)
+      // Homebrew openssl@3
       steps.add(await _appendToPemStore(pemBytes, [
         '/opt/homebrew/etc/openssl@3/cert.pem',
         '/usr/local/etc/openssl@3/cert.pem',
       ], 'Homebrew openssl@3'));
 
-      // 5. Git on macOS uses Homebrew openssl
+      // Git (Homebrew openssl bundle)
       steps.add(await _appendToPemStore(pemBytes, [
         '/opt/homebrew/etc/openssl@3/cert.pem',
         '/usr/local/etc/openssl@3/cert.pem',
@@ -111,8 +110,11 @@ class CertInstaller {
         '/usr/local/etc/openssl/cert.pem',
       ], 'git (Homebrew bundle)'));
 
-      // 6. Python certifi (user-writable)
+      // Python certifi
       steps.addAll(await _installPythonCertifi(pemBytes));
+
+      // App-bundled cert stores
+      steps.add(await _installAppBundledCerts(pemBytes));
     } finally {
       await File(certPath).delete().catchError((_) => File(certPath));
     }
@@ -125,8 +127,6 @@ class CertInstaller {
     );
   }
 
-  /// Runs a script elevated via osascript. Uses single-quoted path inside
-  /// the AppleScript to avoid any escaping issues.
   static Future<int> _runMacOSAdminScript(String scriptPath) async {
     final appleScript =
         "do shell script \"bash '$scriptPath'\" with prompt "
@@ -147,7 +147,7 @@ class CertInstaller {
     await tmpPem.writeAsBytes(pemBytes);
 
     try {
-      // 1. Windows Trusted Root store (all users)
+      // Windows Trusted Root store (all users)
       final certutilResult = await _runWindowsAsAdmin(
         'certutil -addstore -f Root "${tmpPem.path}"',
       );
@@ -159,7 +159,7 @@ class CertInstaller {
             : 'certutil exit code: $certutilResult',
       ));
 
-      // 2. curl on Windows uses Windows cert store
+      // curl on Windows uses Windows cert store
       steps.add(InstallStep(
         name: 'curl (uses Windows cert store)',
         success: certutilResult == 0,
@@ -168,13 +168,16 @@ class CertInstaller {
             : 'Skipped — certutil failed',
       ));
 
-      // 3. Git for Windows
+      // Git for Windows
       steps.add(await _installGitWindowsCerts(pemBytes));
 
-      // 4. Node.js / npm
+      // App-bundled cert stores
+      steps.add(await _installAppBundledCerts(pemBytes));
+
+      // Node.js / npm
       steps.add(await _installWindowsNodeExtraCa(pemBytes));
 
-      // 5. Python certifi
+      // Python certifi
       steps.addAll(await _installPythonCertifi(pemBytes));
     } finally {
       await tmpPem.delete().catchError((_) => tmpPem);
@@ -188,7 +191,6 @@ class CertInstaller {
     );
   }
 
-  /// Runs a command elevated via PowerShell Start-Process -Verb RunAs.
   static Future<int> _runWindowsAsAdmin(String cmd) async {
     final scriptFile = File(
         '${Directory.systemTemp.path}\\lux_admin_${DateTime.now().millisecondsSinceEpoch}.bat');
@@ -259,6 +261,121 @@ class CertInstaller {
         note: 'Error: $e',
       );
     }
+  }
+
+  // ── App-bundled cert stores ──────────────────────────────────────────────
+
+  /// Scans for applications that ship their own CA cert bundles
+  /// and appends the cert. Reports generically — no app names in the UI.
+  static Future<InstallStep> _installAppBundledCerts(List<int> pemBytes) async {
+    final candidates = <String>[];
+
+    if (Platform.isWindows) {
+      final programData = Platform.environment['PROGRAMDATA'] ?? r'C:\ProgramData';
+      final programFiles = Platform.environment['ProgramFiles'] ?? r'C:\Program Files';
+      final userProfile = Platform.environment['USERPROFILE'] ?? r'C:\Users\user';
+
+      // Video editors
+      candidates.addAll([
+        '$programData\\Blackmagic Design\\DaVinci Resolve\\curl-ca-bundle.crt',
+        '$programData\\Blackmagic Design\\DaVinci Resolve\\cacert.pem',
+        '$programData\\Blackmagic Design\\DaVinci Resolve\\ssl\\cert.pem',
+      ]);
+
+      // Anaconda / Miniconda
+      candidates.addAll([
+        '$userProfile\\Anaconda3\\Library\\ssl\\cacert.pem',
+        '$userProfile\\Miniconda3\\Library\\ssl\\cacert.pem',
+        '$userProfile\\anaconda3\\Library\\ssl\\cacert.pem',
+        '$userProfile\\miniconda3\\Library\\ssl\\cacert.pem',
+        '$programData\\Anaconda3\\Library\\ssl\\cacert.pem',
+        '$programData\\Miniconda3\\Library\\ssl\\cacert.pem',
+        '$programFiles\\Anaconda3\\Library\\ssl\\cacert.pem',
+        '$programFiles\\Miniconda3\\Library\\ssl\\cacert.pem',
+      ]);
+
+      // Ruby
+      candidates.addAll([
+        '$programFiles\\Ruby32-x64\\ssl\\cert.pem',
+        '$programFiles\\Ruby31-x64\\ssl\\cert.pem',
+        '$programFiles\\Ruby33-x64\\ssl\\cert.pem',
+      ]);
+
+      // Java (PEM bundles some vendors ship alongside cacerts keystore)
+      candidates.addAll([
+        '$programFiles\\Java\\jre\\lib\\security\\cacerts.pem',
+        '$programFiles\\Eclipse Adoptium\\jdk-21\\lib\\security\\cacerts.pem',
+      ]);
+    } else if (Platform.isMacOS) {
+      final home = Platform.environment['HOME'] ?? '/Users/user';
+
+      // Video editors
+      candidates.addAll([
+        '/Library/Application Support/Blackmagic Design/DaVinci Resolve/curl-ca-bundle.crt',
+        '/Library/Application Support/Blackmagic Design/DaVinci Resolve/cacert.pem',
+      ]);
+
+      // Anaconda / Miniconda
+      candidates.addAll([
+        '$home/anaconda3/ssl/cacert.pem',
+        '$home/miniconda3/ssl/cacert.pem',
+        '$home/anaconda3/lib/python3.11/site-packages/certifi/cacert.pem',
+        '$home/anaconda3/lib/python3.12/site-packages/certifi/cacert.pem',
+        '$home/miniconda3/lib/python3.11/site-packages/certifi/cacert.pem',
+        '$home/miniconda3/lib/python3.12/site-packages/certifi/cacert.pem',
+        '/opt/anaconda3/ssl/cacert.pem',
+        '/opt/miniconda3/ssl/cacert.pem',
+        '/opt/homebrew/anaconda3/ssl/cacert.pem',
+      ]);
+
+      // Homebrew Ruby
+      candidates.addAll([
+        '/opt/homebrew/opt/ruby/etc/openssl/cert.pem',
+        '/usr/local/opt/ruby/etc/openssl/cert.pem',
+      ]);
+
+      // Java (Homebrew / sdkman)
+      candidates.addAll([
+        '/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home/lib/security/cacerts.pem',
+        '$home/.sdkman/candidates/java/current/lib/security/cacerts.pem',
+      ]);
+    }
+
+    int patched = 0;
+    for (final path in candidates) {
+      try {
+        final f = File(path);
+        if (!await f.exists()) continue;
+
+        final existing = await f.readAsString();
+        final pemStr = String.fromCharCodes(pemBytes);
+        if (existing.contains(_extractPemBody(pemStr))) {
+          patched++; // Already present counts as success
+          continue;
+        }
+
+        final raf = await f.open(mode: FileMode.append);
+        await raf.writeString('\n# Added by Lux SSL inspection CA\n');
+        await raf.writeFrom(pemBytes);
+        await raf.close();
+        patched++;
+      } catch (e) {
+        debugPrint('App bundle cert write failed for $path: $e');
+      }
+    }
+
+    if (patched > 0) {
+      return InstallStep(
+        name: 'App cert bundles',
+        success: true,
+        note: 'Patched $patched app-bundled cert store${patched > 1 ? 's' : ''}',
+      );
+    }
+    return const InstallStep(
+      name: 'App cert bundles',
+      success: false,
+      note: 'No app-bundled cert stores found',
+    );
   }
 
   // ── Shared helpers ─────────────────────────────────────────────────────────
