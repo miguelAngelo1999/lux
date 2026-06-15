@@ -26,12 +26,9 @@ Future<bool> _isSudoersConfigured(String corePath) async {
   final realPath = '${corePath}_real';
   final sudoersFile = File('/etc/sudoers.d/lux_core');
   if (!await sudoersFile.exists()) return false;
-  try {
-    final content = await sudoersFile.readAsString();
-    return content.contains(realPath);
-  } catch (_) {
-    return false;
-  }
+  // Can't read file content (root-owned 0440). If it exists,
+  // assume it is configured correctly.
+  return true;
 }
 
 /// Checks if the core binary is already wrapped with the sudo script.
