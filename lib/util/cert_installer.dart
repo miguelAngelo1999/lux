@@ -3,17 +3,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 /// Installs a PEM-encoded CA certificate into the platform's trusted root
-/// store and into popular terminal tool stores (curl, git, etc.).
+/// store and into popular terminal tool stores (curl, git, Node.js, Python).
 class CertInstaller {
   /// Installs [pemBytes] as a trusted root CA on the current platform.
-  ///
   /// Returns an [InstallResult] describing what succeeded and what failed.
   static Future<InstallResult> install(List<int> pemBytes) async {
-    if (Platform.isMacOS) {
-      return _installMacOS(pemBytes);
-    } else if (Platform.isWindows) {
-      return _installWindows(pemBytes);
-    }
+    if (Platform.isMacOS) return _installMacOS(pemBytes);
+    if (Platform.isWindows) return _installWindows(pemBytes);
     return InstallResult(
       success: false,
       steps: [],
@@ -26,54 +22,99 @@ class CertInstaller {
   static Future<InstallResult> _installMacOS(List<int> pemBytes) async {
     final steps = <InstallStep>[];
 
-    // Write PEM to a temp file
-    final tmpFile = File('/tmp/lux_intercept_ca_${DateTime.now().millisecondsSinceEpoch}.pem');
-    await tmpFile.writeAsBytes(pemBytes);
+    // Write PEM to a stable temp location
+    const certPath = '/tmp/lux_intercept_ca.pem';
+    await File(certPath).writeAsBytes(pemBytes);
 
     try {
-      // 1. Install into macOS System keychain (trusted for all users)
-      final sysResult = await _runMacOSAsAdmin(
+      // Build a single admin script that does all root-requiring operations
+      // in one shot — user gets only ONE password prompt.
+      final adminScript = File('/tmp/lux_cert_install.sh');
+      final scriptLines = [
+        '#!/bin/bash',
+        'set -e',
+        'CERT="$certPath"',
+        '',
+        '# 1. Trust in System Keychain',
         'security add-trusted-cert -d -r trustRoot '
-        '-k /Library/Keychains/System.keychain "${tmpFile.path}"',
-        description: 'Trusting cert in System keychain',
-      );
-      steps.add(InstallStep(
-        name: 'macOS System Keychain',
-        success: sysResult == 0,
-        note: sysResult == 0 ? 'Trusted system-wide' : 'Exit code: $sysResult',
-      ));
+            '-k /Library/Keychains/System.keychain "\$CERT"',
+        '',
+        '# 2. Append to system OpenSSL cert stores (curl, wget)',
+        'for STORE in /etc/ssl/cert.pem /usr/local/etc/openssl/cert.pem /opt/homebrew/etc/openssl/cert.pem; do',
+        '  if [ -f "\$STORE" ]; then',
+        '    if ! grep -q "Added by Lux SSL" "\$STORE" 2>/dev/null; then',
+        '      echo "" >> "\$STORE"',
+        '      echo "# Added by Lux SSL inspection CA" >> "\$STORE"',
+        '      cat "\$CERT" >> "\$STORE"',
+        '    fi',
+        '  fi',
+        'done',
+        '',
+        '# 3. Node.js NODE_EXTRA_CA_CERTS',
+        'mkdir -p /etc/ssl/certs',
+        'cp "\$CERT" /etc/ssl/certs/lux_intercept_ca.pem',
+        'chmod 644 /etc/ssl/certs/lux_intercept_ca.pem',
+        '',
+        'if [ ! -f /etc/launchd.conf ] || ! grep -q NODE_EXTRA_CA_CERTS /etc/launchd.conf 2>/dev/null; then',
+        '  echo "setenv NODE_EXTRA_CA_CERTS /etc/ssl/certs/lux_intercept_ca.pem" >> /etc/launchd.conf',
+        'fi',
+        '',
+        'EXPORT_LINE="export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/lux_intercept_ca.pem"',
+        'if [ ! -f /etc/zshenv ] || ! grep -q NODE_EXTRA_CA_CERTS /etc/zshenv 2>/dev/null; then',
+        '  echo "\$EXPORT_LINE" >> /etc/zshenv',
+        'fi',
+        'mkdir -p /etc/profile.d',
+        'if [ ! -f /etc/profile.d/lux_ca.sh ] || ! grep -q NODE_EXTRA_CA_CERTS /etc/profile.d/lux_ca.sh 2>/dev/null; then',
+        '  echo "\$EXPORT_LINE" >> /etc/profile.d/lux_ca.sh',
+        'fi',
+        '',
+        'echo "LUX_CERT_INSTALL_OK"',
+      ];
 
-      // 2. curl — /etc/ssl/cert.pem or /usr/local/etc/openssl/cert.pem
-      steps.add(await _appendToPemStore(
-        pemBytes,
-        _macOSCurlCertStores(),
-        'curl (system OpenSSL)',
-      ));
+      await adminScript.writeAsString(scriptLines.join('\n'));
+      await Process.run('chmod', ['+x', adminScript.path]);
 
-      // 3. Git uses its own bundle (usually points at macOS SecureTransport,
-      //    but homebrew git may have its own store)
-      steps.add(await _appendToPemStore(
-        pemBytes,
-        _macOSGitCertStores(),
-        'git (homebrew bundle)',
-      ));
+      // Run with ONE admin prompt via osascript
+      final adminExit = await _runMacOSAdminScript(adminScript.path);
+      await adminScript.delete().catchError((_) => adminScript);
 
-      // 4. Homebrew's openssl ca-bundle
-      steps.add(await _appendToPemStore(
-        pemBytes,
-        ['/opt/homebrew/etc/openssl@3/cert.pem', '/usr/local/etc/openssl@3/cert.pem'],
-        'Homebrew openssl@3',
-      ));
+      if (adminExit == 0) {
+        steps.add(const InstallStep(
+            name: 'macOS System Keychain', success: true, note: 'Trusted system-wide'));
+        steps.add(const InstallStep(
+            name: 'curl (system OpenSSL)', success: true, note: 'Appended to system stores'));
+        steps.add(const InstallStep(
+            name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)', success: true,
+            note: 'Cert at /etc/ssl/certs/lux_intercept_ca.pem; set in launchd.conf + zshenv'));
+      } else {
+        steps.add(InstallStep(
+            name: 'macOS System Keychain', success: false,
+            note: 'Admin script failed (exit $adminExit). User may have cancelled.'));
+        steps.add(const InstallStep(
+            name: 'curl (system OpenSSL)', success: false, note: 'Admin script failed'));
+        steps.add(const InstallStep(
+            name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)', success: false,
+            note: 'Admin script failed'));
+      }
 
-      // 5. Python certifi (most common location)
+      // 4. Homebrew openssl@3 (user-writable on Apple Silicon)
+      steps.add(await _appendToPemStore(pemBytes, [
+        '/opt/homebrew/etc/openssl@3/cert.pem',
+        '/usr/local/etc/openssl@3/cert.pem',
+      ], 'Homebrew openssl@3'));
+
+      // 5. Git on macOS uses Homebrew openssl
+      steps.add(await _appendToPemStore(pemBytes, [
+        '/opt/homebrew/etc/openssl@3/cert.pem',
+        '/usr/local/etc/openssl@3/cert.pem',
+        '/opt/homebrew/etc/openssl/cert.pem',
+        '/usr/local/etc/openssl/cert.pem',
+      ], 'git (Homebrew bundle)'));
+
+      // 6. Python certifi (user-writable)
       steps.addAll(await _installPythonCertifi(pemBytes));
-
-      // 6. Node.js / npm — respects NODE_EXTRA_CA_CERTS env var.
-      //    We write the cert to a well-known location and add an
-      //    /etc/profile.d entry so it's picked up system-wide.
-      steps.add(await _installNodeExtraCa(pemBytes));
     } finally {
-      await tmpFile.delete().catchError((_) => tmpFile);
+      await File(certPath).delete().catchError((_) => File(certPath));
     }
 
     final anySuccess = steps.any((s) => s.success);
@@ -84,43 +125,31 @@ class CertInstaller {
     );
   }
 
-  /// Runs a shell command elevated via osascript (prompts for admin once).
-  static Future<int> _runMacOSAsAdmin(String cmd, {required String description}) async {
-    final script = 'do shell script "$cmd" with prompt '
-        '"Lux: $description" with administrator privileges';
-    final result = await Process.run('/usr/bin/osascript', ['-e', script]);
-    debugPrint('macOS admin cmd [$description] exit=${result.exitCode} '
-        'err=${result.stderr}');
+  /// Runs a script elevated via osascript. Uses single-quoted path inside
+  /// the AppleScript to avoid any escaping issues.
+  static Future<int> _runMacOSAdminScript(String scriptPath) async {
+    final appleScript =
+        "do shell script \"bash '$scriptPath'\" with prompt "
+        "\"Lux needs admin access to install the CA certificate\" "
+        "with administrator privileges";
+    final result = await Process.run('/usr/bin/osascript', ['-e', appleScript]);
+    debugPrint('macOS admin script exit=${result.exitCode} '
+        'stdout=${result.stdout} err=${result.stderr}');
     return result.exitCode;
   }
-
-  static List<String> _macOSCurlCertStores() => [
-        '/etc/ssl/cert.pem',
-        '/usr/local/etc/openssl/cert.pem',
-        '/opt/homebrew/etc/openssl/cert.pem',
-      ];
-
-  static List<String> _macOSGitCertStores() => [
-        '/usr/local/etc/openssl@3/cert.pem',
-        '/opt/homebrew/etc/openssl@3/cert.pem',
-        '/usr/local/share/ca-certificates/lux_intercept_ca.crt',
-      ];
 
   // ── Windows ────────────────────────────────────────────────────────────────
 
   static Future<InstallResult> _installWindows(List<int> pemBytes) async {
     final steps = <InstallStep>[];
 
-    // Convert PEM → CER (DER) for certutil
-    final tmpPem = File(
-        '${Directory.systemTemp.path}\\lux_intercept_ca_${DateTime.now().millisecondsSinceEpoch}.pem');
+    final tmpPem = File('${Directory.systemTemp.path}\\lux_intercept_ca.pem');
     await tmpPem.writeAsBytes(pemBytes);
 
     try {
-      // 1. Windows Trusted Root store (all users via LocalMachine)
+      // 1. Windows Trusted Root store (all users)
       final certutilResult = await _runWindowsAsAdmin(
         'certutil -addstore -f Root "${tmpPem.path}"',
-        description: 'Installing CA into Windows Trusted Root store',
       );
       steps.add(InstallStep(
         name: 'Windows Trusted Root (certutil)',
@@ -130,23 +159,22 @@ class CertInstaller {
             : 'certutil exit code: $certutilResult',
       ));
 
-      // 2. curl on Windows (curl ships with Windows 10+, uses Windows cert store).
-      //    No separate action needed — it piggybacks the certutil install above.
+      // 2. curl on Windows uses Windows cert store
       steps.add(InstallStep(
         name: 'curl (uses Windows cert store)',
         success: certutilResult == 0,
         note: certutilResult == 0
             ? 'Covered by certutil install'
-            : 'Skipped — certutil install failed',
+            : 'Skipped — certutil failed',
       ));
 
-      // 3. Git for Windows (git-scm) has its own bundled OpenSSL cert bundle
+      // 3. Git for Windows
       steps.add(await _installGitWindowsCerts(pemBytes));
 
-      // 4. Node.js / npm — NODE_EXTRA_CA_CERTS environment variable
+      // 4. Node.js / npm
       steps.add(await _installWindowsNodeExtraCa(pemBytes));
 
-      // 5. Python certifi (most common location)
+      // 5. Python certifi
       steps.addAll(await _installPythonCertifi(pemBytes));
     } finally {
       await tmpPem.delete().catchError((_) => tmpPem);
@@ -161,9 +189,7 @@ class CertInstaller {
   }
 
   /// Runs a command elevated via PowerShell Start-Process -Verb RunAs.
-  static Future<int> _runWindowsAsAdmin(String cmd,
-      {required String description}) async {
-    // Write the command to a temp script to avoid quoting nightmares
+  static Future<int> _runWindowsAsAdmin(String cmd) async {
     final scriptFile = File(
         '${Directory.systemTemp.path}\\lux_admin_${DateTime.now().millisecondsSinceEpoch}.bat');
     await scriptFile.writeAsString('@echo off\r\n$cmd\r\n');
@@ -177,8 +203,7 @@ class CertInstaller {
             '-ArgumentList "/c \\"${scriptFile.path}\\"" '
             '-WindowStyle Hidden',
       ]);
-      debugPrint('Windows admin cmd [$description] exit=${result.exitCode} '
-          'err=${result.stderr}');
+      debugPrint('Windows admin exit=${result.exitCode} err=${result.stderr}');
       return result.exitCode;
     } finally {
       await scriptFile.delete().catchError((_) => scriptFile);
@@ -186,31 +211,27 @@ class CertInstaller {
   }
 
   static Future<InstallStep> _installGitWindowsCerts(List<int> pemBytes) async {
-    // Git for Windows stores its bundle at:
-    //   C:\Program Files\Git\usr\ssl\certs\ca-bundle.crt
     final candidates = [
       r'C:\Program Files\Git\usr\ssl\certs\ca-bundle.crt',
       r'C:\Program Files (x86)\Git\usr\ssl\certs\ca-bundle.crt',
     ];
 
     for (final path in candidates) {
-      final f = File(path);
-      if (await f.exists()) {
+      if (await File(path).exists()) {
         final result = await _appendToPemStore(
             pemBytes, [path], 'Git for Windows (ca-bundle.crt)');
         if (result.success) return result;
       }
     }
 
-    return InstallStep(
+    return const InstallStep(
       name: 'Git for Windows (ca-bundle.crt)',
       success: false,
-      note: 'Git for Windows not found at expected paths',
+      note: 'Git for Windows not found',
     );
   }
 
   static Future<InstallStep> _installWindowsNodeExtraCa(List<int> pemBytes) async {
-    // Store cert at a stable location and set HKLM env var
     const destDir = r'C:\ProgramData\lux';
     const destPath = r'C:\ProgramData\lux\intercept_ca.pem';
 
@@ -219,18 +240,16 @@ class CertInstaller {
       if (!await dir.exists()) await dir.create(recursive: true);
       await File(destPath).writeAsBytes(pemBytes);
 
-      // Set NODE_EXTRA_CA_CERTS system-wide via registry
       final regResult = await _runWindowsAsAdmin(
         'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" '
         '/v NODE_EXTRA_CA_CERTS /t REG_SZ /d "$destPath" /f',
-        description: 'Setting NODE_EXTRA_CA_CERTS for Node.js/npm',
       );
 
       return InstallStep(
         name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)',
         success: regResult == 0,
         note: regResult == 0
-            ? 'Set NODE_EXTRA_CA_CERTS=$destPath in system environment'
+            ? 'Set NODE_EXTRA_CA_CERTS=$destPath'
             : 'Registry write failed (exit $regResult)',
       );
     } catch (e) {
@@ -252,12 +271,11 @@ class CertInstaller {
         final f = File(path);
         if (!await f.exists()) continue;
 
-        // Check if cert is already present (basic dedup)
         final existing = await f.readAsString();
         final pemStr = String.fromCharCodes(pemBytes);
         if (existing.contains(_extractPemBody(pemStr))) {
           return InstallStep(
-              name: storeName, success: true, note: 'Already present');
+              name: storeName, success: true, note: 'Already present in $path');
         }
 
         final raf = await f.open(mode: FileMode.append);
@@ -278,26 +296,23 @@ class CertInstaller {
     );
   }
 
-  /// Extracts the base64 body from a PEM string for dedup checking.
+  /// Extracts 32 chars of base64 body from PEM for dedup checking.
   static String _extractPemBody(String pem) {
-    final lines = pem.split('\n').where((l) =>
-        !l.startsWith('-----') && l.trim().isNotEmpty);
-    return lines.join('').substring(0, 32.clamp(0, lines.join('').length));
+    final body = pem
+        .split('\n')
+        .where((l) => !l.startsWith('-----') && l.trim().isNotEmpty)
+        .join('');
+    return body.length > 32 ? body.substring(0, 32) : body;
   }
 
-  /// Installs into Python certifi on both macOS and Windows.
+  /// Finds Python certifi's cacert.pem and appends the cert.
   static Future<List<InstallStep>> _installPythonCertifi(
       List<int> pemBytes) async {
-    final steps = <InstallStep>[];
-
-    // Find certifi's cacert.pem via python3 -c "import certifi; print(certifi.where())"
-    for (final python in ['python3', 'python', 'python3.11', 'python3.12']) {
+    for (final python in ['python3', 'python', 'python3.12', 'python3.11']) {
       try {
         final result = await Process.run(
             Platform.isWindows ? python : '/usr/bin/env',
-            Platform.isWindows
-                ? [python, '-c', 'import certifi; print(certifi.where())']
-                : [python, '-c', 'import certifi; print(certifi.where())']);
+            [python, '-c', 'import certifi; print(certifi.where())']);
         if (result.exitCode != 0) continue;
 
         final certifiPath = result.stdout.toString().trim();
@@ -305,93 +320,21 @@ class CertInstaller {
 
         final step = await _appendToPemStore(
             pemBytes, [certifiPath], 'Python certifi ($python)');
-        steps.add(step);
-        if (step.success) break; // only need one Python certifi
+        if (step.success) return [step];
       } catch (_) {
         continue;
       }
     }
 
-    if (steps.isEmpty) {
-      steps.add(InstallStep(
-        name: 'Python certifi',
-        success: false,
-        note: 'Python not found or certifi not installed',
-      ));
-    }
-
-    return steps;
-  }
-
-  /// macOS: writes cert to /etc/ssl/certs/lux_intercept_ca.pem and sets
-  /// NODE_EXTRA_CA_CERTS in /etc/launchd.conf so it's picked up system-wide.
-  static Future<InstallStep> _installNodeExtraCa(List<int> pemBytes) async {
-    const destPath = '/etc/ssl/certs/lux_intercept_ca.pem';
-
-    // Write cert via admin
-    final tmp = File('/tmp/lux_node_ca_${DateTime.now().millisecondsSinceEpoch}.pem');
-    await tmp.writeAsBytes(pemBytes);
-
-    try {
-      final copyExit = await _runMacOSAsAdmin(
-        'cp "${tmp.path}" "$destPath" && chmod 644 "$destPath"',
-        description: 'Installing CA for Node.js/npm',
-      );
-      if (copyExit != 0) {
-        return InstallStep(
-          name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)',
-          success: false,
-          note: 'Could not write to $destPath',
-        );
-      }
-
-      // Add to /etc/launchd.conf (macOS system env for all processes)
-      const launchdLine = 'setenv NODE_EXTRA_CA_CERTS $destPath';
-      final launchdConf = File('/etc/launchd.conf');
-      String existing = '';
-      try {
-        if (await launchdConf.exists()) existing = await launchdConf.readAsString();
-      } catch (_) {}
-
-      if (!existing.contains('NODE_EXTRA_CA_CERTS')) {
-        await _runMacOSAsAdmin(
-          'echo "$launchdLine" >> /etc/launchd.conf',
-          description: 'Setting NODE_EXTRA_CA_CERTS in /etc/launchd.conf',
-        );
-      }
-
-      // Also write to /etc/environment and /etc/profile for interactive shells
-      for (final profileFile in [
-        '/etc/profile.d/lux_ca.sh',
-        '/etc/zshenv',
-      ]) {
-        try {
-          String profileContent = '';
-          final pf = File(profileFile);
-          if (await pf.exists()) {
-            try { profileContent = await pf.readAsString(); } catch (_) {}
-          }
-          if (!profileContent.contains('NODE_EXTRA_CA_CERTS')) {
-            await _runMacOSAsAdmin(
-              'echo \'export NODE_EXTRA_CA_CERTS=$destPath\' >> $profileFile',
-              description: 'Setting NODE_EXTRA_CA_CERTS in $profileFile',
-            );
-          }
-        } catch (_) {}
-      }
-
-      return InstallStep(
-        name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)',
-        success: true,
-        note: 'Cert at $destPath; NODE_EXTRA_CA_CERTS set in launchd.conf',
-      );
-    } finally {
-      await tmp.delete().catchError((_) => tmp);
-    }
+    return [const InstallStep(
+      name: 'Python certifi',
+      success: false,
+      note: 'Python not found or certifi not installed',
+    )];
   }
 }
 
-/// Result of a certificate installation attempt.
+/// Result of a full certificate installation attempt.
 class InstallResult {
   final bool success;
   final List<InstallStep> steps;
@@ -404,7 +347,7 @@ class InstallResult {
   });
 }
 
-/// Outcome of a single installation step (e.g. "macOS System Keychain").
+/// Outcome of a single installation step.
 class InstallStep {
   final String name;
   final bool success;
