@@ -310,6 +310,8 @@ class CustomizedRuleItem {
   final String policy;
   final bool disabled;
   final String raw;
+  /// Optional protocol filter: "tcp", "udp", or null (matches both).
+  final String? protocol;
 
   const CustomizedRuleItem({
     required this.ruleType,
@@ -317,16 +319,27 @@ class CustomizedRuleItem {
     required this.policy,
     required this.disabled,
     required this.raw,
+    this.protocol,
   });
 
-  factory CustomizedRuleItem.fromJson(Map<String, dynamic> json) =>
-      CustomizedRuleItem(
-        ruleType: json['ruleType'] as String? ?? '',
-        payload: json['payload'] as String? ?? '',
-        policy: json['policy'] as String? ?? '',
-        disabled: json['disabled'] as bool? ?? false,
-        raw: json['raw'] as String? ?? '',
-      );
+  factory CustomizedRuleItem.fromJson(Map<String, dynamic> json) {
+    final raw = json['raw'] as String? ?? '';
+    // Parse protocol from the raw string's optional 4th field
+    String? protocol;
+    final parts = raw.replaceFirst(RegExp(r'^#'), '').split(',');
+    if (parts.length >= 4) {
+      final p = parts[3].trim().toLowerCase();
+      if (p == 'tcp' || p == 'udp') protocol = p;
+    }
+    return CustomizedRuleItem(
+      ruleType: json['ruleType'] as String? ?? '',
+      payload: json['payload'] as String? ?? '',
+      policy: json['policy'] as String? ?? '',
+      disabled: json['disabled'] as bool? ?? false,
+      raw: raw,
+      protocol: protocol,
+    );
+  }
 
   CustomizedRuleItem copyWith({
     String? ruleType,
@@ -334,6 +347,7 @@ class CustomizedRuleItem {
     String? policy,
     bool? disabled,
     String? raw,
+    Object? protocol = _sentinel,
   }) =>
       CustomizedRuleItem(
         ruleType: ruleType ?? this.ruleType,
@@ -341,9 +355,50 @@ class CustomizedRuleItem {
         policy: policy ?? this.policy,
         disabled: disabled ?? this.disabled,
         raw: raw ?? this.raw,
+        protocol: protocol == _sentinel ? this.protocol : protocol as String?,
       );
 
-  String toRawString() => '$ruleType,$payload,$policy';
+  /// Produces the raw rule string, including optional protocol suffix.
+  String toRawString() {
+    final base = protocol != null
+        ? '$ruleType,$payload,$policy,$protocol'
+        : '$ruleType,$payload,$policy';
+    return disabled ? '#$base' : base;
+  }
+}
+
+// Sentinel for copyWith optional nullable field
+const Object _sentinel = Object();
+
+/// Result of the SSL bump detection probe from the backend.
+class SslBumpStatus {
+  /// Whether an intercepting/inspecting proxy was detected.
+  final bool detected;
+
+  /// Whether a CA cert is available for download.
+  final bool hasCert;
+
+  /// RFC3339 timestamp of the last check (may be empty on first load).
+  final String checkedAt;
+
+  /// Error message if the probe failed.
+  final String? error;
+
+  const SslBumpStatus({
+    required this.detected,
+    required this.hasCert,
+    this.checkedAt = '',
+    this.error,
+  });
+
+  factory SslBumpStatus.fromJson(Map<String, dynamic> json) {
+    return SslBumpStatus(
+      detected: json['detected'] as bool? ?? false,
+      hasCert: json['hasCert'] as bool? ?? false,
+      checkedAt: json['checkedAt'] as String? ?? '',
+      error: json['error'] as String?,
+    );
+  }
 }
 
 // Define the data classes

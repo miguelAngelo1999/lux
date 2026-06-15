@@ -29,6 +29,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     'IP-CIDR',
     'PROCESS',
     'DNS-MAP',
+    'DST-PORT',
   ];
 
   @override
@@ -145,6 +146,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     String ruleType = item?.ruleType ?? 'DOMAIN';
     String payload = item?.payload ?? '';
     String policy = item?.policy ?? 'PROXY';
+    String protocol = item?.protocol ?? 'any'; // 'any' means no protocol field
 
     final result = await showDialog<bool>(
       context: context,
@@ -169,12 +171,14 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 TextFormField(
                   initialValue: payload,
                   decoration: InputDecoration(
-                    labelText: 'Payload',
-                    hintText: ruleType == 'IP-CIDR'
-                        ? '192.168.0.0/24'
-                        : ruleType == 'PROCESS'
-                            ? 'App.app'
-                            : 'example.com',
+                    labelText: ruleType == 'DST-PORT' ? 'Port' : 'Payload',
+                    hintText: ruleType == 'DST-PORT'
+                        ? '993'
+                        : ruleType == 'IP-CIDR'
+                            ? '192.168.0.0/24'
+                            : ruleType == 'PROCESS'
+                                ? 'App.app'
+                                : 'example.com',
                     isDense: true,
                   ),
                   onChanged: (v) => payload = v,
@@ -185,13 +189,27 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   decoration: const InputDecoration(
                       labelText: 'Policy', isDense: true),
                   items: [
-                    // Include current policy even if not in list
                     if (!_proxyNames.contains(policy))
                       DropdownMenuItem(value: policy, child: Text(policy)),
                     ..._proxyNames.map((p) =>
                         DropdownMenuItem(value: p, child: Text(p))),
                   ],
                   onChanged: (v) => setDialogState(() => policy = v!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: protocol,
+                  decoration: const InputDecoration(
+                    labelText: 'Protocol (optional)',
+                    helperText: 'Restrict rule to TCP or UDP only',
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'any', child: Text('Any (TCP + UDP)')),
+                    DropdownMenuItem(value: 'tcp', child: Text('TCP only')),
+                    DropdownMenuItem(value: 'udp', child: Text('UDP only')),
+                  ],
+                  onChanged: (v) => setDialogState(() => protocol = v!),
                 ),
               ],
             ),
@@ -212,7 +230,11 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
 
     if (result != true || payload.isEmpty) return;
 
-    final newRaw = '$ruleType,$payload,$policy';
+    final proto = protocol == 'any' ? null : protocol;
+    final newRaw = proto != null
+        ? '$ruleType,$payload,$policy,$proto'
+        : '$ruleType,$payload,$policy';
+
     if (item == null) {
       setState(() => _rules.insert(0, CustomizedRuleItem(
             ruleType: ruleType,
@@ -220,6 +242,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
             policy: policy,
             disabled: false,
             raw: newRaw,
+            protocol: proto,
           )));
       try {
         await widget.coreManager.addCustomizedRules([newRaw]);
@@ -236,6 +259,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
             policy: policy,
             disabled: false,
             raw: newRaw,
+            protocol: proto,
           );
         }
       });
@@ -400,14 +424,42 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                           ),
                           // Payload
                           Expanded(
-                            child: Text(
-                              rule.payload,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDisabled ? Colors.grey : null,
-                                decoration: isDisabled ? TextDecoration.lineThrough : null,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    rule.payload,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDisabled ? Colors.grey : null,
+                                      decoration: isDisabled ? TextDecoration.lineThrough : null,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (rule.protocol != null) ...[
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: rule.protocol == 'tcp'
+                                          ? Colors.blue.withAlpha(40)
+                                          : Colors.purple.withAlpha(40),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                    child: Text(
+                                      rule.protocol!.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: rule.protocol == 'tcp'
+                                            ? Colors.blue
+                                            : Colors.purple,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                           // Policy badge

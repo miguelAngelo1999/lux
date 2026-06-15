@@ -428,4 +428,43 @@ class CoreManager {
   Future<void> closeAllConnections() async {
     await dio.delete('$baseHttpUrl/connection');
   }
+
+  // ── SSL Inspection ─────────────────────────────────────────────────────────
+
+  /// Probes for SSL bumping. Returns the parsed status map from the backend.
+  /// Keys: detected (bool), checkedAt (String), error (String?), hasCert (bool).
+  Future<SslBumpStatus> getSslBumpStatus() async {
+    try {
+      final res = await dio.get('$baseHttpUrl/ssl-inspect/status',
+          options: Options(receiveTimeout: const Duration(seconds: 20)));
+      return SslBumpStatus.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      return SslBumpStatus(
+        detected: false,
+        hasCert: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Downloads the captured intercept CA cert as PEM bytes.
+  /// Returns null if no cert is available.
+  Future<List<int>?> getSslBumpCert() async {
+    try {
+      final res = await dio.get<List<int>>(
+        '$baseHttpUrl/ssl-inspect/cert',
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
+      if (res.statusCode == 200 && res.data != null && res.data!.isNotEmpty) {
+        return res.data;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('getSslBumpCert error: $e');
+      return null;
+    }
+  }
 }
