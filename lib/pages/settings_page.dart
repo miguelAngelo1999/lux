@@ -593,6 +593,29 @@ String getModeLabel(ProxyMode m) {
 
 // ── DNS Picker Dialog ─────────────────────────────────────────────────────────
 
+class _DnsOption {
+  final String value;
+  final String label;
+  final String description;
+
+  const _DnsOption(this.value, this.label, this.description);
+}
+
+const _allDnsOptions = <_DnsOption>[
+  _DnsOption('tcp://8.8.8.8:53', 'Google DNS', 'TCP · 8.8.8.8:53 · Fast, global'),
+  _DnsOption('tcp://1.1.1.1:53', 'Cloudflare DNS', 'TCP · 1.1.1.1:53 · Privacy-focused'),
+  _DnsOption('tcp://114.114.114.114:53', '114 DNS', 'TCP · 114.114.114.114:53 · China mainland'),
+  _DnsOption('tcp://119.29.29.29:53', 'DNSPod', 'TCP · 119.29.29.29:53 · Tencent China'),
+  _DnsOption('tcp://223.5.5.5:53', 'AliDNS', 'TCP · 223.5.5.5:53 · Alibaba China'),
+  _DnsOption('https://dns.google/dns-query', 'Google DoH', 'HTTPS · Encrypted DNS-over-HTTPS'),
+  _DnsOption('https://cloudflare-dns.com/dns-query', 'Cloudflare DoH', 'HTTPS · Encrypted DNS-over-HTTPS'),
+  _DnsOption('https://doh.pub/dns-query', 'DNSPod DoH', 'HTTPS · Tencent encrypted DNS (China)'),
+  _DnsOption('dhcp://auto', 'DHCP Auto', 'Uses DNS from your router/DHCP server'),
+  _DnsOption('system://auto', 'System Auto', 'Uses your OS-configured DNS servers'),
+  _DnsOption('udp://8.8.8.8:53', 'Google UDP', 'UDP · 8.8.8.8:53 · Traditional DNS'),
+  _DnsOption('udp://1.1.1.1:53', 'Cloudflare UDP', 'UDP · 1.1.1.1:53 · Traditional DNS'),
+];
+
 class _DnsPickerDialog extends StatefulWidget {
   final String title;
   final List<String> allOptions;
@@ -611,25 +634,42 @@ class _DnsPickerDialog extends StatefulWidget {
 class _DnsPickerDialogState extends State<_DnsPickerDialog> {
   late Set<String> _selected;
   late List<String> _options;
-  final _customController = TextEditingController();
+  final _searchController = TextEditingController();
+  String _filter = '';
 
   @override
   void initState() {
     super.initState();
     _selected = Set<String>.from(widget.initialSelected);
     _options = List<String>.from(widget.allOptions);
+    _searchController.addListener(() {
+      setState(() => _filter = _searchController.text.toLowerCase());
+    });
   }
 
   @override
   void dispose() {
-    _customController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
+  _DnsOption _optionFor(String value) {
+    return _allDnsOptions.firstWhere(
+      (o) => o.value == value,
+      orElse: () => _DnsOption(value, value, 'Custom server'),
+    );
+  }
+
+  bool _matchesFilter(_DnsOption opt) {
+    if (_filter.isEmpty) return true;
+    return opt.value.toLowerCase().contains(_filter) ||
+        opt.label.toLowerCase().contains(_filter) ||
+        opt.description.toLowerCase().contains(_filter);
+  }
+
   void _addCustom() {
-    final value = _customController.text.trim();
+    final value = _searchController.text.trim();
     if (value.isEmpty) return;
-    // Basic validation — must start with a known protocol
     final validPrefixes = ['tcp://', 'https://', 'udp://', 'dhcp://', 'system://'];
     if (!validPrefixes.any((p) => value.startsWith(p))) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -641,85 +681,91 @@ class _DnsPickerDialogState extends State<_DnsPickerDialog> {
       if (!_options.contains(value)) _options.add(value);
       _selected.add(value);
     });
-    _customController.clear();
-  }
-
-  /// Short display label for known DNS addresses
-  String _label(String s) {
-    const labels = {
-      'tcp://8.8.8.8:53': 'Google (8.8.8.8)',
-      'tcp://1.1.1.1:53': 'Cloudflare (1.1.1.1)',
-      'tcp://114.114.114.114:53': '114 DNS',
-      'tcp://119.29.29.29:53': 'DNSPod (119)',
-      'https://dns.google/dns-query': 'Google DoH',
-      'https://cloudflare-dns.com/dns-query': 'Cloudflare DoH',
-      'https://doh.pub/dns-query': 'DNSPod DoH',
-      'dhcp://auto': 'DHCP Auto',
-      'system://auto': 'System Auto',
-    };
-    return labels[s] ?? s;
+    _searchController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _options.map(_optionFor).where(_matchesFilter).toList();
+    // Show selected items first
+    filtered.sort((a, b) {
+      final aOn = _selected.contains(a.value) ? 0 : 1;
+      final bOn = _selected.contains(b.value) ? 0 : 1;
+      return aOn.compareTo(bOn);
+    });
+
     return AlertDialog(
       title: Text('Edit ${widget.title}', style: const TextStyle(fontSize: 16)),
       content: SizedBox(
-        width: 420,
+        width: 440,
+        height: 380,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Tap to select/deselect. At least one server is required.',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
+            // Search/add field
+            TextField(
+              controller: _searchController,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                border: const OutlineInputBorder(),
+                hintText: 'Search or type custom (e.g. tcp://9.9.9.9:53)',
+                hintStyle: const TextStyle(fontSize: 12),
+                prefixIcon: const Icon(Icons.search, size: 18),
+                suffixIcon: _filter.isNotEmpty &&
+                        !_options.contains(_searchController.text.trim())
+                    ? IconButton(
+                        icon: const Icon(Icons.add_circle, size: 20),
+                        tooltip: 'Add as custom server',
+                        onPressed: _addCustom,
+                      )
+                    : null,
+              ),
+              onSubmitted: (_) {
+                if (_filter.isNotEmpty && !_options.contains(_filter)) {
+                  _addCustom();
+                }
+              },
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: _options.map((opt) {
-                final isOn = _selected.contains(opt);
-                return FilterChip(
-                  label: Text(_label(opt), style: const TextStyle(fontSize: 11)),
-                  selected: isOn,
-                  onSelected: (v) {
-                    setState(() {
-                      if (v) {
-                        _selected.add(opt);
-                      } else {
-                        _selected.remove(opt);
-                      }
-                    });
-                  },
-                  visualDensity: VisualDensity.compact,
-                );
-              }).toList(),
+            const SizedBox(height: 6),
+            Text(
+              '${_selected.length} selected · tap to toggle',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _customController,
-                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      border: OutlineInputBorder(),
-                      hintText: 'tcp://custom:53 or https://...',
-                      hintStyle: TextStyle(fontSize: 11),
-                    ),
-                    onSubmitted: (_) => _addCustom(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, size: 20),
-                  onPressed: _addCustom,
-                  tooltip: 'Add custom server',
-                ),
-              ],
+            const SizedBox(height: 8),
+            // Scrollable list
+            Expanded(
+              child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (ctx, i) {
+                  final opt = filtered[i];
+                  final isOn = _selected.contains(opt.value);
+                  return CheckboxListTile(
+                    dense: true,
+                    value: isOn,
+                    onChanged: (v) {
+                      setState(() {
+                        if (v == true) {
+                          _selected.add(opt.value);
+                        } else {
+                          _selected.remove(opt.value);
+                        }
+                      });
+                    },
+                    title: Text(opt.label, style: const TextStyle(fontSize: 13)),
+                    subtitle: Text(opt.description,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFamily: opt.description == 'Custom server' ? 'monospace' : null,
+                          color: Colors.grey.shade600,
+                        )),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                  );
+                },
+              ),
             ),
           ],
         ),
