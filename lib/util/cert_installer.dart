@@ -113,8 +113,9 @@ class CertInstaller {
       // Python certifi
       steps.addAll(await _installPythonCertifi(pemBytes));
 
-      // App-bundled cert stores
-      steps.add(await _installAppBundledCerts(pemBytes));
+      // App-bundled cert stores (only add if something was found)
+      final appBundleStep = await _installAppBundledCerts(pemBytes);
+      if (appBundleStep != null) steps.add(appBundleStep);
     } finally {
       await File(certPath).delete().catchError((_) => File(certPath));
     }
@@ -171,8 +172,9 @@ class CertInstaller {
       // Git for Windows
       steps.add(await _installGitWindowsCerts(pemBytes));
 
-      // App-bundled cert stores
-      steps.add(await _installAppBundledCerts(pemBytes));
+      // App-bundled cert stores (only add if something was found)
+      final appBundleStep = await _installAppBundledCerts(pemBytes);
+      if (appBundleStep != null) steps.add(appBundleStep);
 
       // Node.js / npm
       steps.add(await _installWindowsNodeExtraCa(pemBytes));
@@ -267,7 +269,7 @@ class CertInstaller {
 
   /// Scans for applications that ship their own CA cert bundles
   /// and appends the cert. Reports generically — no app names in the UI.
-  static Future<InstallStep> _installAppBundledCerts(List<int> pemBytes) async {
+  static Future<InstallStep?> _installAppBundledCerts(List<int> pemBytes) async {
     final candidates = <String>[];
 
     if (Platform.isWindows) {
@@ -371,11 +373,8 @@ class CertInstaller {
         note: 'Patched $patched app-bundled cert store${patched > 1 ? 's' : ''}',
       );
     }
-    return const InstallStep(
-      name: 'App cert bundles',
-      success: false,
-      note: 'No app-bundled cert stores found',
-    );
+    // Nothing found — return null so callers can skip this step silently
+    return null;
   }
 
   // ── Shared helpers ─────────────────────────────────────────────────────────
