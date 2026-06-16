@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
@@ -466,5 +467,51 @@ class CoreManager {
       debugPrint('getSslBumpCert error: $e');
       return null;
     }
+  }
+
+  // ── MITM SSL Inspection Engine ─────────────────────────────────────────────
+
+  Future<SslInspectionSettings> getSslInspectionSettings() async {
+    final res = await dio.get('$baseHttpUrl/ssl-inspection/settings');
+    return SslInspectionSettings.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<void> setSslInspectionEnabled(bool enabled) async {
+    await dio.put('$baseHttpUrl/ssl-inspection/settings', data: {'enabled': enabled});
+  }
+
+  /// Returns the MITM CA certificate as raw PEM bytes.
+  Future<Uint8List> getCACertPem() async {
+    final res = await dio.get(
+      '$baseHttpUrl/ssl-inspection/ca/pem',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(res.data as List<int>);
+  }
+
+  Future<List<InspectionListEntry>> getInspectionList() async {
+    final res = await dio.get('$baseHttpUrl/ssl-inspection/inspection-list');
+    final entries = res.data['entries'] as List? ?? [];
+    return entries
+        .map((e) => InspectionListEntry.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> addInspectionDomain(String pattern) async {
+    await dio.put('$baseHttpUrl/ssl-inspection/inspection-list', data: {'pattern': pattern});
+  }
+
+  Future<void> removeInspectionDomain(String pattern) async {
+    await dio.delete('$baseHttpUrl/ssl-inspection/inspection-list', data: {'pattern': pattern});
+  }
+
+  Future<void> toggleInspectionDomain(String pattern) async {
+    await dio.post('$baseHttpUrl/ssl-inspection/inspection-list/toggle', data: {'pattern': pattern});
+  }
+
+  Future<List<String>> getBypassList() async {
+    final res = await dio.get('$baseHttpUrl/ssl-inspection/bypass-list');
+    final patterns = res.data['patterns'] as List? ?? [];
+    return patterns.map((e) => e as String).toList();
   }
 }

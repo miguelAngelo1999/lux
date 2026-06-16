@@ -441,6 +441,47 @@ class SslBumpStatus {
   }
 }
 
+/// Settings for the MITM SSL inspection engine.
+class SslInspectionSettings {
+  final bool enabled;
+  final String? caFingerprint;
+  final DateTime? caGeneratedAt;
+
+  const SslInspectionSettings({
+    required this.enabled,
+    this.caFingerprint,
+    this.caGeneratedAt,
+  });
+
+  factory SslInspectionSettings.fromJson(Map<String, dynamic> json) {
+    return SslInspectionSettings(
+      enabled: json['enabled'] as bool? ?? false,
+      caFingerprint: json['caFingerprint'] as String?,
+      caGeneratedAt: json['caGeneratedAt'] != null
+          ? DateTime.tryParse(json['caGeneratedAt'] as String)
+          : null,
+    );
+  }
+}
+
+/// A single entry in the SSL inspection list.
+class InspectionListEntry {
+  final String pattern;
+  final bool enabled;
+
+  const InspectionListEntry({
+    required this.pattern,
+    required this.enabled,
+  });
+
+  factory InspectionListEntry.fromJson(Map<String, dynamic> json) {
+    return InspectionListEntry(
+      pattern: json['pattern'] as String? ?? '',
+      enabled: json['enabled'] as bool? ?? true,
+    );
+  }
+}
+
 // Define the data classes
 class Speed {
   final Proxy proxy;

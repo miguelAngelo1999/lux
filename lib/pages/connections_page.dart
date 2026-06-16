@@ -12,6 +12,8 @@ class ConnectionEntry {
   final String process;
   final int upload;
   final int download;
+  final bool inspected;
+  final String? fullUrl;
 
   ConnectionEntry({
     required this.id,
@@ -21,6 +23,8 @@ class ConnectionEntry {
     required this.process,
     required this.upload,
     required this.download,
+    this.inspected = false,
+    this.fullUrl,
   });
 
   factory ConnectionEntry.fromJson(Map<String, dynamic> j) {
@@ -40,6 +44,8 @@ class ConnectionEntry {
       process: (meta['processPath'] as String? ?? '').split('/').last,
       upload: (j['upload'] as num? ?? 0).toInt(),
       download: (j['download'] as num? ?? 0).toInt(),
+      inspected: j['inspected'] as bool? ?? false,
+      fullUrl: j['fullUrl'] as String?,
     );
   }
 }
@@ -109,12 +115,12 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
 
   List<ConnectionEntry> get _filtered {
     if (_search.isEmpty) return _conns;
-    return _conns
-        .where((c) =>
-            c.host.toLowerCase().contains(_search) ||
-            c.rule.toLowerCase().contains(_search) ||
-            c.process.toLowerCase().contains(_search))
-        .toList();
+    return _conns.where((c) =>
+        c.host.toLowerCase().contains(_search) ||
+        (c.fullUrl?.toLowerCase().contains(_search) ?? false) ||
+        c.rule.toLowerCase().contains(_search) ||
+        c.process.toLowerCase().contains(_search)
+    ).toList();
   }
 
   String _fmt(int bytes) {
@@ -208,9 +214,25 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                           ),
                           Expanded(
                             flex: 3,
-                            child: Text(c.host,
-                                style: const TextStyle(fontSize: 11),
-                                overflow: TextOverflow.ellipsis),
+                            child: Row(
+                              children: [
+                                if (c.inspected)
+                                  Tooltip(
+                                    message: 'TLS inspected',
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(right: 3),
+                                      child: Icon(Icons.security_outlined, size: 11, color: Colors.blue),
+                                    ),
+                                  ),
+                                Expanded(
+                                  child: Text(
+                                    c.inspected && c.fullUrl != null ? c.fullUrl! : c.host,
+                                    style: const TextStyle(fontSize: 11),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           Expanded(
                             flex: 2,
