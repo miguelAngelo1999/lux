@@ -1,0 +1,117 @@
+name: Build
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - v*.*.*           # Push events to v1.0, v1.1, and v1.9 tags
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-15, macos-15-intel]
+
+    steps:
+      - if: matrix.os != 'windows-latest'
+        name: Setup xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.2"
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: 'stable'
+      - run: dart pub global activate fastforge 0.6.6
+      - run: flutter pub get
+      - if: matrix.os == 'macos-15'
+        name: Build mac arm64 installer
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo Version: $VERSION
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          npm install -g appdmg
+          dart run scripts/init.dart -a 'arm64' -s ${{ secrets.GITHUB_TOKEN }} 
+          fastforge release --name ${{ matrix.os }}
+          mv dist/${VERSION}/lux-${VERSION}-macos.dmg dist/${VERSION}/lux-${VERSION}-arm64-macos.dmg
+
+      - if: matrix.os == 'macos-15-intel'
+        name: Build mac amd64 installer
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo Version: $VERSION
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          sed -i '' 's/EXCLUDED_ARCHS = x86_64/EXCLUDED_ARCHS = arm64/g' macos/Runner.xcodeproj/project.pbxproj
+          npm install -g appdmg
+          dart run scripts/init.dart -a 'amd64' -s ${{ secrets.GITHUB_TOKEN }} 
+          fastforge release --name ${{ matrix.os }}
+          mv dist/${VERSION}/lux-${VERSION}-macos.dmg dist/${VERSION}/lux-${VERSION}-amd64-macos.dmg
+
+      - if: matrix.os == 'windows-latest'
+        name: install InnoSetup
+        shell: cmd
+        run: choco upgrade innosetup -y --no-progress
+
+      - if: matrix.os == 'windows-latest'
+        name: Build windows x64 installer
+        run: |
+          mkdir -p  C:\temp\dll
+          cp -Force C:\Windows\System32\msvcp140.dll C:\temp\dll\msvcp140.dll
+          cp -Force C:\Windows\System32\vcruntime140.dll C:\temp\dll\vcruntime140.dll
+          cp -Force C:\Windows\System32\vcruntime140_1.dll C:\temp\dll\vcruntime140_1.dll
+          dart run scripts/init.dart ${{ secrets.GITHUB_TOKEN }} 
+          fastforge release --name ${{ matrix.os }}
+          
+      - if: matrix.os == 'windows-latest'
+        name: Rename windows installer
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo Version: $VERSION
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          mv dist/${VERSION}/lux-${VERSION}-windows-setup.exe dist/${VERSION}/lux-${VERSION}-x64-windows.exe
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-artifact
+          path: dist/*/*
+
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+      - run: |
+          mkdir artifact
+          mv windows-latest-artifact/*/* artifact/
+          mv macos-15-artifact/*/* artifact/
+          mv macos-15-intel-artifact/*/* artifact/
+
+      - name: Generate checksum
+        uses: jmgilman/actions-generate-checksum@v1
+        with:
+          patterns: |
+            artifact/*
+
+      - name: Create a release
+        run: |
+          RELEASE_NOTES="Release created by [Lux](https://github.com/${{ github.repository }}) workflow run [#${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})<br/>"
+          echo "$RELEASE_NOTES" >> CHANGELOG.md
+
+      - name: GH Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref, '-beat.') }}
+          draft: ${{ !contains(github.ref, '-beat.') }}
+          body_path: CHANGELOG.md
+          files: |
+            checksum.txt
+            artifact/*

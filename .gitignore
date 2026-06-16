@@ -1,0 +1,76 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+/assets/bin
+dist
+config.json
+log.txt
+ChineseSimplified.isl
+devtools_options.yaml
+
+# Machine-specific build/deploy files (local only)
+BUILD.md
+JOURNAL.md
+upload_installer.py
+inject_sdk.ps1
+fix_reg.ps1
+copy_bin.ps1
+core_patches/
+.kiro/
+*.txt
+cleanup_*.ps1
+stop_services*.ps1
+lux_installed_backup.exeoldchat.md
+
+# LuxDialog build outputs (large binaries)
+lux-dialog/LuxDialog/bin/
+lux-dialog/LuxDialog/obj/
+lux-dialog/LuxDialog/publish_out/
+lux-dialog/NuGet.Config
+lux-dialog/LuxDialog/LuxDialog.csproj.user
+patch_reorder.py
+patch_ruletable.py
