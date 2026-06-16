@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:lux/util/cert_installer.dart';
 
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
@@ -22,6 +23,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Setting? _setting;
   bool _isLoading = true;
   bool _isSaving = false;
+  // SSL inspection state
+  SslBumpStatus? _sslStatus;
+  bool _sslChecking = false;
+  bool _sslInstalling = false;
+  InstallResult? _installResult;
+
   List<String> _interfaces = [];
 
   // DNS server lists (loaded from raw config)
@@ -248,6 +255,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             const SizedBox(height: 16),
             _sectionHeader('Advanced'),
             _configFileTile(),
+
+            // ── SSL Inspection ──
+            const SizedBox(height: 16),
+            _sectionHeader('SSL Inspection'),
+            _sslInspectionSection(),
 
             // ── Config Backup ──
             const SizedBox(height: 16),
@@ -648,6 +660,425 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         );
       }
     }
+  }
+
+  // ── SSL Inspection ──────────────────────────────────────────────────────
+
+  Future<void> _checkSslBump() async {
+    setState(() {
+      _sslChecking = true;
+      _installResult = null;
+    });
+    try {
+      final status = await widget.coreManager.getSslBumpStatus();
+      if (mounted) setState(() => _sslStatus = status);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sslStatus = SslBumpStatus(
+              detected: false,
+              hasCert: false,
+              error: e.toString(),
+            ));
+      }
+    } finally {
+      if (mounted) setState(() => _sslChecking = false);
+    }
+  }
+
+  Future<void> _installCert() async {
+    final status = _sslStatus;
+    if (status == null || !status.hasCert) return;
+
+    // Show cert details + explicit confirmation before doing anything
+    final confirmed = await _showCertConfirmDialog(status.certInfo);
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _sslInstalling = true;
+      _installResult = null;
+    });
+    try {
+      final pemBytes = await widget.coreManager.getSslBumpCert();
+      if (pemBytes == null || pemBytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No certificate available to install')),
+          );
+        }
+        return;
+      }
+      final result = await CertInstaller.install(pemBytes);
+      if (mounted) setState(() => _installResult = result);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.success
+                ? 'Certificate installed successfully'
+                : 'Installation partially failed — see details below'),
+            backgroundColor:
+                result.success ? Colors.green.shade700 : Colors.orange.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Install error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sslInstalling = false);
+    }
+  }
+
+  /// Shows a dialog with the intercepting cert's details and asks the user
+  /// to explicitly confirm before trusting it system-wide.
+  Future<bool> _showCertConfirmDialog(CertInfo? info) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
+                SizedBox(width: 8),
+                Flexible(child: Text('Trust this certificate?', style: TextStyle(fontSize: 16))),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your proxy is intercepting HTTPS traffic. Installing this CA '
+                    'will make your system trust all certificates it signs — only '
+                    'do this if you trust the organization that controls this proxy.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  if (info != null) ...[
+                    const SizedBox(height: 16),
+                    _certDetailTable(info),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Certificate details unavailable.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      border: Border.all(color: Colors.orange.shade200),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, size: 14, color: Colors.orange),
+                        SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'This grants the proxy the ability to decrypt and read '
+                            'all your HTTPS traffic. Only proceed if this is your '
+                            'corporate or personal proxy.',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('I trust this — install'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Widget _certDetailTable(CertInfo info) {
+    final rows = [
+      if (info.subject.isNotEmpty) ('Subject', info.subject),
+      if (info.organizationName.isNotEmpty) ('Organization', info.organizationName),
+      if (info.issuer.isNotEmpty && info.issuer != info.subject) ('Issuer', info.issuer),
+      ('Valid from', info.notBefore),
+      ('Valid until', info.notAfter),
+      if (info.sha256Fingerprint.isNotEmpty) ('SHA-256', info.sha256Fingerprint),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        children: rows.map((r) {
+          final isLast = r == rows.last;
+          return Container(
+            decoration: BoxDecoration(
+              border: isLast
+                  ? null
+                  : Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 88,
+                  child: Text(r.$1,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500)),
+                ),
+                Expanded(
+                  child: Text(r.$2,
+                      style: const TextStyle(
+                          fontSize: 11, fontFamily: 'monospace'),
+                      softWrap: true),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// Compact inline cert preview shown in the settings page (not the dialog).
+  Widget _certPreviewCard(CertInfo? info) {
+    if (info == null) return const SizedBox.shrink();
+    final display = info.organizationName.isNotEmpty ? info.organizationName : info.subject;
+    final fp = info.sha256Fingerprint.length > 29
+        ? '${info.sha256Fingerprint.substring(0, 29)}…'
+        : info.sha256Fingerprint;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.amber.shade300),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.amber.shade50.withValues(alpha: 0.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Intercepting CA',
+              style: TextStyle(fontSize: 10, color: Colors.amber.shade800, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          if (display.isNotEmpty)
+            Text(display, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          if (fp.isNotEmpty)
+            Text('SHA-256: $fp',
+                style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey.shade700)),
+          Text('Valid: ${info.notBefore} → ${info.notAfter}',
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _sslInspectionSection() {
+    final status = _sslStatus;
+
+    // Status indicator chip
+    Widget statusChip;
+    if (_sslChecking) {
+      statusChip = const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 6),
+          Text('Checking…', style: TextStyle(fontSize: 12)),
+        ],
+      );
+    } else if (status == null) {
+      statusChip = const Text('Not checked yet', style: TextStyle(fontSize: 12, color: Colors.grey));
+    } else if (status.error != null && status.error!.isNotEmpty) {
+      statusChip = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, size: 14, color: Colors.orange.shade700),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              'Probe failed: ${status.error}',
+              style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    } else if (status.detected) {
+      statusChip = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade700),
+          const SizedBox(width: 4),
+          Text('SSL inspection detected',
+              style: TextStyle(fontSize: 12, color: Colors.amber.shade700, fontWeight: FontWeight.w600)),
+        ],
+      );
+    } else {
+      statusChip = const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+          SizedBox(width: 4),
+          Text('No interception detected', style: TextStyle(fontSize: 12, color: Colors.green)),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          dense: true,
+          title: const Text('Detect SSL Bumping', style: TextStyle(fontSize: 14)),
+          subtitle: const Text(
+            'Check if your proxy intercepts HTTPS traffic and install its CA certificate so curl, git, npm, and Python trust it.',
+            style: TextStyle(fontSize: 12),
+          ),
+          trailing: TextButton.icon(
+            icon: const Icon(Icons.search, size: 16),
+            label: const Text('Check', style: TextStyle(fontSize: 12)),
+            onPressed: _sslChecking ? null : _checkSslBump,
+          ),
+        ),
+        if (status != null) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: statusChip,
+          ),
+          if (status.detected && status.hasCert) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _certPreviewCard(status.certInfo),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                icon: _sslInstalling
+                    ? const SizedBox(
+                        width: 14, height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.verified_user, size: 16),
+                label: Text(
+                  _sslInstalling ? 'Installing…' : 'Install Certificate…',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                onPressed: _sslInstalling ? null : _installCert,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                Platform.isWindows
+                    ? 'Installs into Windows Trusted Root (all users), Git for Windows, Node.js, and Python certifi.'
+                    : 'Installs into macOS System Keychain (all users), curl, git, Homebrew openssl, Node.js, and Python certifi.',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ),
+          ],
+          if (!status.detected && status.hasCert)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                'A certificate was previously captured. You can still install it.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ),
+          // Show previous install results
+          if (_installResult != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _installResultWidget(_installResult!),
+            ),
+          ],
+        ],
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _installResultWidget(InstallResult result) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: result.success ? Colors.green.shade300 : Colors.orange.shade300,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        color: result.success
+            ? Colors.green.shade50.withValues(alpha: 0.3)
+            : Colors.orange.shade50.withValues(alpha: 0.3),
+      ),
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                result.success ? Icons.check_circle : Icons.warning_amber_rounded,
+                size: 16,
+                color: result.success ? Colors.green.shade700 : Colors.orange.shade700,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                result.success ? 'Installation complete' : 'Partial install',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: result.success ? Colors.green.shade700 : Colors.orange.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ...result.steps.map((step) => Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      step.success ? Icons.check : Icons.close,
+                      size: 13,
+                      color: step.success ? Colors.green : Colors.red.shade400,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '${step.name}: ${step.note}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
   }
 
   Widget _sectionHeader(String title) => Padding(
