@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
+import 'package:lux/util/utils.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/util/cert_installer.dart';
 import 'package:window_manager/window_manager.dart';
@@ -401,6 +403,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             _sectionHeader('SSL Inspection'),
             _sslInspectionSection(),
 
+            // ── Config Backup ──
+            const SizedBox(height: 16),
+            _sectionHeader('Config Backup'),
+            _importExportTile(),
+
             const SizedBox(height: 32),
           ],
         ),
@@ -460,6 +467,109 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       );
 
   // ── SSL Inspection section widget ──────────────────────────────────────────
+
+  Widget _importExportTile() {
+    return ListTile(
+      dense: true,
+      title: const Text('Backup & Restore', style: TextStyle(fontSize: 14)),
+      subtitle: const Text('Export or import your full configuration', style: TextStyle(fontSize: 12)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: _isSaving ? null : _exportConfig,
+            child: const Text('Export', style: TextStyle(fontSize: 12)),
+          ),
+          const SizedBox(width: 4),
+          TextButton(
+            onPressed: _isSaving ? null : _importConfig,
+            child: const Text('Import', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportConfig() async {
+    try {
+      final homeDir = await getHomeDir();
+      final source = File('$homeDir/config.json');
+      if (!source.existsSync()) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('config.json not found')));
+        return;
+      }
+      final result = await Process.run('osascript', [
+        '-e',
+        'tell app "System Events" to return POSIX path of (choose file name with prompt "Save config backup as:" default name "lux-config-backup.json")',
+      ]);
+      final savePath = result.stdout.toString().trim();
+      if (savePath.isEmpty) return;
+      await source.copy(savePath);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Config exported to $savePath')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _importConfig() async {
+    try {
+      final result = await Process.run('osascript', [
+        '-e',
+        'tell app "System Events" to return POSIX path of (choose file with prompt "Select a Lux config backup:" of type {"public.json", "json"})',
+      ]);
+      final filePath = result.stdout.toString().trim();
+      if (filePath.isEmpty) return;
+      final source = File(filePath);
+      if (!source.existsSync()) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File not found')));
+        return;
+      }
+      final content = await source.readAsString();
+      final Map<String, dynamic> parsed;
+      try {
+        parsed = jsonDecode(content) as Map<String, dynamic>;
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid JSON'), backgroundColor: Colors.red));
+        return;
+      }
+      if (!parsed.containsKey('setting') && !parsed.containsKey('proxy')) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not a valid Lux config'), backgroundColor: Colors.red));
+        return;
+      }
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Import Config'),
+          content: const Text('Replaces current config. Restart to apply. Continue?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      final homeDir = await getHomeDir();
+      final dest = File('$homeDir/config.json');
+      await dest.copy('$homeDir/config.json.bak');
+      await source.copy(dest.path);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Imported. Restart Lux to apply.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: $e'), backgroundColor: Colors.red));
+    }
+  }
 
   Widget _sslInspectionSection() {
     final status = _sslStatus;
