@@ -477,4 +477,26 @@ class CoreManager {
     final patterns = res.data['patterns'] as List? ?? [];
     return patterns.map((e) => e as String).toList();
   }
+
+  // ---------------------------------------------------------------------------
+  // Proxy Auto-Detection
+  // ---------------------------------------------------------------------------
+
+  /// Calls GET /proxies/detect and returns a list of discovered upstream proxies.
+  /// Returns an empty list if none are found or on error.
+  Future<ProxyDetectResult> detectNetworkProxy() async {
+    try {
+      final res = await dio.get(
+        '$baseHttpUrl/proxies/detect',
+        options: Options(
+          sendTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
+      return ProxyDetectResult.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('detectNetworkProxy error: $e');
+      return const ProxyDetectResult(detected: false, proxies: []);
+    }
+  }
 }

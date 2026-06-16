@@ -588,3 +588,72 @@ class InspectionListEntry {
     );
   }
 }
+
+// ── Proxy Auto-Detection models ────────────────────────────────────────────────
+
+/// A single upstream proxy discovered by the /proxies/detect endpoint.
+class DetectedProxy {
+  /// How it was discovered: "dhcp_option252", "wpad_dns", "pac", "manual"
+  final String source;
+
+  /// Proxy hostname or IP.
+  final String host;
+
+  /// Proxy port string (e.g. "3128").
+  final String port;
+
+  /// PAC file URL, if the proxy was found via PAC/WPAD.
+  final String? pacUrl;
+
+  /// True when the proxy returned HTTP 407 Proxy-Authentication-Required.
+  final bool requiresAuth;
+
+  /// Non-empty when probing failed (dial error, etc.).
+  final String? error;
+
+  const DetectedProxy({
+    required this.source,
+    required this.host,
+    required this.port,
+    this.pacUrl,
+    this.requiresAuth = false,
+    this.error,
+  });
+
+  factory DetectedProxy.fromJson(Map<String, dynamic> json) {
+    return DetectedProxy(
+      source: json['source'] as String? ?? '',
+      host: json['host'] as String? ?? '',
+      port: json['port'] as String? ?? '',
+      pacUrl: json['pacUrl'] as String?,
+      requiresAuth: json['requiresAuth'] as bool? ?? false,
+      error: json['error'] as String?,
+    );
+  }
+
+  String get displayAddress => '$host:$port';
+}
+
+/// Top-level result from GET /proxies/detect.
+class ProxyDetectResult {
+  final bool detected;
+  final List<DetectedProxy> proxies;
+  final String? error;
+
+  const ProxyDetectResult({
+    required this.detected,
+    required this.proxies,
+    this.error,
+  });
+
+  factory ProxyDetectResult.fromJson(Map<String, dynamic> json) {
+    final rawList = json['proxies'] as List? ?? [];
+    return ProxyDetectResult(
+      detected: json['detected'] as bool? ?? false,
+      proxies: rawList
+          .map((e) => DetectedProxy.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      error: json['error'] as String?,
+    );
+  }
+}

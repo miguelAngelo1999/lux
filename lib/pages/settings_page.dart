@@ -35,6 +35,10 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   List<String> _bypassList = [];
   bool _sslLoading = false;
 
+  // Proxy detection state
+  ProxyDetectResult? _proxyDetectResult;
+  bool _proxyDetecting = false;
+
   @override
   void initState() {
     super.initState();
@@ -237,6 +241,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 (v) => _save(s.copyWith(hijackDns: v)),
               ),
             ],
+
+            // ── Network Detection ──
+            const SizedBox(height: 16),
+            _sectionHeader('Network Detection'),
+            _buildProxyDetectSection(),
 
             // ── Auto Mode ──
             const SizedBox(height: 16),
@@ -694,6 +703,259 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         )),
       ],
     ));
+  }
+
+  // ── Proxy Detection ─────────────────────────────────────────────────────────
+
+  Widget _buildProxyDetectSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          dense: true,
+          title: const Text('Detect Upstream Proxy', style: TextStyle(fontSize: 14)),
+          subtitle: const Text(
+            'Check if your network uses a corporate proxy or PAC/WPAD auto-config',
+            style: TextStyle(fontSize: 12),
+          ),
+          trailing: _proxyDetecting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : OutlinedButton.icon(
+                  icon: const Icon(Icons.search, size: 14),
+                  label: const Text('Detect', style: TextStyle(fontSize: 12)),
+                  onPressed: _runProxyDetect,
+                ),
+        ),
+        if (_proxyDetectResult != null) ..._buildDetectResults(),
+      ],
+    );
+  }
+
+  List<Widget> _buildDetectResults() {
+    final result = _proxyDetectResult!;
+    if (result.error != null && result.error!.isNotEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text('Detection error: ${result.error}',
+              style: const TextStyle(fontSize: 12, color: Colors.red)),
+        ),
+      ];
+    }
+    if (!result.detected || result.proxies.isEmpty) {
+      return [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text('No upstream proxy detected on this network.',
+              style: TextStyle(fontSize: 12, color: Colors.green)),
+        ),
+      ];
+    }
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Text(
+          '${result.proxies.length} upstream proxy detected:',
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ),
+      ...result.proxies.map((p) => _buildDetectedProxyTile(p)),
+    ];
+  }
+
+  Widget _buildDetectedProxyTile(DetectedProxy p) {
+    final hasError = p.error != null && p.error!.isNotEmpty;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(
+                hasError ? Icons.warning_amber : Icons.shield_outlined,
+                size: 16,
+                color: hasError ? Colors.orange : Colors.blue,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                p.host.isNotEmpty ? '${p.host}:${p.port}' : 'PAC only',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              _sourceChip(p.source),
+            ]),
+            if (p.pacUrl != null && p.pacUrl!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text('PAC: ${p.pacUrl}',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  overflow: TextOverflow.ellipsis),
+            ],
+            if (p.requiresAuth) ...[
+              const SizedBox(height: 4),
+              const Row(children: [
+                Icon(Icons.lock_outline, size: 13, color: Colors.orange),
+                SizedBox(width: 4),
+                Text('Requires proxy authentication (407)',
+                    style: TextStyle(fontSize: 12, color: Colors.orange)),
+              ]),
+            ],
+            if (hasError) ...[
+              const SizedBox(height: 4),
+              Text(p.error!,
+                  style: const TextStyle(fontSize: 11, color: Colors.red)),
+            ],
+            // Only show "Add as proxy" if we have a concrete host:port
+            if (p.host.isNotEmpty && p.port.isNotEmpty && !hasError) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.add, size: 13),
+                  label: const Text('Add as HTTP proxy', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _addDetectedProxyAsEntry(p),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sourceChip(String source) {
+    final labels = {
+      'dhcp_option252': 'DHCP opt-252',
+      'wpad_dns': 'WPAD DNS',
+      'pac': 'PAC',
+      'manual': 'Manual',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        labels[source] ?? source,
+        style: TextStyle(
+          fontSize: 10,
+          color: Theme.of(context).colorScheme.onSecondaryContainer,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runProxyDetect() async {
+    setState(() {
+      _proxyDetecting = true;
+      _proxyDetectResult = null;
+    });
+    try {
+      final result = await widget.coreManager.detectNetworkProxy();
+      if (mounted) setState(() => _proxyDetectResult = result);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _proxyDetectResult =
+            ProxyDetectResult(detected: false, proxies: [], error: e.toString()));
+      }
+    } finally {
+      if (mounted) setState(() => _proxyDetecting = false);
+    }
+  }
+
+  Future<void> _addDetectedProxyAsEntry(DetectedProxy p) async {
+    final nameCtrl = TextEditingController(text: '${p.host}:${p.port}');
+    final usernameCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Detected Proxy'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (p.requiresAuth) ...[
+              TextField(
+                controller: usernameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  isDense: true,
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final port = int.tryParse(p.port) ?? 0;
+      final proxyData = <String, dynamic>{
+        'name': nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : '${p.host}:${p.port}',
+        'type': 'http',
+        'server': p.host,
+        'port': port,
+        if (p.requiresAuth && usernameCtrl.text.isNotEmpty)
+          'username': usernameCtrl.text,
+        if (p.requiresAuth && passwordCtrl.text.isNotEmpty)
+          'password': passwordCtrl.text,
+      };
+      await widget.coreManager.addProxy(proxyData);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Proxy added ✓')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add proxy: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      nameCtrl.dispose();
+      usernameCtrl.dispose();
+      passwordCtrl.dispose();
+    }
   }
 
   // ── Section header ──────────────────────────────────────────────────────────
