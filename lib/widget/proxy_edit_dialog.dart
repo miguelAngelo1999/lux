@@ -8,12 +8,16 @@ class ProxyEditDialog extends StatefulWidget {
   final CoreManager coreManager;
   final ProxyDetail? initialValue; // null = create new
   final VoidCallback onSaved;
+  /// Called only when a NEW proxy is added (not on edit). Used to trigger
+  /// SSL bump detection after the proxy is saved.
+  final VoidCallback? onAdded;
 
   const ProxyEditDialog({
     super.key,
     required this.coreManager,
     this.initialValue,
     required this.onSaved,
+    this.onAdded,
   });
 
   @override
@@ -87,6 +91,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
 
       if (mounted) {
         widget.onSaved();
+        if (!isEditing) widget.onAdded?.call();
         Navigator.of(context).pop();
       }
     } catch (e) {

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
@@ -351,7 +350,7 @@ class CoreManager {
     await dio.post('$baseHttpUrl/proxies/$id', data: proxy);
   }
 
-  /// Save settings — reads current raw config and merges only the changed fields.
+  /// Save settings ΓÇö reads current raw config and merges only the changed fields.
   /// Never overwrites DNS server lists or other fields not managed by the settings page.
   Future<void> saveSetting(Setting setting) async {
     final current = await dio.get('$baseHttpUrl/setting');
@@ -367,7 +366,7 @@ class CoreManager {
     raw['autoConnect'] = setting.autoConnect;
     raw['defaultInterface'] = setting.defaultInterface;
 
-    // Local server — preserve existing structure
+    // Local server ΓÇö preserve existing structure
     final ls = Map<String, dynamic>.from(raw['localServer'] as Map? ?? {});
     ls['port'] = setting.localServerPort;
     ls['allowLan'] = setting.allowLan;
@@ -377,13 +376,13 @@ class CoreManager {
     if (setting.shouldFindProcess != null) raw['shouldFindProcess'] = setting.shouldFindProcess;
     if (setting.sensitiveInfoMode != null) raw['sensitiveInfoMode'] = setting.sensitiveInfoMode;
 
-    // DNS — only update fakeIp and disableCache, NEVER touch server lists
+    // DNS ΓÇö only update fakeIp and disableCache, NEVER touch server lists
     final dns = Map<String, dynamic>.from(raw['dns'] as Map? ?? {});
     if (setting.fakeIp != null) dns['fakeIp'] = setting.fakeIp;
     if (setting.disableDnsCache != null) dns['disableCache'] = setting.disableDnsCache;
     raw['dns'] = dns;
 
-    // HijackDns — preserve networkService and alwaysReset
+    // HijackDns ΓÇö preserve networkService and alwaysReset
     final hd = Map<String, dynamic>.from(raw['hijackDns'] as Map? ?? {});
     hd['enabled'] = setting.hijackDns;
     raw['hijackDns'] = hd;
@@ -430,73 +429,64 @@ class CoreManager {
     await dio.delete('$baseHttpUrl/connection');
   }
 
-  // ---------------------------------------------------------------------------
-  // SSL Inspection
-  // ---------------------------------------------------------------------------
+  // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-  Future<SslInspectionSettings> getSslInspectionSettings() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspection/settings');
-    return SslInspectionSettings.fromJson(res.data as Map<String, dynamic>);
-  }
-
-  Future<void> setSslInspectionEnabled(bool enabled) async {
-    await dio.put('$baseHttpUrl/ssl-inspection/settings', data: {'enabled': enabled});
-  }
-
-  /// Returns the CA certificate as raw PEM bytes.
-  Future<Uint8List> getCACertPem() async {
-    final res = await dio.get(
-      '$baseHttpUrl/ssl-inspection/ca/pem',
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return Uint8List.fromList(res.data as List<int>);
-  }
-
-  Future<List<InspectionListEntry>> getInspectionList() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspection/inspection-list');
-    final entries = res.data['entries'] as List? ?? [];
-    return entries
-        .map((e) => InspectionListEntry.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<void> addInspectionDomain(String pattern) async {
-    await dio.put('$baseHttpUrl/ssl-inspection/inspection-list', data: {'pattern': pattern});
-  }
-
-  Future<void> removeInspectionDomain(String pattern) async {
-    await dio.delete('$baseHttpUrl/ssl-inspection/inspection-list', data: {'pattern': pattern});
-  }
-
-  Future<void> toggleInspectionDomain(String pattern) async {
-    await dio.post('$baseHttpUrl/ssl-inspection/inspection-list/toggle', data: {'pattern': pattern});
-  }
-
-  Future<List<String>> getBypassList() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspection/bypass-list');
-    final patterns = res.data['patterns'] as List? ?? [];
-    return patterns.map((e) => e as String).toList();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Proxy Auto-Detection
-  // ---------------------------------------------------------------------------
-
-  /// Calls GET /proxies/detect and returns a list of discovered upstream proxies.
-  /// Returns an empty list if none are found or on error.
-  Future<ProxyDetectResult> detectNetworkProxy() async {
+  /// Probes for SSL bumping. Returns the parsed status map from the backend.
+  /// Keys: detected (bool), checkedAt (String), error (String?), hasCert (bool).
+  Future<SslBumpStatus> getSslBumpStatus() async {
     try {
-      final res = await dio.get(
-        '$baseHttpUrl/proxies/detect',
+      final res = await dio.get('$baseHttpUrl/ssl-inspect/status',
+          options: Options(receiveTimeout: const Duration(seconds: 20)));
+      return SslBumpStatus.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      return SslBumpStatus(
+        detected: false,
+        hasCert: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Downloads the captured intercept CA cert as PEM bytes.
+  /// Returns null if no cert is available.
+  Future<List<int>?> getSslBumpCert() async {
+    try {
+      final res = await dio.get<List<int>>(
+        '$baseHttpUrl/ssl-inspect/cert',
         options: Options(
-          sendTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 15),
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 10),
         ),
       );
-      return ProxyDetectResult.fromJson(res.data as Map<String, dynamic>);
+      if (res.statusCode == 200 && res.data != null && res.data!.isNotEmpty) {
+        return res.data;
+      }
+      return null;
     } catch (e) {
-      debugPrint('detectNetworkProxy error: $e');
-      return const ProxyDetectResult(detected: false, proxies: []);
+      debugPrint('getSslBumpCert error: $e');
+      return null;
+    }
+  }
+
+  /// Auto-detect an upstream proxy on the current network.
+  /// Uses scutil (macOS), WPAD probe, and environment variables.
+  /// Returns null if no proxy is detected or lux_core is not running.
+  Future<DetectedProxy?> detectNetworkProxy() async {
+    try {
+      final res = await dio.get('$baseHttpUrl/proxies/detect',
+          options: Options(
+            sendTimeout: const Duration(seconds: 5),
+            receiveTimeout: const Duration(seconds: 8),
+          ));
+      if (res.statusCode == 200 && res.data is Map) {
+        final d = res.data as Map<String, dynamic>;
+        if (d['found'] == true) {
+          return DetectedProxy.fromJson(d);
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 }

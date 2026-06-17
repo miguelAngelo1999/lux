@@ -1,6 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:lux/util/cert_installer.dart';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
@@ -22,22 +23,18 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Setting? _setting;
   bool _isLoading = true;
   bool _isSaving = false;
+  // SSL inspection state
+  SslBumpStatus? _sslStatus;
+  bool _sslChecking = false;
+  bool _sslInstalling = false;
+  InstallResult? _installResult;
+
   List<String> _interfaces = [];
 
   // DNS server lists (loaded from raw config)
   List<String> _dnsRemote = [];
   List<String> _dnsLocal = [];
   List<String> _dnsBoost = [];
-
-  // SSL Inspection state
-  SslInspectionSettings? _sslSettings;
-  List<InspectionListEntry> _inspectionList = [];
-  List<String> _bypassList = [];
-  bool _sslLoading = false;
-
-  // Proxy detection state
-  ProxyDetectResult? _proxyDetectResult;
-  bool _proxyDetecting = false;
 
   @override
   void initState() {
@@ -87,18 +84,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
-
-    // Load SSL inspection state (silently — backend may not support yet)
-    try {
-      final ssl = await widget.coreManager.getSslInspectionSettings();
-      final list = await widget.coreManager.getInspectionList();
-      final bypass = await widget.coreManager.getBypassList();
-      if (mounted) setState(() {
-        _sslSettings = ssl;
-        _inspectionList = list;
-        _bypassList = bypass;
-      });
-    } catch (_) {}
   }
 
   Future<void> _save(Setting updated) async {
@@ -130,7 +115,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ── General ──
+            // ΓöÇΓöÇ General ΓöÇΓöÇ
             _sectionHeader('General'),
             _dropdownTile<String>(
               'Language',
@@ -165,7 +150,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               (v) => _save(s.copyWith(sensitiveInfoMode: v)),
             ),
 
-            // ── Network ──
+            // ΓöÇΓöÇ Network ΓöÇΓöÇ
             const SizedBox(height: 16),
             _sectionHeader('Network'),
             _dropdownTile<ProxyMode>(
@@ -194,7 +179,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               (v) => _save(s.copyWith(allowLan: v)),
             ),
 
-            // ── TUN/Mixed only ──
+            // ΓöÇΓöÇ TUN/Mixed only ΓöÇΓöÇ
             if (isTun) ...[
               const SizedBox(height: 16),
               _sectionHeader('TUN / Mixed Mode'),
@@ -217,7 +202,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 (v) => _save(s.copyWith(fakeIp: v)),
               ),
 
-              // ── DNS Servers ──
+              // ΓöÇΓöÇ DNS Servers ΓöÇΓöÇ
               const SizedBox(height: 8),
               if (s.fakeIp != true)
                 _dnsListTile('Remote DNS', 'Resolve foreign domains', _dnsRemote,
@@ -242,12 +227,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               ),
             ],
 
-            // ── Network Detection ──
-            const SizedBox(height: 16),
-            _sectionHeader('Network Detection'),
-            _buildProxyDetectSection(),
-
-            // ── Auto Mode ──
+            // ΓöÇΓöÇ Auto Mode ΓöÇΓöÇ
             const SizedBox(height: 16),
             _sectionHeader('Auto Mode'),
             _switchTile(
@@ -276,10 +256,15 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             _sectionHeader('Advanced'),
             _configFileTile(),
 
-            // ── SSL Inspection ──
+            // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇ
             const SizedBox(height: 16),
-            _sectionHeader('SSL Inspection (Lux MITM)'),
-            _buildSslInspectionSection(),
+            _sectionHeader('SSL Inspection'),
+            _sslInspectionSection(),
+
+            // ΓöÇΓöÇ Config Backup ΓöÇΓöÇ
+            const SizedBox(height: 16),
+            _sectionHeader('Config Backup'),
+            _importExportTile(),
 
             const SizedBox(height: 32),
           ],
@@ -298,7 +283,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
   }
 
-  // ── DNS editing helpers ──────────────────────────────────────────────────
+  // ΓöÇΓöÇ DNS editing helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   Future<void> _saveDnsList(String key, List<String> servers) async {
     setState(() => _isSaving = true);
@@ -398,7 +383,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
-  // ── Language / Theme helpers ─────────────────────────────────────────────
+  // ΓöÇΓöÇ Language / Theme helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   String _currentLanguage() {
     final appState = Provider.of<AppStateModel>(context, listen: false);
@@ -411,7 +396,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   String _languageLabel(String v) {
     switch (v) {
       case 'en': return 'English';
-      case 'zh-CN': return '中文';
+      case 'zh-CN': return 'Σ╕¡µûç';
       default: return 'System';
     }
   }
@@ -464,7 +449,152 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
-  // ── Config File tile ────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Config File tile ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+  // ΓöÇΓöÇ Config Import / Export ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+  Widget _importExportTile() {
+    return ListTile(
+      dense: true,
+      title: const Text('Backup & Restore', style: TextStyle(fontSize: 14)),
+      subtitle: const Text('Export or import your full configuration', style: TextStyle(fontSize: 12)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: _isSaving ? null : _exportConfig,
+            child: const Text('Export', style: TextStyle(fontSize: 12)),
+          ),
+          const SizedBox(width: 4),
+          TextButton(
+            onPressed: _isSaving ? null : _importConfig,
+            child: const Text('Import', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportConfig() async {
+    try {
+      final homeDir = await getHomeDir();
+      final source = File('$homeDir/config.json');
+      if (!source.existsSync()) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('config.json not found')));
+        return;
+      }
+
+      // Try native save dialog via osascript
+      String savePath = '';
+      try {
+        final result = await Process.run('/usr/bin/osascript', [
+          '-e',
+          'tell application "Finder" to activate\ntell application "Finder" to set p to POSIX path of (choose file name with prompt "Save config backup as:" default name "lux-config-backup.json")\nreturn p',
+        ]).timeout(const Duration(seconds: 30));
+        savePath = result.stdout.toString().trim();
+      } catch (_) {}
+
+      // Fallback: save to Desktop
+      if (savePath.isEmpty) {
+        final desktop = '${Platform.environment['HOME']}/Desktop/lux-config-backup.json';
+        savePath = desktop;
+      }
+
+      await source.copy(savePath);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Config exported to $savePath')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _importConfig() async {
+    try {
+      // Try native open dialog via osascript
+      String filePath = '';
+      try {
+        final result = await Process.run('/usr/bin/osascript', [
+          '-e',
+          'tell application "Finder" to activate\ntell application "Finder" to set p to POSIX path of (choose file with prompt "Select a Lux config backup:" of type {"public.json", "json"})\nreturn p',
+        ]).timeout(const Duration(seconds: 30));
+        filePath = result.stdout.toString().trim();
+      } catch (_) {}
+
+      // Fallback: ask user to type path
+      if (filePath.isEmpty) {
+        if (!mounted) return;
+        final controller = TextEditingController();
+        final typed = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Import Config'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Path to config.json',
+                hintText: '/Users/.../lux-config-backup.json',
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.of(ctx).pop(controller.text.trim()), child: const Text('Open')),
+            ],
+          ),
+        );
+        if (typed == null || typed.isEmpty) return;
+        filePath = typed;
+      }
+
+      final source = File(filePath);
+      if (!source.existsSync()) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File not found: $filePath')));
+        return;
+      }
+      final content = await source.readAsString();
+      final Map<String, dynamic> parsed;
+      try {
+        parsed = jsonDecode(content) as Map<String, dynamic>;
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid JSON'), backgroundColor: Colors.red));
+        return;
+      }
+      if (!parsed.containsKey('setting') && !parsed.containsKey('proxy')) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not a valid Lux config'), backgroundColor: Colors.red));
+        return;
+      }
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Import Config'),
+          content: const Text('Replaces current config. Restart to apply. Continue?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      final homeDir = await getHomeDir();
+      final dest = File('$homeDir/config.json');
+      await dest.copy('$homeDir/config.json.bak');
+      await source.copy(dest.path);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Imported. Restart Lux to apply.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: $e'), backgroundColor: Colors.red));
+    }
+  }
 
   Widget _configFileTile() {
     return ListTile(
@@ -532,433 +662,424 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
-  // ── SSL Inspection ─────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-  Widget _buildSslInspectionSection() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SwitchListTile(
-        title: const Text('SSL Inspection', style: TextStyle(fontSize: 14)),
-        subtitle: const Text('Decrypt HTTPS for selected domains only', style: TextStyle(fontSize: 12)),
-        value: _sslSettings?.enabled ?? false,
-        dense: true,
-        onChanged: (_isSaving || _sslLoading) ? null : (v) => _toggleSslInspection(v),
-      ),
-      if (_sslSettings?.enabled == true && _sslSettings?.caFingerprint != null) ...[
-        ListTile(
-          dense: true,
-          title: const Text('Root CA', style: TextStyle(fontSize: 13)),
-          subtitle: Text(
-            'SHA256: ${_sslSettings!.caFingerprint!.substring(0, 16)}...\n'
-            'Generated: ${_sslSettings!.caGeneratedAt?.toLocal().toString().split(".").first ?? "unknown"}',
-            style: const TextStyle(fontSize: 11),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Wrap(spacing: 8, children: [
-            OutlinedButton.icon(
-              icon: const Icon(Icons.download, size: 14),
-              label: const Text('Export CA', style: TextStyle(fontSize: 12)),
-              onPressed: _exportCA,
-            ),
-            if (Platform.isWindows)
-              OutlinedButton.icon(
-                icon: const Icon(Icons.verified_user_outlined, size: 14),
-                label: const Text('Install in Trust Store', style: TextStyle(fontSize: 12)),
-                onPressed: _installCAWindows,
-              ),
-          ]),
-        ),
-      ],
-      if (_sslSettings?.enabled == true) ...[
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('Inspected Domains', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        ),
-        ..._inspectionList.map((entry) => ListTile(
-          dense: true,
-          leading: Icon(entry.enabled ? Icons.circle : Icons.circle_outlined, size: 10,
-              color: entry.enabled ? Colors.green : Colors.grey),
-          title: Text(entry.pattern, style: const TextStyle(fontSize: 13)),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            IconButton(icon: Icon(entry.enabled ? Icons.toggle_on : Icons.toggle_off, size: 20),
-                onPressed: () => _toggleDomain(entry.pattern), padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
-            IconButton(icon: const Icon(Icons.close, size: 14, color: Colors.red),
-                onPressed: () => _removeDomain(entry.pattern), padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
-          ]),
-        )),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: _AddDomainRow(onAdd: _addDomain),
-        ),
-        TextButton(
-          onPressed: _showBypassList,
-          child: const Text('View bypass list (read-only)', style: TextStyle(fontSize: 12)),
-        ),
-      ],
-    ]);
-  }
-
-  Future<void> _toggleSslInspection(bool v) async {
-    if (v && _sslSettings?.caFingerprint == null) {
-      final confirmed = await showDialog<bool>(context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Enable SSL Inspection?'),
-          content: const Text('SSL Inspection decrypts HTTPS traffic for the domains you select. '
-              'You must install the Lux Root CA certificate into your system trust store. '
-              'You are responsible for the security implications.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enable')),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-    }
-    setState(() => _sslLoading = true);
+  Future<void> _checkSslBump() async {
+    setState(() {
+      _sslChecking = true;
+      _installResult = null;
+    });
     try {
-      await widget.coreManager.setSslInspectionEnabled(v);
-      await _load();
+      final status = await widget.coreManager.getSslBumpStatus();
+      if (mounted) setState(() => _sslStatus = status);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      if (mounted) {
+        setState(() => _sslStatus = SslBumpStatus(
+              detected: false,
+              hasCert: false,
+              error: e.toString(),
+            ));
+      }
     } finally {
-      if (mounted) setState(() => _sslLoading = false);
+      if (mounted) setState(() => _sslChecking = false);
     }
   }
 
-  Future<void> _exportCA() async {
+  Future<void> _installCert() async {
+    final status = _sslStatus;
+    if (status == null || !status.hasCert) return;
+
+    // Show cert details + explicit confirmation before doing anything
+    final confirmed = await _showCertConfirmDialog(status.certInfo);
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _sslInstalling = true;
+      _installResult = null;
+    });
     try {
-      final bytes = await widget.coreManager.getCACertPem();
-      final tmp = File('${Directory.systemTemp.path}/lux-ca.crt');
-      await tmp.writeAsBytes(bytes);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved to ${tmp.path}')));
+      final pemBytes = await widget.coreManager.getSslBumpCert();
+      if (pemBytes == null || pemBytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No certificate available to install')),
+          );
+        }
+        return;
+      }
+      final result = await CertInstaller.install(pemBytes);
+      if (mounted) setState(() => _installResult = result);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.success
+                ? 'Certificate installed successfully'
+                : 'Installation partially failed ΓÇö see details below'),
+            backgroundColor:
+                result.success ? Colors.green.shade700 : Colors.orange.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Install error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sslInstalling = false);
     }
   }
 
-  Future<void> _installCAWindows() async {
-    try {
-      final bytes = await widget.coreManager.getCACertPem();
-      // Use a path without spaces for certutil compatibility
-      final tmp = File('C:\\Windows\\Temp\\lux-ca-install.crt');
-      await tmp.writeAsBytes(bytes);
-      // certutil -addstore Root requires elevation — run via PowerShell RunAs
-      final result = await Process.run(
-        'powershell.exe',
-        [
-          '-noprofile',
-          '-command',
-          'Start-Process certutil -ArgumentList @("-addstore","Root","C:\\Windows\\Temp\\lux-ca-install.crt") -Verb RunAs -Wait -WindowStyle Hidden',
+  /// Shows a dialog with the intercepting cert's details and asks the user
+  /// to explicitly confirm before trusting it system-wide.
+  Future<bool> _showCertConfirmDialog(CertInfo? info) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
+                SizedBox(width: 8),
+                Flexible(child: Text('Trust this certificate?', style: TextStyle(fontSize: 16))),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your proxy is intercepting HTTPS traffic. Installing this CA '
+                    'will make your system trust all certificates it signs ΓÇö only '
+                    'do this if you trust the organization that controls this proxy.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  if (info != null) ...[
+                    const SizedBox(height: 16),
+                    _certDetailTable(info),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Certificate details unavailable.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade800.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.orange.shade600),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, size: 14, color: Colors.orange),
+                        SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'This grants the proxy the ability to decrypt and read '
+                            'all your HTTPS traffic. Only proceed if this is your '
+                            'corporate or personal proxy.',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('I trust this ΓÇö install'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Widget _certDetailTable(CertInfo info) {
+    final rows = [
+      if (info.subject.isNotEmpty) ('Subject', info.subject),
+      if (info.organizationName.isNotEmpty) ('Organization', info.organizationName),
+      if (info.issuer.isNotEmpty && info.issuer != info.subject) ('Issuer', info.issuer),
+      ('Valid from', info.notBefore),
+      ('Valid until', info.notAfter),
+      if (info.sha256Fingerprint.isNotEmpty) ('SHA-256', info.sha256Fingerprint),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        children: rows.map((r) {
+          final isLast = r == rows.last;
+          return Container(
+            decoration: BoxDecoration(
+              border: isLast
+                  ? null
+                  : Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 88,
+                  child: Text(r.$1,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500)),
+                ),
+                Expanded(
+                  child: Text(r.$2,
+                      style: const TextStyle(
+                          fontSize: 11, fontFamily: 'monospace'),
+                      softWrap: true),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// Compact inline cert preview shown in the settings page (not the dialog).
+  Widget _certPreviewCard(CertInfo? info) {
+    if (info == null) return const SizedBox.shrink();
+    final display = info.organizationName.isNotEmpty ? info.organizationName : info.subject;
+    final fp = info.sha256Fingerprint.length > 29
+        ? '${info.sha256Fingerprint.substring(0, 29)}ΓÇª'
+        : info.sha256Fingerprint;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.amber.shade600),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.amber.shade800.withValues(alpha: 0.15),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Intercepting CA',
+              style: TextStyle(fontSize: 10, color: Colors.amber.shade400, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          if (display.isNotEmpty)
+            Text(display, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          if (fp.isNotEmpty)
+            Text('SHA-256: $fp',
+                style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey.shade700)),
+          Text('Valid: ${info.notBefore} ΓåÆ ${info.notAfter}',
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
         ],
-        runInShell: false,
+      ),
+    );
+  }
+
+  Widget _sslInspectionSection() {
+    final status = _sslStatus;
+
+    // Status indicator chip
+    Widget statusChip;
+    if (_sslChecking) {
+      statusChip = const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 6),
+          Text('CheckingΓÇª', style: TextStyle(fontSize: 12)),
+        ],
       );
-      try { await tmp.delete(); } catch (_) {}
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(result.exitCode == 0
-              ? 'Lux CA installed in Windows trust store ✓'
-              : 'Install returned exit ${result.exitCode} — check if you approved the UAC prompt')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Install failed: $e'), backgroundColor: Colors.red));
+    } else if (status == null) {
+      statusChip = const Text('Not checked yet', style: TextStyle(fontSize: 12, color: Colors.grey));
+    } else if (status.error != null && status.error!.isNotEmpty) {
+      statusChip = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, size: 14, color: Colors.orange.shade700),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              'Probe failed: ${status.error}',
+              style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    } else if (status.detected) {
+      statusChip = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade700),
+          const SizedBox(width: 4),
+          Text('SSL inspection detected',
+              style: TextStyle(fontSize: 12, color: Colors.amber.shade700, fontWeight: FontWeight.w600)),
+        ],
+      );
+    } else {
+      statusChip = const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+          SizedBox(width: 4),
+          Text('No interception detected', style: TextStyle(fontSize: 12, color: Colors.green)),
+        ],
+      );
     }
-  }
 
-  Future<void> _addDomain(String pattern) async {
-    try {
-      await widget.coreManager.addInspectionDomain(pattern);
-      final l = await widget.coreManager.getInspectionList();
-      if (mounted) setState(() => _inspectionList = l);
-    } catch (_) {}
-  }
-
-  Future<void> _toggleDomain(String pattern) async {
-    try {
-      await widget.coreManager.toggleInspectionDomain(pattern);
-      final l = await widget.coreManager.getInspectionList();
-      if (mounted) setState(() => _inspectionList = l);
-    } catch (_) {}
-  }
-
-  Future<void> _removeDomain(String pattern) async {
-    try {
-      await widget.coreManager.removeInspectionDomain(pattern);
-      final l = await widget.coreManager.getInspectionList();
-      if (mounted) setState(() => _inspectionList = l);
-    } catch (_) {}
-  }
-
-  void _showBypassList() {
-    showModalBottomSheet(context: context, builder: (ctx) => ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('Bypass List (never inspected)', style: Theme.of(ctx).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        ..._bypassList.map((p) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Text(p, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
-        )),
-      ],
-    ));
-  }
-
-  // ── Proxy Detection ─────────────────────────────────────────────────────────
-
-  Widget _buildProxyDetectSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ListTile(
           dense: true,
-          title: const Text('Detect Upstream Proxy', style: TextStyle(fontSize: 14)),
+          title: const Text('Detect SSL Bumping', style: TextStyle(fontSize: 14)),
           subtitle: const Text(
-            'Check if your network uses a corporate proxy or PAC/WPAD auto-config',
+            'Check if your proxy intercepts HTTPS traffic and install its CA certificate so curl, git, npm, and Python trust it.',
             style: TextStyle(fontSize: 12),
           ),
-          trailing: _proxyDetecting
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : OutlinedButton.icon(
-                  icon: const Icon(Icons.search, size: 14),
-                  label: const Text('Detect', style: TextStyle(fontSize: 12)),
-                  onPressed: _runProxyDetect,
-                ),
+          trailing: TextButton.icon(
+            icon: const Icon(Icons.search, size: 16),
+            label: const Text('Check', style: TextStyle(fontSize: 12)),
+            onPressed: _sslChecking ? null : _checkSslBump,
+          ),
         ),
-        if (_proxyDetectResult != null) ..._buildDetectResults(),
+        if (status != null) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: statusChip,
+          ),
+          if (status.detected && status.hasCert) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _certPreviewCard(status.certInfo),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                icon: _sslInstalling
+                    ? const SizedBox(
+                        width: 14, height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.verified_user, size: 16),
+                label: Text(
+                  _sslInstalling ? 'InstallingΓÇª' : 'Install CertificateΓÇª',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                onPressed: _sslInstalling ? null : _installCert,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                Platform.isWindows
+                    ? 'Installs into Windows Trusted Root (all users), Git for Windows, Node.js, and Python certifi.'
+                    : 'Installs into macOS System Keychain (all users), curl, git, Homebrew openssl, Node.js, and Python certifi.',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ),
+          ],
+          if (!status.detected && status.hasCert)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                'A certificate was previously captured. You can still install it.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ),
+          // Show previous install results
+          if (_installResult != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _installResultWidget(_installResult!),
+            ),
+          ],
+        ],
+        const SizedBox(height: 8),
       ],
     );
   }
 
-  List<Widget> _buildDetectResults() {
-    final result = _proxyDetectResult!;
-    if (result.error != null && result.error!.isNotEmpty) {
-      return [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Text('Detection error: ${result.error}',
-              style: const TextStyle(fontSize: 12, color: Colors.red)),
+  Widget _installResultWidget(InstallResult result) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: result.success ? Colors.green.shade300 : Colors.orange.shade300,
         ),
-      ];
-    }
-    if (!result.detected || result.proxies.isEmpty) {
-      return [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Text('No upstream proxy detected on this network.',
-              style: TextStyle(fontSize: 12, color: Colors.green)),
-        ),
-      ];
-    }
-    return [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: Text(
-          '${result.proxies.length} upstream proxy detected:',
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
+        borderRadius: BorderRadius.circular(8),
+        color: result.success
+            ? Colors.green.shade50.withValues(alpha: 0.3)
+            : Colors.orange.shade50.withValues(alpha: 0.3),
       ),
-      ...result.proxies.map((p) => _buildDetectedProxyTile(p)),
-    ];
-  }
-
-  Widget _buildDetectedProxyTile(DetectedProxy p) {
-    final hasError = p.error != null && p.error!.isNotEmpty;
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
               Icon(
-                hasError ? Icons.warning_amber : Icons.shield_outlined,
+                result.success ? Icons.check_circle : Icons.warning_amber_rounded,
                 size: 16,
-                color: hasError ? Colors.orange : Colors.blue,
+                color: result.success ? Colors.green.shade700 : Colors.orange.shade700,
               ),
               const SizedBox(width: 6),
               Text(
-                p.host.isNotEmpty ? '${p.host}:${p.port}' : 'PAC only',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-              const Spacer(),
-              _sourceChip(p.source),
-            ]),
-            if (p.pacUrl != null && p.pacUrl!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text('PAC: ${p.pacUrl}',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
-                  overflow: TextOverflow.ellipsis),
-            ],
-            if (p.requiresAuth) ...[
-              const SizedBox(height: 4),
-              const Row(children: [
-                Icon(Icons.lock_outline, size: 13, color: Colors.orange),
-                SizedBox(width: 4),
-                Text('Requires proxy authentication (407)',
-                    style: TextStyle(fontSize: 12, color: Colors.orange)),
-              ]),
-            ],
-            if (hasError) ...[
-              const SizedBox(height: 4),
-              Text(p.error!,
-                  style: const TextStyle(fontSize: 11, color: Colors.red)),
-            ],
-            // Only show "Add as proxy" if we have a concrete host:port
-            if (p.host.isNotEmpty && p.port.isNotEmpty && !hasError) ...[
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.add, size: 13),
-                  label: const Text('Add as HTTP proxy', style: TextStyle(fontSize: 12)),
-                  onPressed: () => _addDetectedProxyAsEntry(p),
+                result.success ? 'Installation complete' : 'Partial install',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: result.success ? Colors.green.shade700 : Colors.orange.shade700,
                 ),
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sourceChip(String source) {
-    final labels = {
-      'dhcp_option252': 'DHCP opt-252',
-      'wpad_dns': 'WPAD DNS',
-      'pac': 'PAC',
-      'manual': 'Manual',
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        labels[source] ?? source,
-        style: TextStyle(
-          fontSize: 10,
-          color: Theme.of(context).colorScheme.onSecondaryContainer,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _runProxyDetect() async {
-    setState(() {
-      _proxyDetecting = true;
-      _proxyDetectResult = null;
-    });
-    try {
-      final result = await widget.coreManager.detectNetworkProxy();
-      if (mounted) setState(() => _proxyDetectResult = result);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _proxyDetectResult =
-            ProxyDetectResult(detected: false, proxies: [], error: e.toString()));
-      }
-    } finally {
-      if (mounted) setState(() => _proxyDetecting = false);
-    }
-  }
-
-  Future<void> _addDetectedProxyAsEntry(DetectedProxy p) async {
-    final nameCtrl = TextEditingController(text: '${p.host}:${p.port}');
-    final usernameCtrl = TextEditingController();
-    final passwordCtrl = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Detected Proxy'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (p.requiresAuth) ...[
-              TextField(
-                controller: usernameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: passwordCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  isDense: true,
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Add'),
-          ),
+          const SizedBox(height: 6),
+          ...result.steps.map((step) => Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      step.success ? Icons.check : Icons.close,
+                      size: 13,
+                      color: step.success ? Colors.green : Colors.red.shade400,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '${step.name}: ${step.note}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
         ],
       ),
     );
-
-    if (confirmed != true) return;
-
-    try {
-      final port = int.tryParse(p.port) ?? 0;
-      final proxyData = <String, dynamic>{
-        'name': nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : '${p.host}:${p.port}',
-        'type': 'http',
-        'server': p.host,
-        'port': port,
-        if (p.requiresAuth && usernameCtrl.text.isNotEmpty)
-          'username': usernameCtrl.text,
-        if (p.requiresAuth && passwordCtrl.text.isNotEmpty)
-          'password': passwordCtrl.text,
-      };
-      await widget.coreManager.addProxy(proxyData);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Proxy added ✓')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add proxy: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      nameCtrl.dispose();
-      usernameCtrl.dispose();
-      passwordCtrl.dispose();
-    }
   }
-
-  // ── Section header ──────────────────────────────────────────────────────────
 
   Widget _sectionHeader(String title) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -1052,33 +1173,7 @@ String getModeLabel(ProxyMode m) {
   }
 }
 
-// ── Add Domain Row ────────────────────────────────────────────────────────────
-
-class _AddDomainRow extends StatefulWidget {
-  final void Function(String) onAdd;
-  const _AddDomainRow({required this.onAdd});
-  @override State<_AddDomainRow> createState() => _AddDomainRowState();
-}
-class _AddDomainRowState extends State<_AddDomainRow> {
-  final _ctrl = TextEditingController();
-  @override void dispose() { _ctrl.dispose(); super.dispose(); }
-  @override Widget build(BuildContext context) => Row(children: [
-    Expanded(child: TextField(controller: _ctrl,
-      decoration: const InputDecoration(hintText: 'example.com or *.example.com',
-          isDense: true, border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
-      style: const TextStyle(fontSize: 12),
-      onSubmitted: (v) { if (v.isNotEmpty) { widget.onAdd(v); _ctrl.clear(); } },
-    )),
-    const SizedBox(width: 8),
-    FilledButton(
-      onPressed: () { if (_ctrl.text.isNotEmpty) { widget.onAdd(_ctrl.text); _ctrl.clear(); } },
-      child: const Text('Add', style: TextStyle(fontSize: 12)),
-    ),
-  ]);
-}
-
-// ── DNS Picker Dialog ─────────────────────────────────────────────────────────
+// ΓöÇΓöÇ DNS Picker Dialog ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class _DnsOption {
   final String value;
@@ -1089,18 +1184,18 @@ class _DnsOption {
 }
 
 const _allDnsOptions = <_DnsOption>[
-  _DnsOption('tcp://8.8.8.8:53', 'Google DNS', 'TCP · 8.8.8.8:53 · Fast, global'),
-  _DnsOption('tcp://1.1.1.1:53', 'Cloudflare DNS', 'TCP · 1.1.1.1:53 · Privacy-focused'),
-  _DnsOption('tcp://114.114.114.114:53', '114 DNS', 'TCP · 114.114.114.114:53 · China mainland'),
-  _DnsOption('tcp://119.29.29.29:53', 'DNSPod', 'TCP · 119.29.29.29:53 · Tencent China'),
-  _DnsOption('tcp://223.5.5.5:53', 'AliDNS', 'TCP · 223.5.5.5:53 · Alibaba China'),
-  _DnsOption('https://dns.google/dns-query', 'Google DoH', 'HTTPS · Encrypted DNS-over-HTTPS'),
-  _DnsOption('https://cloudflare-dns.com/dns-query', 'Cloudflare DoH', 'HTTPS · Encrypted DNS-over-HTTPS'),
-  _DnsOption('https://doh.pub/dns-query', 'DNSPod DoH', 'HTTPS · Tencent encrypted DNS (China)'),
+  _DnsOption('tcp://8.8.8.8:53', 'Google DNS', 'TCP ┬╖ 8.8.8.8:53 ┬╖ Fast, global'),
+  _DnsOption('tcp://1.1.1.1:53', 'Cloudflare DNS', 'TCP ┬╖ 1.1.1.1:53 ┬╖ Privacy-focused'),
+  _DnsOption('tcp://114.114.114.114:53', '114 DNS', 'TCP ┬╖ 114.114.114.114:53 ┬╖ China mainland'),
+  _DnsOption('tcp://119.29.29.29:53', 'DNSPod', 'TCP ┬╖ 119.29.29.29:53 ┬╖ Tencent China'),
+  _DnsOption('tcp://223.5.5.5:53', 'AliDNS', 'TCP ┬╖ 223.5.5.5:53 ┬╖ Alibaba China'),
+  _DnsOption('https://dns.google/dns-query', 'Google DoH', 'HTTPS ┬╖ Encrypted DNS-over-HTTPS'),
+  _DnsOption('https://cloudflare-dns.com/dns-query', 'Cloudflare DoH', 'HTTPS ┬╖ Encrypted DNS-over-HTTPS'),
+  _DnsOption('https://doh.pub/dns-query', 'DNSPod DoH', 'HTTPS ┬╖ Tencent encrypted DNS (China)'),
   _DnsOption('dhcp://auto', 'DHCP Auto', 'Uses DNS from your router/DHCP server'),
   _DnsOption('system://auto', 'System Auto', 'Uses your OS-configured DNS servers'),
-  _DnsOption('udp://8.8.8.8:53', 'Google UDP', 'UDP · 8.8.8.8:53 · Traditional DNS'),
-  _DnsOption('udp://1.1.1.1:53', 'Cloudflare UDP', 'UDP · 1.1.1.1:53 · Traditional DNS'),
+  _DnsOption('udp://8.8.8.8:53', 'Google UDP', 'UDP ┬╖ 8.8.8.8:53 ┬╖ Traditional DNS'),
+  _DnsOption('udp://1.1.1.1:53', 'Cloudflare UDP', 'UDP ┬╖ 1.1.1.1:53 ┬╖ Traditional DNS'),
 ];
 
 class _DnsPickerDialog extends StatefulWidget {
@@ -1217,7 +1312,7 @@ class _DnsPickerDialogState extends State<_DnsPickerDialog> {
             ),
             const SizedBox(height: 6),
             Text(
-              '${_selected.length} selected · tap to toggle',
+              '${_selected.length} selected ┬╖ tap to toggle',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 8),

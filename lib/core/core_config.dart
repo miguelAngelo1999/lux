@@ -310,6 +310,8 @@ class CustomizedRuleItem {
   final String policy;
   final bool disabled;
   final String raw;
+  /// Optional protocol filter: "tcp", "udp", or null (matches both).
+  final String? protocol;
 
   const CustomizedRuleItem({
     required this.ruleType,
@@ -317,16 +319,27 @@ class CustomizedRuleItem {
     required this.policy,
     required this.disabled,
     required this.raw,
+    this.protocol,
   });
 
-  factory CustomizedRuleItem.fromJson(Map<String, dynamic> json) =>
-      CustomizedRuleItem(
-        ruleType: json['ruleType'] as String? ?? '',
-        payload: json['payload'] as String? ?? '',
-        policy: json['policy'] as String? ?? '',
-        disabled: json['disabled'] as bool? ?? false,
-        raw: json['raw'] as String? ?? '',
-      );
+  factory CustomizedRuleItem.fromJson(Map<String, dynamic> json) {
+    final raw = json['raw'] as String? ?? '';
+    // Parse protocol from the raw string's optional 4th field
+    String? protocol;
+    final parts = raw.replaceFirst(RegExp(r'^#'), '').split(',');
+    if (parts.length >= 4) {
+      final p = parts[3].trim().toLowerCase();
+      if (p == 'tcp' || p == 'udp') protocol = p;
+    }
+    return CustomizedRuleItem(
+      ruleType: json['ruleType'] as String? ?? '',
+      payload: json['payload'] as String? ?? '',
+      policy: json['policy'] as String? ?? '',
+      disabled: json['disabled'] as bool? ?? false,
+      raw: raw,
+      protocol: protocol,
+    );
+  }
 
   CustomizedRuleItem copyWith({
     String? ruleType,
@@ -334,6 +347,7 @@ class CustomizedRuleItem {
     String? policy,
     bool? disabled,
     String? raw,
+    Object? protocol = _sentinel,
   }) =>
       CustomizedRuleItem(
         ruleType: ruleType ?? this.ruleType,
@@ -341,9 +355,90 @@ class CustomizedRuleItem {
         policy: policy ?? this.policy,
         disabled: disabled ?? this.disabled,
         raw: raw ?? this.raw,
+        protocol: protocol == _sentinel ? this.protocol : protocol as String?,
       );
 
-  String toRawString() => '$ruleType,$payload,$policy';
+  /// Produces the raw rule string, including optional protocol suffix.
+  String toRawString() {
+    final base = protocol != null
+        ? '$ruleType,$payload,$policy,$protocol'
+        : '$ruleType,$payload,$policy';
+    return disabled ? '#$base' : base;
+  }
+}
+
+// Sentinel for copyWith optional nullable field
+const Object _sentinel = Object();
+
+/// Human-readable fields extracted from an intercepting CA certificate.
+class CertInfo {
+  final String subject;
+  final String issuer;
+  final String organizationName;
+  final String notBefore;
+  final String notAfter;
+  final String sha256Fingerprint;
+  final bool isCA;
+
+  const CertInfo({
+    required this.subject,
+    required this.issuer,
+    required this.organizationName,
+    required this.notBefore,
+    required this.notAfter,
+    required this.sha256Fingerprint,
+    required this.isCA,
+  });
+
+  factory CertInfo.fromJson(Map<String, dynamic> json) {
+    return CertInfo(
+      subject: json['subject'] as String? ?? '',
+      issuer: json['issuer'] as String? ?? '',
+      organizationName: json['organizationName'] as String? ?? '',
+      notBefore: json['notBefore'] as String? ?? '',
+      notAfter: json['notAfter'] as String? ?? '',
+      sha256Fingerprint: json['sha256Fingerprint'] as String? ?? '',
+      isCA: json['isCA'] as bool? ?? false,
+    );
+  }
+}
+
+/// Result of the SSL bump detection probe from the backend.
+class SslBumpStatus {
+  /// Whether an intercepting/inspecting proxy was detected.
+  final bool detected;
+
+  /// Whether a CA cert is available for download.
+  final bool hasCert;
+
+  /// RFC3339 timestamp of the last check (may be empty on first load).
+  final String checkedAt;
+
+  /// Error message if the probe failed.
+  final String? error;
+
+  /// Parsed metadata about the intercepting CA cert, if available.
+  final CertInfo? certInfo;
+
+  const SslBumpStatus({
+    required this.detected,
+    required this.hasCert,
+    this.checkedAt = '',
+    this.error,
+    this.certInfo,
+  });
+
+  factory SslBumpStatus.fromJson(Map<String, dynamic> json) {
+    return SslBumpStatus(
+      detected: json['detected'] as bool? ?? false,
+      hasCert: json['hasCert'] as bool? ?? false,
+      checkedAt: json['checkedAt'] as String? ?? '',
+      error: json['error'] as String?,
+      certInfo: json['certInfo'] is Map<String, dynamic>
+          ? CertInfo.fromJson(json['certInfo'] as Map<String, dynamic>)
+          : null,
+    );
+  }
 }
 
 // Define the data classes
@@ -550,110 +645,29 @@ class Setting {
   }
 }
 
-class SslInspectionSettings {
-  final bool enabled;
-  final String? caFingerprint;
-  final DateTime? caGeneratedAt;
-
-  const SslInspectionSettings({
-    required this.enabled,
-    this.caFingerprint,
-    this.caGeneratedAt,
-  });
-
-  factory SslInspectionSettings.fromJson(Map<String, dynamic> json) {
-    return SslInspectionSettings(
-      enabled: json['enabled'] as bool? ?? false,
-      caFingerprint: json['caFingerprint'] as String?,
-      caGeneratedAt: json['caGeneratedAt'] != null
-          ? DateTime.tryParse(json['caGeneratedAt'] as String)
-          : null,
-    );
-  }
-}
-
-class InspectionListEntry {
-  final String pattern;
-  final bool enabled;
-
-  const InspectionListEntry({
-    required this.pattern,
-    required this.enabled,
-  });
-
-  factory InspectionListEntry.fromJson(Map<String, dynamic> json) {
-    return InspectionListEntry(
-      pattern: json['pattern'] as String? ?? '',
-      enabled: json['enabled'] as bool? ?? true,
-    );
-  }
-}
-
-// ── Proxy Auto-Detection models ────────────────────────────────────────────────
-
-/// A single upstream proxy discovered by the /proxies/detect endpoint.
+/// Result of a network proxy auto-detection probe.
 class DetectedProxy {
-  /// How it was discovered: "dhcp_option252", "wpad_dns", "pac", "manual"
+  final String host;
+  final String port;
+  final String scheme;
+  final bool needsAuth;
   final String source;
 
-  /// Proxy hostname or IP.
-  final String host;
-
-  /// Proxy port string (e.g. "3128").
-  final String port;
-
-  /// PAC file URL, if the proxy was found via PAC/WPAD.
-  final String? pacUrl;
-
-  /// True when the proxy returned HTTP 407 Proxy-Authentication-Required.
-  final bool requiresAuth;
-
-  /// Non-empty when probing failed (dial error, etc.).
-  final String? error;
-
   const DetectedProxy({
-    required this.source,
     required this.host,
     required this.port,
-    this.pacUrl,
-    this.requiresAuth = false,
-    this.error,
+    required this.scheme,
+    required this.needsAuth,
+    required this.source,
   });
 
-  factory DetectedProxy.fromJson(Map<String, dynamic> json) {
-    return DetectedProxy(
-      source: json['source'] as String? ?? '',
-      host: json['host'] as String? ?? '',
-      port: json['port'] as String? ?? '',
-      pacUrl: json['pacUrl'] as String?,
-      requiresAuth: json['requiresAuth'] as bool? ?? false,
-      error: json['error'] as String?,
-    );
-  }
+  factory DetectedProxy.fromJson(Map<String, dynamic> json) => DetectedProxy(
+        host: json['host'] as String? ?? '',
+        port: json['port'] as String? ?? '8080',
+        scheme: json['scheme'] as String? ?? 'http',
+        needsAuth: json['needsAuth'] as bool? ?? false,
+        source: json['source'] as String? ?? '',
+      );
 
-  String get displayAddress => '$host:$port';
-}
-
-/// Top-level result from GET /proxies/detect.
-class ProxyDetectResult {
-  final bool detected;
-  final List<DetectedProxy> proxies;
-  final String? error;
-
-  const ProxyDetectResult({
-    required this.detected,
-    required this.proxies,
-    this.error,
-  });
-
-  factory ProxyDetectResult.fromJson(Map<String, dynamic> json) {
-    final rawList = json['proxies'] as List? ?? [];
-    return ProxyDetectResult(
-      detected: json['detected'] as bool? ?? false,
-      proxies: rawList
-          .map((e) => DetectedProxy.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      error: json['error'] as String?,
-    );
-  }
+  String get address => '$host:$port';
 }
