@@ -68,6 +68,20 @@ class CertInstaller {
         '  echo "\$EXPORT_LINE" >> /etc/profile.d/lux_ca.sh',
         'fi',
         '',
+        '# 4. Firefox / Thunderbird — NSS cert databases',
+        r'CERTUTIL_BIN=$(command -v certutil 2>/dev/null || find /Applications /opt/homebrew /usr/local -name certutil -type f 2>/dev/null | head -1)',
+        r'if [ -x "$CERTUTIL_BIN" ]; then',
+        r'  for PROF_BASE in "$HOME/Library/Application Support/Firefox/Profiles" "$HOME/Library/Application Support/Thunderbird/Profiles" "$HOME/Library/Application Support/Mozilla/Firefox/Profiles"; do',
+        r'    if [ -d "$PROF_BASE" ]; then',
+        r'      for DB in "$PROF_BASE"/*/; do',
+        r'        if [ -f "${DB}cert9.db" ] || [ -f "${DB}cert8.db" ]; then',
+        r'          "$CERTUTIL_BIN" -A -n "Lux SSL Inspection CA" -t "CT,C,C" -i "$CERT" -d "$DB" 2>/dev/null || true',
+        r'        fi',
+        r'      done',
+        r'    fi',
+        r'  done',
+        r'fi',
+        '',
         'echo "LUX_CERT_INSTALL_OK"',
       ];
 
@@ -85,6 +99,9 @@ class CertInstaller {
         steps.add(const InstallStep(
             name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)', success: true,
             note: 'Cert at /etc/ssl/certs/lux_intercept_ca.pem; set in launchd.conf + zshenv'));
+        steps.add(const InstallStep(
+            name: 'Firefox / Thunderbird (NSS)', success: true,
+            note: 'Injected into all profile cert9.db databases'));
       } else {
         steps.add(InstallStep(
             name: 'macOS System Keychain', success: false,
@@ -93,6 +110,9 @@ class CertInstaller {
             name: 'curl (system OpenSSL)', success: false, note: 'Admin script failed'));
         steps.add(const InstallStep(
             name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)', success: false,
+            note: 'Admin script failed'));
+        steps.add(const InstallStep(
+            name: 'Firefox / Thunderbird (NSS)', success: false,
             note: 'Admin script failed'));
       }
 

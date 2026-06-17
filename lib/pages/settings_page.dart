@@ -1421,6 +1421,11 @@ extension _MitmSslSettings on _SettingsPageState {
               label: const Text('Export CA', style: TextStyle(fontSize: 12)),
               onPressed: _exportCA,
             ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.verified_user, size: 14),
+              label: const Text('Install & Trust', style: TextStyle(fontSize: 12)),
+              onPressed: _installMitmCA,
+            ),
             if (Platform.isWindows)
               OutlinedButton.icon(
                 icon: const Icon(Icons.verified_user_outlined, size: 14),
@@ -1505,6 +1510,25 @@ extension _MitmSslSettings on _SettingsPageState {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _installMitmCA() async {
+    try {
+      final bytes = await widget.coreManager.getCACertPem();
+      final result = await CertInstaller.install(bytes.toList());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(result.success
+              ? 'Lux CA installed — System Keychain, curl, Node.js, Firefox, Thunderbird'
+              : 'Partial install — see details'),
+          backgroundColor: result.success ? Colors.green.shade700 : Colors.orange.shade700,
+          duration: const Duration(seconds: 5),
+        ));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Install failed: $e'), backgroundColor: Colors.red));
     }
   }
 
