@@ -40,7 +40,16 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
   bool get isEditing => widget.initialValue != null;
 
   /// Prompts for macOS system authentication before revealing the password.
+  /// Blocks reveal entirely for one-time and timed passwords.
   Future<bool> _authenticateToReveal() async {
+    // One-time and timed passwords must never be revealed — not even to admins
+    if (_passwordMode == 'one-time' || _passwordMode == 'timed') {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This password mode does not allow revealing the password')),
+      );
+      return false;
+    }
     return await ElevationHelper.requestElevation(
       message: 'Authenticate to reveal proxy password',
       context: context,
@@ -184,20 +193,24 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           initialValue: _password,
                           decoration: InputDecoration(
                             labelText: 'Password (optional)',
-                            suffixIcon: IconButton(
-                              icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                              onPressed: () async {
-                                if (_obscurePassword) {
-                                  // Require system auth before revealing
-                                  final ok = await _authenticateToReveal();
-                                  if (ok) setState(() => _obscurePassword = false);
-                                } else {
-                                  setState(() => _obscurePassword = true);
-                                }
-                              },
-                            ),
+                            suffixIcon: (_passwordMode == 'one-time' || _passwordMode == 'timed')
+                                ? const Tooltip(
+                                    message: 'Password cannot be revealed in this mode',
+                                    child: Icon(Icons.lock, size: 20, color: Colors.grey),
+                                  )
+                                : IconButton(
+                                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                                    onPressed: () async {
+                                      if (_obscurePassword) {
+                                        final ok = await _authenticateToReveal();
+                                        if (ok) setState(() => _obscurePassword = false);
+                                      } else {
+                                        setState(() => _obscurePassword = true);
+                                      }
+                                    },
+                                  ),
                           ),
-                          obscureText: _obscurePassword,
+                          obscureText: _obscurePassword || _passwordMode == 'one-time' || _passwordMode == 'timed',
                           onSaved: (v) => _password = v ?? '',
                         ),
                         const SizedBox(height: 16),
