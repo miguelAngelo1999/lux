@@ -205,13 +205,13 @@ class CertInstaller {
       steps.add(await _installGitWindowsCerts(pemBytes));
 
       // App-bundled cert stores
-      steps.add(await _installAppBundledCerts(pemBytes));
+      steps.add(await _installAppBundledCerts(pemBytes, elevatedTmpPath: tmpPath));
 
       // Node.js / npm
       steps.add(await _installWindowsNodeExtraCa(pemBytes));
 
       // Python certifi
-      steps.addAll(await _installPythonCertifi(pemBytes));
+      steps.addAll(await _installPythonCertifi(pemBytes, elevatedTmpPath: tmpPath));
     } finally {
       await tmpPem.delete().catchError((_) => tmpPem);
     }
@@ -341,7 +341,8 @@ class CertInstaller {
 
   /// Scans for applications that ship their own CA cert bundles
   /// and appends the cert. Reports generically ΓÇö no app names in the UI.
-  static Future<InstallStep> _installAppBundledCerts(List<int> pemBytes) async {
+  static Future<InstallStep> _installAppBundledCerts(List<int> pemBytes,
+      {String? elevatedTmpPath}) async {
     final candidates = <String>[];
 
     if (Platform.isWindows) {
@@ -351,9 +352,12 @@ class CertInstaller {
 
       // Video editors
       candidates.addAll([
+        '$programFiles\\Blackmagic Design\\DaVinci Resolve\\curl-ca-bundle.crt',
+        '$programFiles\\Blackmagic Design\\DaVinci Resolve\\cacert.pem',
+        '$programFiles\\Blackmagic Design\\DaVinci Resolve\\ssl\\cert.pem',
+        // Also check ProgramData just in case
         '$programData\\Blackmagic Design\\DaVinci Resolve\\curl-ca-bundle.crt',
         '$programData\\Blackmagic Design\\DaVinci Resolve\\cacert.pem',
-        '$programData\\Blackmagic Design\\DaVinci Resolve\\ssl\\cert.pem',
       ]);
 
       // Anaconda / Miniconda
@@ -424,15 +428,45 @@ class CertInstaller {
         final existing = await f.readAsString();
         final pemStr = String.fromCharCodes(pemBytes);
         if (existing.contains(_extractPemBody(pemStr))) {
-          patched++; // Already present counts as success
+          patched++;
           continue;
         }
 
-        final raf = await f.open(mode: FileMode.append);
-        await raf.writeString('\n# Added by Lux SSL inspection CA\n');
-        await raf.writeFrom(pemBytes);
-        await raf.close();
-        patched++;
+        bool written = false;
+        try {
+          final raf = await f.open(mode: FileMode.append);
+          await raf.writeString('\n# Added by Lux SSL inspection CA\n');
+          await raf.writeFrom(pemBytes);
+          await raf.close();
+          written = true;
+        } catch (_) {}
+
+        // On Windows, protected paths need elevation
+        if (!written && Platform.isWindows && elevatedTmpPath != null) {
+          final ts = DateTime.now().millisecondsSinceEpoch;
+          final scriptPath = 'C:\\Windows\\Temp\\lux_app_cert_$ts.ps1';
+          final escaped = path.replaceAll("'", "''");
+          final srcEscaped = elevatedTmpPath.replaceAll("'", "''");
+          await File(scriptPath).writeAsString(
+            'Add-Content -Path \'$escaped\' -Value "`n# Added by Lux SSL inspection CA`n"\r\n'
+            'Add-Content -Path \'$escaped\' -Value (Get-Content -Raw -Path \'$srcEscaped\')\r\n',
+          );
+          try {
+            final p = await Process.run('powershell.exe', [
+              '-noprofile', '-NonInteractive', '-command',
+              '\$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru '
+              '-WindowStyle Hidden '
+              '-ArgumentList @("-ExecutionPolicy","Bypass","-File","$scriptPath"); '
+              'if (\$p) { \$p.ExitCode } else { 1 }',
+            ]);
+            written = p.exitCode == 0 &&
+                (int.tryParse(p.stdout.toString().trim()) ?? 1) == 0;
+          } finally {
+            await File(scriptPath).delete().catchError((_) => File(scriptPath));
+          }
+        }
+
+        if (written) patched++;
       } catch (e) {
         debugPrint('App bundle cert write failed for $path: $e');
       }
@@ -497,30 +531,140 @@ class CertInstaller {
   }
 
   /// Finds Python certifi's cacert.pem and appends the cert.
+  /// Uses where.exe / which to find all Python installs dynamically.
+  /// [elevatedTmpPath] is the cert PEM file path for elevated Windows scripts.
   static Future<List<InstallStep>> _installPythonCertifi(
-      List<int> pemBytes) async {
-    for (final python in ['python3', 'python', 'python3.12', 'python3.11']) {
+      List<int> pemBytes, {String? elevatedTmpPath}) async {
+    // Collect all Python executables on this machine
+    final pythons = <String>{};
+
+    if (Platform.isWindows) {
+      // where.exe searches the full PATH and known install locations
       try {
-        final result = await Process.run(
-            Platform.isWindows ? python : '/usr/bin/env',
-            [python, '-c', 'import certifi; print(certifi.where())']);
-        if (result.exitCode != 0) continue;
+        final r = await Process.run('where.exe', ['python']);
+        if (r.exitCode == 0) {
+          for (final line in r.stdout.toString().split('\n')) {
+            final p = line.trim();
+            if (p.isNotEmpty && !p.contains('WindowsApps')) pythons.add(p);
+          }
+        }
+      } catch (_) {}
+      // Also probe common install roots in case they're not on PATH
+      final roots = [
+        r'C:\Program Files',
+        r'C:\Program Files (x86)',
+        Platform.environment['LOCALAPPDATA'],
+        Platform.environment['APPDATA'],
+        Platform.environment['USERPROFILE'],
+      ].whereType<String>();
+      for (final root in roots) {
+        try {
+          final dir = Directory(root);
+          await for (final entity in dir.list()) {
+            if (entity is Directory &&
+                entity.path.toLowerCase().contains('python')) {
+              final exe = '${entity.path}\\python.exe';
+              if (await File(exe).exists()) pythons.add(exe);
+            }
+          }
+        } catch (_) {}
+      }
+    } else {
+      // macOS/Linux: use which + common paths
+      for (final cmd in ['python3', 'python', 'python3.12', 'python3.11']) {
+        try {
+          final r = await Process.run('/usr/bin/env', ['which', cmd]);
+          if (r.exitCode == 0) {
+            final p = r.stdout.toString().trim();
+            if (p.isNotEmpty) pythons.add(p);
+          }
+        } catch (_) {}
+      }
+    }
 
-        final certifiPath = result.stdout.toString().trim();
-        if (certifiPath.isEmpty) continue;
+    final pemStr = String.fromCharCodes(pemBytes);
+    final steps = <InstallStep>[];
 
-        final step = await _appendToPemStore(
-            pemBytes, [certifiPath], 'Python certifi ($python)');
-        if (step.success) return [step];
+    for (final python in pythons) {
+      try {
+        final r = await Process.run(python, [
+          '-c',
+          'import certifi; print(certifi.where())',
+        ]);
+        if (r.exitCode != 0) continue;
+        final certifiPath = r.stdout.toString().trim();
+        if (certifiPath.isEmpty || !await File(certifiPath).exists()) continue;
+
+        // Check dedup
+        final existing = await File(certifiPath).readAsString();
+        if (existing.contains(_extractPemBody(pemStr))) {
+          steps.add(InstallStep(
+            name: 'Python certifi',
+            success: true,
+            note: 'Already present in $certifiPath',
+          ));
+          return steps;
+        }
+
+        // Try direct append first (works if path is user-writable)
+        bool written = false;
+        try {
+          final raf = await File(certifiPath).open(mode: FileMode.append);
+          await raf.writeString('\n# Added by Lux SSL inspection CA\n');
+          await raf.writeFrom(pemBytes);
+          await raf.close();
+          written = true;
+        } catch (_) {}
+
+        if (!written && Platform.isWindows && elevatedTmpPath != null) {
+          // Protected path — use elevated script
+          final ts = DateTime.now().millisecondsSinceEpoch;
+          final scriptPath = 'C:\\Windows\\Temp\\lux_certifi_$ts.ps1';
+          final escaped = certifiPath.replaceAll("'", "''");
+          final srcEscaped = elevatedTmpPath.replaceAll("'", "''");
+          await File(scriptPath).writeAsString(
+            'Add-Content -Path \'$escaped\' -Value "`n# Added by Lux SSL inspection CA`n"\r\n'
+            'Add-Content -Path \'$escaped\' -Value (Get-Content -Raw -Path \'$srcEscaped\')\r\n',
+          );
+          try {
+            final p = await Process.run('powershell.exe', [
+              '-noprofile', '-NonInteractive', '-command',
+              '\$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru '
+              '-WindowStyle Hidden '
+              '-ArgumentList @("-ExecutionPolicy","Bypass","-File","$scriptPath"); '
+              'if (\$p) { \$p.ExitCode } else { 1 }',
+            ]);
+            written = p.exitCode == 0 &&
+                (int.tryParse(p.stdout.toString().trim()) ?? 1) == 0;
+          } finally {
+            await File(scriptPath).delete().catchError((_) => File(scriptPath));
+          }
+        }
+
+        if (written) {
+          steps.add(InstallStep(
+            name: 'Python certifi',
+            success: true,
+            note: 'Appended to $certifiPath',
+          ));
+          return steps;
+        }
       } catch (_) {
         continue;
       }
     }
 
+    if (pythons.isEmpty) {
+      return [const InstallStep(
+        name: 'Python certifi',
+        success: false,
+        note: 'Python not found',
+      )];
+    }
     return [const InstallStep(
       name: 'Python certifi',
       success: false,
-      note: 'Python not found or certifi not installed',
+      note: 'certifi not installed in any Python found',
     )];
   }
 }
