@@ -685,3 +685,31 @@ class Setting {
     return ProxyMode.mixed;
   }
 }
+
+
+/// Result of a network proxy auto-detection probe.
+class DetectedProxy {
+  final String host;
+  final String port;
+  final String scheme;
+  final bool needsAuth;
+  final String source;
+
+  const DetectedProxy({
+    required this.host,
+    required this.port,
+    required this.scheme,
+    required this.needsAuth,
+    required this.source,
+  });
+
+  factory DetectedProxy.fromJson(Map<String, dynamic> json) => DetectedProxy(
+        host: json['host'] as String? ?? '',
+        port: json['port'] as String? ?? '8080',
+        scheme: json['scheme'] as String? ?? 'http',
+        needsAuth: json['needsAuth'] as bool? ?? false,
+        source: json['source'] as String? ?? '',
+      );
+
+  String get address => '$host:$port';
+}

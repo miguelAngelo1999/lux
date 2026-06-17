@@ -472,25 +472,25 @@ class CoreManager {
   // ── MITM SSL Inspection Engine ─────────────────────────────────────────────
 
   Future<SslInspectionSettings> getSslInspectionSettings() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspection/settings');
+    final res = await dio.get('$baseHttpUrl/ssl-inspect/settings');
     return SslInspectionSettings.fromJson(res.data as Map<String, dynamic>);
   }
 
   Future<void> setSslInspectionEnabled(bool enabled) async {
-    await dio.put('$baseHttpUrl/ssl-inspection/settings', data: {'enabled': enabled});
+    await dio.put('$baseHttpUrl/ssl-inspect/settings', data: {'enabled': enabled});
   }
 
   /// Returns the MITM CA certificate as raw PEM bytes.
   Future<Uint8List> getCACertPem() async {
     final res = await dio.get(
-      '$baseHttpUrl/ssl-inspection/ca/pem',
+      '$baseHttpUrl/ssl-inspect/ca/pem',
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(res.data as List<int>);
   }
 
   Future<List<InspectionListEntry>> getInspectionList() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspection/inspection-list');
+    final res = await dio.get('$baseHttpUrl/ssl-inspect/inspection-list');
     final entries = res.data['entries'] as List? ?? [];
     return entries
         .map((e) => InspectionListEntry.fromJson(e as Map<String, dynamic>))
@@ -498,20 +498,42 @@ class CoreManager {
   }
 
   Future<void> addInspectionDomain(String pattern) async {
-    await dio.put('$baseHttpUrl/ssl-inspection/inspection-list', data: {'pattern': pattern});
+    await dio.put('$baseHttpUrl/ssl-inspect/inspection-list', data: {'pattern': pattern});
   }
 
   Future<void> removeInspectionDomain(String pattern) async {
-    await dio.delete('$baseHttpUrl/ssl-inspection/inspection-list', data: {'pattern': pattern});
+    await dio.delete('$baseHttpUrl/ssl-inspect/inspection-list', data: {'pattern': pattern});
   }
 
   Future<void> toggleInspectionDomain(String pattern) async {
-    await dio.post('$baseHttpUrl/ssl-inspection/inspection-list/toggle', data: {'pattern': pattern});
+    await dio.post('$baseHttpUrl/ssl-inspect/inspection-list/toggle', data: {'pattern': pattern});
   }
 
   Future<List<String>> getBypassList() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspection/bypass-list');
+    final res = await dio.get('$baseHttpUrl/ssl-inspect/bypass-list');
     final patterns = res.data['patterns'] as List? ?? [];
     return patterns.map((e) => e as String).toList();
+  }
+
+  /// Auto-detect an upstream proxy on the current network.
+  /// Uses scutil (macOS), WPAD probe, and environment variables.
+  /// Returns null if no proxy is detected or lux_core is not running.
+  Future<DetectedProxy?> detectNetworkProxy() async {
+    try {
+      final res = await dio.get('$baseHttpUrl/proxies/detect',
+          options: Options(
+            sendTimeout: const Duration(seconds: 5),
+            receiveTimeout: const Duration(seconds: 8),
+          ));
+      if (res.statusCode == 200 && res.data is Map) {
+        final d = res.data as Map<String, dynamic>;
+        if (d['found'] == true) {
+          return DetectedProxy.fromJson(d);
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }

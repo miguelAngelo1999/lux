@@ -23,11 +23,17 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Setting? _setting;
   bool _isLoading = true;
   bool _isSaving = false;
-  // SSL inspection state
+  // SSL bump detection state (upstream proxy SSL inspection)
   SslBumpStatus? _sslStatus;
   bool _sslChecking = false;
   bool _sslInstalling = false;
   InstallResult? _installResult;
+
+  // MITM SSL inspection engine state (Lux-as-MITM)
+  SslInspectionSettings? _sslSettings;
+  List<InspectionListEntry> _inspectionList = [];
+  List<String> _bypassList = [];
+  bool _sslLoading = false;
 
   List<String> _interfaces = [];
 
@@ -84,6 +90,18 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
+
+    // Load MITM SSL inspection state (silently — backend may not support yet)
+    try {
+      final ssl = await widget.coreManager.getSslInspectionSettings();
+      final list = await widget.coreManager.getInspectionList();
+      final bypass = await widget.coreManager.getBypassList();
+      if (mounted) setState(() {
+        _sslSettings = ssl;
+        _inspectionList = list;
+        _bypassList = bypass;
+      });
+    } catch (_) {}
   }
 
   Future<void> _save(Setting updated) async {
@@ -256,10 +274,15 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             _sectionHeader('Advanced'),
             _configFileTile(),
 
-            // ── SSL Inspection ──
+            // ── SSL Inspection (bump detection) ──
             const SizedBox(height: 16),
             _sectionHeader('SSL Inspection'),
             _sslInspectionSection(),
+
+            // ── MITM SSL Inspection Engine ──
+            const SizedBox(height: 16),
+            _sectionHeader('SSL Inspection (Lux MITM)'),
+            _buildSslInspectionSection(),
 
             // ── Config Backup ──
             const SizedBox(height: 16),
@@ -1366,4 +1389,206 @@ class _DnsPickerDialogState extends State<_DnsPickerDialog> {
       ],
     );
   }
+}
+
+// ── MITM SSL Inspection Engine UI ────────────────────────────────────────────
+
+extension _MitmSslSettings on _SettingsPageState {
+  Widget _buildSslInspectionSection() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SwitchListTile(
+        title: const Text('SSL Inspection', style: TextStyle(fontSize: 14)),
+        subtitle: const Text('Decrypt HTTPS for selected domains only', style: TextStyle(fontSize: 12)),
+        value: _sslSettings?.enabled ?? false,
+        dense: true,
+        onChanged: (_isSaving || _sslLoading) ? null : (v) => _toggleSslInspection(v),
+      ),
+      if (_sslSettings?.enabled == true && _sslSettings?.caFingerprint != null) ...[
+        ListTile(
+          dense: true,
+          title: const Text('Root CA', style: TextStyle(fontSize: 13)),
+          subtitle: Text(
+            'SHA256: ${_sslSettings!.caFingerprint!.substring(0, 16)}...\n'
+            'Generated: ${_sslSettings!.caGeneratedAt?.toLocal().toString().split(".").first ?? "unknown"}',
+            style: const TextStyle(fontSize: 11),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Wrap(spacing: 8, children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.download, size: 14),
+              label: const Text('Export CA', style: TextStyle(fontSize: 12)),
+              onPressed: _exportCA,
+            ),
+            if (Platform.isWindows)
+              OutlinedButton.icon(
+                icon: const Icon(Icons.verified_user_outlined, size: 14),
+                label: const Text('Install in Trust Store', style: TextStyle(fontSize: 12)),
+                onPressed: _installCAWindows,
+              ),
+          ]),
+        ),
+      ],
+      if (_sslSettings?.enabled == true) ...[
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text('Inspected Domains', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ),
+        ..._inspectionList.map((entry) => ListTile(
+          dense: true,
+          leading: Icon(entry.enabled ? Icons.circle : Icons.circle_outlined, size: 10,
+              color: entry.enabled ? Colors.green : Colors.grey),
+          title: Text(entry.pattern, style: const TextStyle(fontSize: 13)),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            IconButton(
+              icon: Icon(entry.enabled ? Icons.toggle_on : Icons.toggle_off, size: 20),
+              onPressed: () => _toggleDomain(entry.pattern),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 14, color: Colors.red),
+              onPressed: () => _removeDomain(entry.pattern),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+          ]),
+        )),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: _AddDomainRow(onAdd: _addDomain),
+        ),
+        TextButton(
+          onPressed: _showBypassList,
+          child: const Text('View bypass list (read-only)', style: TextStyle(fontSize: 12)),
+        ),
+      ],
+    ]);
+  }
+
+  Future<void> _toggleSslInspection(bool v) async {
+    if (v && _sslSettings?.caFingerprint == null) {
+      final confirmed = await showDialog<bool>(context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Enable SSL Inspection?'),
+          content: const Text(
+            'SSL Inspection decrypts HTTPS traffic for the domains you select. '
+            'You must install the Lux Root CA certificate into your system trust store. '
+            'You are responsible for the security implications.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enable')),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    setState(() => _sslLoading = true);
+    try {
+      await widget.coreManager.setSslInspectionEnabled(v);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    } finally {
+      if (mounted) setState(() => _sslLoading = false);
+    }
+  }
+
+  Future<void> _exportCA() async {
+    try {
+      final bytes = await widget.coreManager.getCACertPem();
+      final tmp = File('${Directory.systemTemp.path}/lux-ca.crt');
+      await tmp.writeAsBytes(bytes);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Saved to ${tmp.path}')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _installCAWindows() async {
+    try {
+      final bytes = await widget.coreManager.getCACertPem();
+      final tmp = File('C:\\Windows\\Temp\\lux-ca-install.crt');
+      await tmp.writeAsBytes(bytes);
+      final result = await Process.run('powershell.exe', [
+        '-noprofile', '-command',
+        'Start-Process certutil -ArgumentList @("-addstore","Root","C:\\Windows\\Temp\\lux-ca-install.crt") -Verb RunAs -Wait -WindowStyle Hidden',
+      ], runInShell: false);
+      try { await tmp.delete(); } catch (_) {}
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.exitCode == 0
+            ? 'Lux CA installed in Windows trust store ✓'
+            : 'Install returned exit ${result.exitCode} — check if you approved the UAC prompt')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Install failed: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _addDomain(String pattern) async {
+    try {
+      await widget.coreManager.addInspectionDomain(pattern);
+      final l = await widget.coreManager.getInspectionList();
+      if (mounted) setState(() => _inspectionList = l);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleDomain(String pattern) async {
+    try {
+      await widget.coreManager.toggleInspectionDomain(pattern);
+      final l = await widget.coreManager.getInspectionList();
+      if (mounted) setState(() => _inspectionList = l);
+    } catch (_) {}
+  }
+
+  Future<void> _removeDomain(String pattern) async {
+    try {
+      await widget.coreManager.removeInspectionDomain(pattern);
+      final l = await widget.coreManager.getInspectionList();
+      if (mounted) setState(() => _inspectionList = l);
+    } catch (_) {}
+  }
+
+  void _showBypassList() {
+    showModalBottomSheet(context: context, builder: (ctx) => ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Bypass List (never inspected)', style: Theme.of(ctx).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        ..._bypassList.map((p) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text(p, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+        )),
+      ],
+    ));
+  }
+}
+
+class _AddDomainRow extends StatefulWidget {
+  final void Function(String) onAdd;
+  const _AddDomainRow({required this.onAdd});
+  @override State<_AddDomainRow> createState() => _AddDomainRowState();
+}
+
+class _AddDomainRowState extends State<_AddDomainRow> {
+  final _ctrl = TextEditingController();
+  @override void dispose() { _ctrl.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) => Row(children: [
+    Expanded(child: TextField(controller: _ctrl,
+      decoration: const InputDecoration(
+        hintText: 'example.com or *.example.com',
+        isDense: true, border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+      style: const TextStyle(fontSize: 12),
+      onSubmitted: (v) { if (v.isNotEmpty) { widget.onAdd(v); _ctrl.clear(); } },
+    )),
+    const SizedBox(width: 8),
+    FilledButton(
+      onPressed: () { if (_ctrl.text.isNotEmpty) { widget.onAdd(_ctrl.text); _ctrl.clear(); } },
+      child: const Text('Add', style: TextStyle(fontSize: 12)),
+    ),
+  ]);
 }
