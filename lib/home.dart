@@ -156,9 +156,11 @@ class _HomeState extends State<Home>
       isCoreReady.value = true;
     });
     if (eventChannel == null) {
-      coreManager?.getEventChannel().then((channel) {
+      coreManager?.getEventChannel().then((channel) async {
+        if (channel == null) return;
+        await channel.ready;
         eventChannel = channel;
-        eventChannel?.stream.listen((rawData) async {
+        eventChannel!.stream.listen((rawData) async {
           if (rawData is! String) {
             return;
           }

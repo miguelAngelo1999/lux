@@ -147,9 +147,11 @@ class _State extends State<AppHeaderBar> with WindowListener {
     refreshData();
 
     if (runtimeStatusChannel == null) {
-      widget.coreManager.getRuntimeStatusChannel().then((channel) {
+      widget.coreManager.getRuntimeStatusChannel().then((channel) async {
+        if (channel == null) return;
+        await channel.ready;
         runtimeStatusChannel = channel;
-        runtimeStatusChannel?.stream.listen((message) {
+        runtimeStatusChannel!.stream.listen((message) {
           RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));
           setState(() {
             if (!isLoadingSwitch) {
