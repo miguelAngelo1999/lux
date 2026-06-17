@@ -202,7 +202,7 @@ class CertInstaller {
       ));
 
       // Git for Windows
-      steps.add(await _installGitWindowsCerts(pemBytes));
+      steps.add(await _installGitWindowsCerts(pemBytes, elevatedTmpPath: tmpPath));
 
       // App-bundled cert stores
       steps.add(await _installAppBundledCerts(pemBytes, elevatedTmpPath: tmpPath));
@@ -255,25 +255,122 @@ class CertInstaller {
     }
   }
 
-  static Future<InstallStep> _installGitWindowsCerts(List<int> pemBytes) async {
-    final candidates = [
-      r'C:\Program Files\Git\usr\ssl\certs\ca-bundle.crt',
-      r'C:\Program Files (x86)\Git\usr\ssl\certs\ca-bundle.crt',
-    ];
+  static Future<InstallStep> _installGitWindowsCerts(List<int> pemBytes,
+      {String? elevatedTmpPath}) async {
+    final pemStr = String.fromCharCodes(pemBytes);
+    final toAppend = <String>{};
 
-    for (final path in candidates) {
-      if (await File(path).exists()) {
-        final result = await _appendToPemStore(
-            pemBytes, [path], 'Git for Windows (ca-bundle.crt)');
-        if (result.success) return result;
+    // 1. git http.sslCAInfo — the actual CA file git validates against
+    for (final scope in ['--global', '--system']) {
+      try {
+        final r = await Process.run('git', ['config', scope, 'http.sslCAInfo']);
+        if (r.exitCode == 0) {
+          final p = r.stdout.toString().trim();
+          if (p.isNotEmpty && await File(p).exists()) toAppend.add(p);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Find all git.exe and walk up to find cert stores
+    final gitExes = <String>{};
+    try {
+      final r = await Process.run('where.exe', ['git']);
+      if (r.exitCode == 0) {
+        for (final line in r.stdout.toString().split('\n')) {
+          final p = line.trim();
+          if (p.endsWith('.exe') && await File(p).exists()) gitExes.add(p);
+        }
+      }
+    } catch (_) {}
+
+    for (final gitExe in gitExes) {
+      var dir = File(gitExe).parent;
+      for (var i = 0; i < 4; i++) {
+        dir = dir.parent;
+        for (final rel in [
+          'usr\\ssl\\cert.pem',
+          'usr\\ssl\\certs\\ca-bundle.crt',
+          'etc\\ssl\\cert.pem',
+          'etc\\pki\\ca-trust\\extracted\\pem\\tls-ca-bundle.pem',
+          'clangarm64\\etc\\ssl\\cert.pem',
+          'clangarm64\\etc\\pki\\ca-trust\\extracted\\pem\\tls-ca-bundle.pem',
+        ]) {
+          final c = '${dir.path}\\$rel';
+          if (await File(c).exists()) toAppend.add(c);
+        }
       }
     }
 
-    return const InstallStep(
-      name: 'Git for Windows (ca-bundle.crt)',
-      success: false,
-      note: 'Git for Windows not found',
+    if (toAppend.isEmpty) {
+      return const InstallStep(
+        name: 'Git (cert stores)',
+        success: false,
+        note: 'Git not found or no cert stores located',
+      );
+    }
+
+    int patched = 0;
+    final notes = <String>[];
+    for (final path in toAppend) {
+      try {
+        final existing = await File(path).readAsString().catchError((_) => '');
+        if (existing.contains(_extractPemBody(pemStr))) {
+          patched++;
+          notes.add('already in ${_shortPath(path)}');
+          continue;
+        }
+
+        bool written = false;
+        try {
+          final raf = await File(path).open(mode: FileMode.append);
+          await raf.writeString('\n# Added by Lux SSL inspection CA\n');
+          await raf.writeFrom(pemBytes);
+          await raf.close();
+          written = true;
+        } catch (_) {}
+
+        if (!written && elevatedTmpPath != null) {
+          final ts = DateTime.now().millisecondsSinceEpoch;
+          final scriptPath = 'C:\\Windows\\Temp\\lux_git_$ts.ps1';
+          final esc = path.replaceAll("'", "''");
+          final src = elevatedTmpPath.replaceAll("'", "''");
+          await File(scriptPath).writeAsString(
+            'Add-Content -Path \'$esc\' -Value "`n# Added by Lux SSL inspection CA`n"\r\n'
+            'Add-Content -Path \'$esc\' -Value (Get-Content -Raw -Path \'$src\')\r\n',
+          );
+          try {
+            final p = await Process.run('powershell.exe', [
+              '-noprofile', '-NonInteractive', '-command',
+              r'$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru '
+              '-WindowStyle Hidden '
+              '-ArgumentList @("-ExecutionPolicy","Bypass","-File","$scriptPath"); '
+              r'if ($p) { $p.ExitCode } else { 1 }',
+            ]);
+            written = p.exitCode == 0 &&
+                (int.tryParse(p.stdout.toString().trim()) ?? 1) == 0;
+          } finally {
+            await File(scriptPath).delete().catchError((_) => File(scriptPath));
+          }
+        }
+
+        if (written) { patched++; notes.add(_shortPath(path)); }
+      } catch (_) {}
+    }
+
+    return InstallStep(
+      name: 'Git (cert stores)',
+      success: patched > 0,
+      note: patched > 0
+          ? 'Patched $patched store(s): ${notes.join(", ")}'
+          : 'Could not write to any Git cert store',
     );
+  }
+
+  static String _shortPath(String p) {
+    final parts = p.replaceAll('\\', '/').split('/');
+    return parts.length > 3
+        ? '.../${parts.sublist(parts.length - 3).join('/')}'
+        : p;
   }
 
   static Future<InstallStep> _installWindowsNodeExtraCa(List<int> pemBytes) async {
