@@ -17,11 +17,25 @@ void markProxyAsNewlyCreated(String proxyId) {
 
 /// Shows a dialog that reveals the proxy password.
 /// Requires admin elevation unless the proxy was just created in this session.
+/// Blocks reveal entirely for one-time and timed passwords.
 Future<void> showPasswordPeekDialog({
   required BuildContext context,
   required CoreManager coreManager,
   required ProxyItem proxyItem,
 }) async {
+  // Check password mode — one-time and timed passwords cannot be revealed
+  final detail = await coreManager.getProxyDetail(proxyItem.id);
+  if (detail != null) {
+    final mode = detail.raw['passwordMode'] as String? ?? 'persistent';
+    if (mode == 'one-time' || mode == 'timed') {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This password mode does not allow revealing the password')),
+      );
+      return;
+    }
+  }
+
   final isNewlyCreated = _sessionCreatedProxyIds.contains(proxyItem.id);
 
   // If not newly created, require elevation first
