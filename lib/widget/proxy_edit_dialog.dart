@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
+import 'package:lux/util/elevation_helper.dart';
 
 /// Dialog for creating or editing a proxy configuration.
 /// Supports HTTP, SOCKS5, and Shadowsocks proxy types.
@@ -37,6 +38,14 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
   bool _obscurePassword = true;
 
   bool get isEditing => widget.initialValue != null;
+
+  /// Prompts for macOS system authentication before revealing the password.
+  Future<bool> _authenticateToReveal() async {
+    return await ElevationHelper.requestElevation(
+      message: 'Authenticate to reveal proxy password',
+      context: context,
+    );
+  }
 
   @override
   void initState() {
@@ -177,7 +186,15 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                             labelText: 'Password (optional)',
                             suffixIcon: IconButton(
                               icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                              onPressed: () async {
+                                if (_obscurePassword) {
+                                  // Require system auth before revealing
+                                  final ok = await _authenticateToReveal();
+                                  if (ok) setState(() => _obscurePassword = false);
+                                } else {
+                                  setState(() => _obscurePassword = true);
+                                }
+                              },
                             ),
                           ),
                           obscureText: _obscurePassword,

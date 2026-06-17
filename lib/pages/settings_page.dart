@@ -279,11 +279,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             _sectionHeader('SSL Inspection'),
             _sslInspectionSection(),
 
-            // ── MITM SSL Inspection Engine ──
-            const SizedBox(height: 16),
-            _sectionHeader('SSL Inspection (Lux MITM)'),
-            _buildSslInspectionSection(),
-
             // ── Config Backup ──
             const SizedBox(height: 16),
             _sectionHeader('Config Backup'),

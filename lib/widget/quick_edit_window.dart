@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
+import 'package:lux/util/elevation_helper.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// A compact credential editor that appears as a floating panel near the menubar.
@@ -191,8 +192,17 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                       obscureText: _obscurePassword,
                       decoration: _inputDecoration('Password', isDark).copyWith(
                         suffixIcon: GestureDetector(
-                          onTap: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
+                          onTap: () async {
+                            if (_obscurePassword) {
+                              final ok = await ElevationHelper.requestElevation(
+                                message: 'Authenticate to reveal proxy password',
+                                context: context,
+                              );
+                              if (ok) setState(() => _obscurePassword = false);
+                            } else {
+                              setState(() => _obscurePassword = true);
+                            }
+                          },
                           child: Icon(
                             _obscurePassword
                                 ? Icons.visibility_off
