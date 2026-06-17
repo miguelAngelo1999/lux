@@ -78,11 +78,7 @@ Future<void> showPasswordPeekDialog({
 
   if (!context.mounted) return;
 
-  // Use the core API GET /proxies/{id} which returns the decrypted password
-  final detail = await coreManager.getProxyDetail(proxyItem.id);
-
-  if (!context.mounted) return;
-
+  // Reuse the detail already fetched for the mode check above
   final password = detail?.password;
 
   if (password == null || password.isEmpty) {
