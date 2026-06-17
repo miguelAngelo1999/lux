@@ -670,7 +670,35 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       _installResult = null;
     });
     try {
-      final status = await widget.coreManager.getSslBumpStatus();
+      // Get the currently selected proxy to route the probe through it.
+      // This is what actually sees the SSL bump — probing direct misses it.
+      String? proxyAddr;
+      try {
+        final proxyList = await widget.coreManager.getProxyList();
+        final selectedId = proxyList.id;
+        if (selectedId.isNotEmpty && selectedId != 'DIRECT') {
+          final detail = await widget.coreManager.getProxyDetail(selectedId);
+          if (detail != null &&
+              detail.server != null &&
+              detail.port != null &&
+              (detail.type == 'http' || detail.type == 'https')) {
+            proxyAddr = '${detail.server}:${detail.port}';
+            // Include credentials if present
+            final user = detail.raw['username'] as String? ?? '';
+            final pass = detail.password ?? '';
+            if (user.isNotEmpty) {
+              final eu = Uri.encodeComponent(user);
+              final ep = Uri.encodeComponent(pass);
+              proxyAddr = '$eu:$ep@${detail.server}:${detail.port}';
+            }
+          }
+        }
+      } catch (_) {}
+
+      final status = await widget.coreManager.getSslBumpStatus(
+        proxyAddr: proxyAddr,
+        fresh: true,
+      );
       if (mounted) setState(() => _sslStatus = status);
     } catch (e) {
       if (mounted) {

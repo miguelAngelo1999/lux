@@ -143,29 +143,62 @@ class CertInstaller {
   static Future<InstallResult> _installWindows(List<int> pemBytes) async {
     final steps = <InstallStep>[];
 
-    final tmpPem = File('${Directory.systemTemp.path}\\lux_intercept_ca.pem');
+    // Use a short path with no spaces to avoid quoting issues
+    const tmpPath = r'C:\Windows\Temp\lux_ca.pem';
+    final tmpPem = File(tmpPath);
     await tmpPem.writeAsBytes(pemBytes);
 
     try {
-      // Windows Trusted Root store (all users)
-      final certutilResult = await _runWindowsAsAdmin(
-        'certutil -addstore -f Root "${tmpPem.path}"',
+      // Install to LocalMachine\Root by writing a script and launching it elevated.
+      // Start-Process -Verb RunAs on a .ps1 file shows the UAC dialog to the user.
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final scriptPath = 'C:\\Windows\\Temp\\lux_cert_install_$ts.ps1';
+      final script = File(scriptPath);
+      await script.writeAsString(
+        'Import-Certificate -FilePath "$tmpPath" -CertStoreLocation Cert:\\LocalMachine\\Root\r\n',
       );
-      steps.add(InstallStep(
-        name: 'Windows Trusted Root (certutil)',
-        success: certutilResult == 0,
-        note: certutilResult == 0
-            ? 'Installed to LocalMachine\\Root'
-            : 'certutil exit code: $certutilResult',
-      ));
+      bool sysOk = false;
+      try {
+        final sysResult = await Process.run('powershell.exe', [
+          '-noprofile', '-NonInteractive', '-command',
+          '\$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru '
+          '-WindowStyle Hidden '
+          '-ArgumentList @("-ExecutionPolicy","Bypass","-File","$scriptPath"); '
+          'if (\$p) { \$p.ExitCode } else { 1 }',
+        ]);
+        sysOk = sysResult.exitCode == 0 &&
+            (int.tryParse(sysResult.stdout.toString().trim()) ?? 1) == 0;
+      } finally {
+        await script.delete().catchError((_) => script);
+      }
+
+      if (!sysOk) {
+        // Fall back: current user store (no elevation needed)
+        final userResult = await Process.run('certutil', [
+          '-addstore', '-user', '-f', 'Root', tmpPath,
+        ]);
+        final userOk = userResult.exitCode == 0;
+        steps.add(InstallStep(
+          name: 'Windows Trusted Root',
+          success: userOk,
+          note: userOk
+              ? 'Installed to CurrentUser\\Root (non-elevated apps only)'
+              : 'Failed: ${userResult.stderr.toString().trim().split('\n').last}',
+        ));
+      } else {
+        steps.add(InstallStep(
+          name: 'Windows Trusted Root (all users)',
+          success: true,
+          note: 'Installed to LocalMachine\\Root',
+        ));
+      }
+      final certSuccess = sysOk || (steps.last.success);
 
       // curl on Windows uses Windows cert store
       steps.add(InstallStep(
         name: 'curl (uses Windows cert store)',
-        success: certutilResult == 0,
-        note: certutilResult == 0
-            ? 'Covered by certutil install'
-            : 'Skipped ΓÇö certutil failed',
+        success: certSuccess,
+        note: certSuccess ? 'Covered by cert store install' : 'Skipped — cert store install failed',
       ));
 
       // Git for Windows
@@ -191,24 +224,34 @@ class CertInstaller {
     );
   }
 
+  /// Runs [cmd] elevated via UAC. Returns the exit code of the command.
   static Future<int> _runWindowsAsAdmin(String cmd) async {
-    final scriptFile = File(
-        '${Directory.systemTemp.path}\\lux_admin_${DateTime.now().millisecondsSinceEpoch}.bat');
-    await scriptFile.writeAsString('@echo off\r\n$cmd\r\n');
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final exitFile = 'C:\\Windows\\Temp\\lux_exit_$ts.txt';
+
+    // The elevated PowerShell runs the command and writes its exit code to a file
+    final elevatedCmd = '$cmd; [IO.File]::WriteAllText("$exitFile", \$LASTEXITCODE)';
 
     try {
-      final result = await Process.run('powershell.exe', [
-        '-noprofile',
-        '-NonInteractive',
-        '-command',
-        'Start-Process cmd.exe -Verb RunAs -Wait '
-            '-ArgumentList "/c \\"${scriptFile.path}\\"" '
-            '-WindowStyle Hidden',
+      final r = await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        'Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden '
+            '-ArgumentList @("-noprofile","-NonInteractive","-command","$elevatedCmd")',
       ]);
-      debugPrint('Windows admin exit=${result.exitCode} err=${result.stderr}');
-      return result.exitCode;
+      debugPrint('_runWindowsAsAdmin stderr=${r.stderr}');
+      await Future.delayed(const Duration(milliseconds: 500));
+      final f = File(exitFile);
+      if (await f.exists()) {
+        final code = int.tryParse((await f.readAsString()).trim()) ?? 0;
+        return code;
+      }
+      // UAC cancelled or no exit file written — treat as failure
+      return 1;
+    } catch (e) {
+      debugPrint('_runWindowsAsAdmin error: $e');
+      return 1;
     } finally {
-      await scriptFile.delete().catchError((_) => scriptFile);
+      await File(exitFile).delete().catchError((_) => File(exitFile));
     }
   }
 
@@ -238,21 +281,52 @@ class CertInstaller {
     const destPath = r'C:\ProgramData\lux\intercept_ca.pem';
 
     try {
-      final dir = Directory(destDir);
-      if (!await dir.exists()) await dir.create(recursive: true);
+      // Write cert to ProgramData (world-readable location)
+      await Directory(destDir).create(recursive: true);
       await File(destPath).writeAsBytes(pemBytes);
 
-      final regResult = await _runWindowsAsAdmin(
-        'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" '
-        '/v NODE_EXTRA_CA_CERTS /t REG_SZ /d "$destPath" /f',
+      // Try Machine scope via elevated script file (UAC prompt will appear)
+      final ts2 = DateTime.now().millisecondsSinceEpoch;
+      final nodeScriptPath = 'C:\\Windows\\Temp\\lux_node_env_$ts2.ps1';
+      final nodeScript = File(nodeScriptPath);
+      await nodeScript.writeAsString(
+        '[Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS","$destPath","Machine")\r\n',
       );
+      bool sysOk2 = false;
+      try {
+        final sysResult2 = await Process.run('powershell.exe', [
+          '-noprofile', '-NonInteractive', '-command',
+          '\$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru '
+          '-WindowStyle Hidden '
+          '-ArgumentList @("-ExecutionPolicy","Bypass","-File","$nodeScriptPath"); '
+          'if (\$p) { \$p.ExitCode } else { 1 }',
+        ]);
+        sysOk2 = sysResult2.exitCode == 0 &&
+            (int.tryParse(sysResult2.stdout.toString().trim()) ?? 1) == 0;
+      } finally {
+        await nodeScript.delete().catchError((_) => nodeScript);
+      }
+
+      if (sysOk2) {
+        return const InstallStep(
+          name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)',
+          success: true,
+          note: 'Set system-wide NODE_EXTRA_CA_CERTS (all users)',
+        );
+      }
+
+      // Fall back: user scope — no elevation needed
+      final userResult = await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        '[Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS","$destPath","User")',
+      ]);
 
       return InstallStep(
         name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)',
-        success: regResult == 0,
-        note: regResult == 0
-            ? 'Set NODE_EXTRA_CA_CERTS=$destPath'
-            : 'Registry write failed (exit $regResult)',
+        success: userResult.exitCode == 0,
+        note: userResult.exitCode == 0
+            ? 'Set NODE_EXTRA_CA_CERTS for current user'
+            : 'Failed to set env var',
       );
     } catch (e) {
       return InstallStep(

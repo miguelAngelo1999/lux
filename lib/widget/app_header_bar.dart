@@ -17,13 +17,16 @@ class AppHeaderBar extends StatefulWidget {
   final CoreManager coreManager;
   final String curProxyInfo;
   final void Function(String) onCurProxyInfoChange;
+  /// Called after lux successfully connects — used to trigger SSL bump check.
+  final VoidCallback? onConnected;
 
   const AppHeaderBar(
       {super.key,
       required this.coreManager,
       required this.urlStr,
       required this.curProxyInfo,
-      required this.onCurProxyInfoChange});
+      required this.onCurProxyInfoChange,
+      this.onConnected});
 
   final String urlStr;
 
@@ -86,6 +89,8 @@ class _State extends State<AppHeaderBar> with WindowListener {
         setState(() {
           isStarted = true;
         });
+        // Trigger SSL bump check after connecting
+        Future.delayed(const Duration(seconds: 5), () => widget.onConnected?.call());
       } else {
         await widget.coreManager.stop();
         setState(() {

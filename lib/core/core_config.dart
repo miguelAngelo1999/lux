@@ -665,7 +665,7 @@ class DetectedProxy {
         host: json['host'] as String? ?? '',
         port: json['port'] as String? ?? '8080',
         scheme: json['scheme'] as String? ?? 'http',
-        needsAuth: json['needsAuth'] as bool? ?? false,
+        needsAuth: (json['requiresAuth'] as bool? ?? json['needsAuth'] as bool?) ?? false,
         source: json['source'] as String? ?? '',
       );
 

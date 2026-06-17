@@ -432,10 +432,15 @@ class CoreManager {
   // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   /// Probes for SSL bumping. Returns the parsed status map from the backend.
-  /// Keys: detected (bool), checkedAt (String), error (String?), hasCert (bool).
-  Future<SslBumpStatus> getSslBumpStatus() async {
+  /// Pass [proxyAddr] as "host:port" to route the probe through a specific proxy.
+  /// Pass [fresh] = true to bypass the 30s server-side cache.
+  Future<SslBumpStatus> getSslBumpStatus({String? proxyAddr, bool fresh = false}) async {
     try {
-      final res = await dio.get('$baseHttpUrl/ssl-inspect/status',
+      final params = <String, String>{};
+      if (fresh) params['fresh'] = 'true';
+      if (proxyAddr != null && proxyAddr.isNotEmpty) params['proxy'] = proxyAddr;
+      final uri = Uri.http(baseUrl, '/ssl-inspect/status', params.isEmpty ? null : params);
+      final res = await dio.getUri(uri,
           options: Options(receiveTimeout: const Duration(seconds: 20)));
       return SslBumpStatus.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
@@ -476,12 +481,15 @@ class CoreManager {
       final res = await dio.get('$baseHttpUrl/proxies/detect',
           options: Options(
             sendTimeout: const Duration(seconds: 5),
-            receiveTimeout: const Duration(seconds: 8),
+            receiveTimeout: const Duration(seconds: 15),
           ));
       if (res.statusCode == 200 && res.data is Map) {
         final d = res.data as Map<String, dynamic>;
-        if (d['found'] == true) {
-          return DetectedProxy.fromJson(d);
+        if (d['detected'] == true) {
+          final proxies = d['proxies'] as List?;
+          if (proxies != null && proxies.isNotEmpty) {
+            return DetectedProxy.fromJson(proxies.first as Map<String, dynamic>);
+          }
         }
       }
       return null;

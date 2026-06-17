@@ -121,7 +121,10 @@ class _HomeState extends State<Home>
             source: 'scutil',
           );
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _showDetectedProxyDialog(detected);
+            if (mounted) _showProxyAndCertDialog(
+              detected,
+              SslBumpStatus(detected: false, hasCert: false),
+            );
           });
           return;
         }
@@ -130,6 +133,9 @@ class _HomeState extends State<Home>
     // Fall back to lux_core detection after it starts
   }
 
+  // -- Proxy address detected at startup --
+  String? _detectedProxyAddr;
+
   Future<void> _checkForNetworkProxy() async {
     if (coreManager == null || !mounted) return;
     await Future.delayed(const Duration(seconds: 3));
@@ -137,185 +143,340 @@ class _HomeState extends State<Home>
     try {
       final detected = await coreManager!.detectNetworkProxy();
       if (detected == null || !mounted) return;
-      // Always show ΓÇö let user decide
+      _detectedProxyAddr = detected.address;
+
+      // Run SSL bump probe in parallel through the detected proxy
+      // before lux has changed any system settings.
+      final sslStatus = await coreManager!.getSslBumpStatus(
+        proxyAddr: detected.address,
+        fresh: true,
+      );
+
+      if (!mounted) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _showDetectedProxyDialog(detected);
+        if (mounted) _showProxyAndCertDialog(detected, sslStatus);
       });
     } catch (e) {
       debugPrint('Proxy detection error: $e');
     }
   }
 
-  void _showDetectedProxyDialog(DetectedProxy detected) {
-    final source = detected.source == 'scutil'
-        ? 'system settings'
-        : detected.source == 'wpad'
-            ? 'WPAD'
-            : 'environment';
-    showDialog(
+  /// Single combined dialog: proxy info + SSL status + add fields.
+  Future<void> _showProxyAndCertDialog(
+      DetectedProxy detected, SslBumpStatus ssl) async {
+    if (_dismissedProxies.contains(detected.address)) return;
+
+    final nameCtrl   = TextEditingController(text: detected.host);
+    final serverCtrl = TextEditingController(text: detected.host);
+    final portCtrl   = TextEditingController(text: detected.port);
+    final userCtrl   = TextEditingController();
+    final passCtrl   = TextEditingController();
+    final userFocus  = FocusNode();
+    final passFocus  = FocusNode();
+    bool obscure = true;
+
+    final sourceLabel = const {
+      'dhcp_wpad':      'DHCP/WPAD',
+      'wpad_dns':       'WPAD DNS',
+      'dhcp_option252': 'DHCP',
+      'pac':            'PAC',
+      'scutil':         'System',
+    };
+
+    await showDialog<void>(
       context: context,
-      barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Row(children: [
             Icon(Icons.wifi_find, size: 20),
             SizedBox(width: 8),
             Text('Network Proxy Detected', style: TextStyle(fontSize: 16)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('A proxy was detected via $source:',
-                style: const TextStyle(fontSize: 13)),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
+          ]),
+          content: SizedBox(
+            width: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.dns, size: 16),
-                  const SizedBox(width: 8),
-                  Text(detected.address,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w500)),
+                  // Proxy address + source badge
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.dns, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(detected.address,
+                            style: const TextStyle(fontSize: 14,
+                                fontWeight: FontWeight.w500)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx).colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          sourceLabel[detected.source] ?? detected.source,
+                          style: TextStyle(fontSize: 10,
+                              color: Theme.of(ctx)
+                                  .colorScheme.onSecondaryContainer),
+                        ),
+                      ),
+                    ]),
+                  ),
+
+                  // SSL bump result
+                  const SizedBox(height: 10),
+                  if (ssl.detected) ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade800.withValues(alpha: 0.12),
+                        border: Border.all(color: Colors.orange.shade600),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(children: [
+                            Icon(Icons.security, size: 14, color: Colors.orange),
+                            SizedBox(width: 6),
+                            Text('SSL Interception Detected',
+                                style: TextStyle(fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.orange)),
+                          ]),
+                          if (ssl.certInfo != null) ...[
+                            const SizedBox(height: 8),
+                            _buildCertSummary(ssl.certInfo!),
+                          ],
+                          const SizedBox(height: 6),
+                          const Text(
+                            'This proxy decrypts HTTPS. '
+                            'You can install its CA cert after adding it.',
+                            style: TextStyle(fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ] else if (ssl.error != null && ssl.error!.contains('407')) ...[
+                    // Auth required — can't probe SSL without credentials
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade800.withValues(alpha: 0.10),
+                        border: Border.all(color: Colors.blue.shade600),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(children: [
+                            Icon(Icons.info_outline, size: 13, color: Colors.blue),
+                            SizedBox(width: 4),
+                            Text('SSL check requires credentials',
+                                style: TextStyle(fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blue)),
+                          ]),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Enter your username & password below, then add the proxy. '
+                            'SSL inspection will be checked in Settings after connecting.',
+                            style: TextStyle(fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    Row(children: const [
+                      Icon(Icons.shield_outlined, size: 13, color: Colors.green),
+                      SizedBox(width: 4),
+                      Text('No SSL interception detected',
+                          style: TextStyle(fontSize: 12, color: Colors.green)),
+                    ]),
+                  ],
+
+                  // Fields
+                  const SizedBox(height: 14),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Name', isDense: true,
+                        border: OutlineInputBorder()),
+                    style: const TextStyle(fontSize: 13),
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: serverCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Server', isDense: true,
+                            border: OutlineInputBorder()),
+                        style: const TextStyle(fontSize: 13),
+                        textInputAction: TextInputAction.next,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: TextField(
+                        controller: portCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Port', isDense: true,
+                            border: OutlineInputBorder()),
+                        style: const TextStyle(fontSize: 13),
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) =>
+                            FocusScope.of(ctx).requestFocus(userFocus),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: userCtrl,
+                    focusNode: userFocus,
+                    decoration: const InputDecoration(
+                        labelText: 'Username (optional)', isDense: true,
+                        border: OutlineInputBorder()),
+                    style: const TextStyle(fontSize: 13),
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) =>
+                        FocusScope.of(ctx).requestFocus(passFocus),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: passCtrl,
+                    focusNode: passFocus,
+                    obscureText: obscure,
+                    decoration: InputDecoration(
+                      labelText: 'Password (optional)',
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscure
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined, size: 16),
+                        onPressed: () => setSt(() => obscure = !obscure),
+                      ),
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                    textInputAction: TextInputAction.done,
+                  ),
+                  if (detected.needsAuth) ...[
+                    const SizedBox(height: 4),
+                    const Row(children: [
+                      Icon(Icons.lock_outline, size: 12, color: Colors.orange),
+                      SizedBox(width: 4),
+                      Text('407 auth required',
+                          style: TextStyle(fontSize: 11, color: Colors.orange)),
+                    ]),
+                  ],
                 ],
               ),
             ),
-            if (detected.needsAuth) ...[
-              const SizedBox(height: 8),
-              const Text('ΓÜá This proxy requires authentication.',
-                  style: TextStyle(fontSize: 12, color: Colors.orange)),
-            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _dismissedProxies.add(detected.address);
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('Ignore'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                // Capture credentials before controllers are disposed
+                final server = serverCtrl.text.trim();
+                final port = portCtrl.text.trim();
+                final user = userCtrl.text;
+                final pass = passCtrl.text;
+                final name = nameCtrl.text.trim().isNotEmpty
+                    ? nameCtrl.text.trim()
+                    : 'Network Proxy ($server)';
+                try {
+                  await coreManager!.addProxy({
+                    'type': 'http',
+                    'name': name,
+                    'server': server,
+                    'port': int.tryParse(port) ?? 8080,
+                    if (user.isNotEmpty) 'username': user,
+                    if (pass.isNotEmpty) 'password': pass,
+                  });
+
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Proxy added — checking SSL…')));
+
+                  // Build proxy URL with credentials for the SSL probe.
+                  // Format: http://user:pass@host:port (or http://host:port if no creds)
+                  String proxyAddr;
+                  if (user.isNotEmpty) {
+                    final encodedUser = Uri.encodeComponent(user);
+                    final encodedPass = Uri.encodeComponent(pass);
+                    proxyAddr = '$encodedUser:$encodedPass@$server:$port';
+                  } else {
+                    proxyAddr = '$server:$port';
+                  }
+
+                  // Re-probe with credentials — bypass the 30s cache
+                  final freshSsl = await coreManager!.getSslBumpStatus(
+                    proxyAddr: proxyAddr,
+                    fresh: true,
+                  );
+
+                  if (!mounted) return;
+                  if (freshSsl.detected && freshSsl.hasCert) {
+                    // SSL interception confirmed — show cert install dialog
+                    _showInlineCertTrustDialog(freshSsl);
+                  } else if (freshSsl.error != null &&
+                      freshSsl.error!.contains('407')) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text(
+                          'Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
+                      duration: Duration(seconds: 5),
+                    ));
+                  } else if (freshSsl.detected && !freshSsl.hasCert) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text(
+                          'SSL interception detected — connect to proxy to capture certificate'),
+                      duration: Duration(seconds: 4),
+                    ));
+                  }
+                  // If not detected: no SSL interception, nothing to do.
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed: $e')));
+                  }
+                }
+              },
+              child: Text(ssl.detected && ssl.hasCert
+                  ? 'Add & Install Certificate'
+                  : 'Add to Lux'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Ignore'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _showAddDetectedProxy(detected);
-            },
-            child: const Text('Add to Lux'),
-          ),
-        ],
       ),
     );
+
+    nameCtrl.dispose(); serverCtrl.dispose(); portCtrl.dispose();
+    userCtrl.dispose(); passCtrl.dispose();
+    userFocus.dispose(); passFocus.dispose();
   }
 
-  Future<void> _showAddDetectedProxy(DetectedProxy detected) async {
-    final serverCtrl = TextEditingController(text: detected.host);
-    final portCtrl = TextEditingController(text: detected.port);
-    final userCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
-    final userFocus = FocusNode();
-    final passFocus = FocusNode();
-
-    Future<void> doAdd(BuildContext ctx) async {
-      Navigator.of(ctx).pop();
-      try {
-        await coreManager!.addProxy({
-          'type': 'http',
-          'name': 'Network Proxy (${serverCtrl.text})',
-          'server': serverCtrl.text,
-          'port': int.tryParse(portCtrl.text) ?? 8080,
-          if (userCtrl.text.isNotEmpty) 'username': userCtrl.text,
-          if (passCtrl.text.isNotEmpty) 'password': passCtrl.text,
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Proxy added ΓÇö checking for SSL inspectionΓÇª')));
-        }
-        // After adding proxy, wait for Lux to use it then check for SSL bumping
-        Future.delayed(const Duration(seconds: 4), () => _checkSslAfterProxyAdd());
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to add proxy: $e')));
-        }
-      }
-    }
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Detected Proxy'),
-        content: SizedBox(
-          width: 340,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: serverCtrl,
-                decoration: const InputDecoration(labelText: 'Server', isDense: true),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: portCtrl,
-                decoration: const InputDecoration(labelText: 'Port', isDense: true),
-                keyboardType: TextInputType.number,
-                textInputAction: detected.needsAuth ? TextInputAction.next : TextInputAction.done,
-                onSubmitted: detected.needsAuth
-                    ? (_) => FocusScope.of(ctx).requestFocus(userFocus)
-                    : (_) => doAdd(ctx),
-              ),
-              if (detected.needsAuth) ...[
-                const SizedBox(height: 12),
-                const Text('This proxy requires authentication:',
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: userCtrl,
-                  focusNode: userFocus,
-                  decoration: const InputDecoration(labelText: 'Username', isDense: true),
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) => FocusScope.of(ctx).requestFocus(passFocus),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: passCtrl,
-                  focusNode: passFocus,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Password', isDense: true),
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => doAdd(ctx),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => doAdd(ctx),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// After proxy is added, probe for SSL bumping and prompt to install cert.
-  Future<void> _checkSslAfterProxyAdd() async {
-    if (!mounted || coreManager == null) return;
-    try {
-      final status = await coreManager!.getSslBumpStatus();
-      if (!mounted) return;
-      if (status.detected && status.hasCert) {
-        _showInlineCertTrustDialog(status);
-      }
-    } catch (_) {}
-  }
 
   /// Shows the SSL cert trust dialog inline (same as Settings page but triggered automatically).
   void _showInlineCertTrustDialog(SslBumpStatus status) {
@@ -754,6 +915,7 @@ class _HomeState extends State<Home>
         },
       );
     }
-    return Dashboard(homeDir, baseUrl, urlStr, coreManager!);
+    return Dashboard(homeDir, baseUrl, urlStr, coreManager!,
+        onConnected: () {});
   }
 }

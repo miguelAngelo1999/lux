@@ -18,9 +18,10 @@ class Dashboard extends StatefulWidget {
   final String urlStr;
   final String homeDir;
   final CoreManager coreManager;
+  final VoidCallback? onConnected;
 
   const Dashboard(this.homeDir, this.baseUrl, this.urlStr, this.coreManager,
-      {super.key});
+      {super.key, this.onConnected});
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -102,6 +103,7 @@ class _DashboardState extends State<Dashboard> with WindowListener {
           urlStr: widget.urlStr,
           curProxyInfo: curProxyInfo,
           onCurProxyInfoChange: onCurProxyInfoChange,
+          onConnected: widget.onConnected,
         ),
       ),
       body: Row(
