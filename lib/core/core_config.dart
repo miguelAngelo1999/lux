@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lux/util/utils.dart';
 import 'package:path/path.dart' as path;
@@ -11,6 +14,51 @@ Future<Map<String, dynamic>> readConfig() async {
     return await readJsonFile(configPath);
   } catch (e) {
     return {};
+  }
+}
+
+// ── Local app preferences (lux_prefs.json) ──────────────────────────────────
+// Separate from config.json (managed by lux_core) so we never corrupt it.
+
+Future<String> _prefsPath() async {
+  final homeDir = await getHomeDir();
+  return path.join(homeDir, 'lux_prefs.json');
+}
+
+Future<Map<String, dynamic>> _readPrefs() async {
+  try {
+    final p = await _prefsPath();
+    final f = File(p);
+    if (!f.existsSync()) return {};
+    final raw = f.readAsStringSync();
+    final decoded = jsonDecode(raw);
+    return decoded is Map<String, dynamic> ? decoded : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+Future<void> _writePrefs(Map<String, dynamic> prefs) async {
+  try {
+    final p = await _prefsPath();
+    File(p).writeAsStringSync(jsonEncode(prefs));
+  } catch (_) {}
+}
+
+Future<Set<String>> readDismissedProxies() async {
+  final prefs = await _readPrefs();
+  final raw = prefs['dismissedProxies'];
+  if (raw is List) return raw.cast<String>().toSet();
+  return {};
+}
+
+Future<void> addDismissedProxy(String address) async {
+  final prefs = await _readPrefs();
+  final existing = (prefs['dismissedProxies'] as List?)?.cast<String>() ?? [];
+  if (!existing.contains(address)) {
+    existing.add(address);
+    prefs['dismissedProxies'] = existing;
+    await _writePrefs(prefs);
   }
 }
 

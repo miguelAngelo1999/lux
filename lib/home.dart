@@ -90,6 +90,11 @@ class _HomeState extends State<Home>
 
   final Set<String> _dismissedProxies = {};
 
+  Future<void> _loadDismissedProxies() async {
+    final saved = await readDismissedProxies();
+    _dismissedProxies.addAll(saved);
+  }
+
   /// Early detection ΓÇö reads system proxy via scutil BEFORE lux_core starts.
   /// Called at app init so the system proxy hasn't been overwritten by Lux yet.
   Future<void> _detectProxyEarly() async {
@@ -174,6 +179,7 @@ class _HomeState extends State<Home>
     final userFocus  = FocusNode();
     final passFocus  = FocusNode();
     bool obscure = true;
+    bool dontShowAgain = false;
 
     final sourceLabel = const {
       'dhcp_wpad':      'DHCP/WPAD',
@@ -388,84 +394,104 @@ class _HomeState extends State<Home>
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () {
-                _dismissedProxies.add(detected.address);
-                Navigator.of(ctx).pop();
-              },
-              child: const Text('Ignore'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.of(ctx).pop();
-                // Capture credentials before controllers are disposed
-                final server = serverCtrl.text.trim();
-                final port = portCtrl.text.trim();
-                final user = userCtrl.text;
-                final pass = passCtrl.text;
-                final name = nameCtrl.text.trim().isNotEmpty
-                    ? nameCtrl.text.trim()
-                    : 'Network Proxy ($server)';
-                try {
-                  await coreManager!.addProxy({
-                    'type': 'http',
-                    'name': name,
-                    'server': server,
-                    'port': int.tryParse(port) ?? 8080,
-                    if (user.isNotEmpty) 'username': user,
-                    if (pass.isNotEmpty) 'password': pass,
-                  });
+            // "Don't show again" checkbox on the left, flush with buttons
+            Row(
+              children: [
+                Checkbox(
+                  value: dontShowAgain,
+                  onChanged: (v) => setSt(() => dontShowAgain = v ?? false),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                GestureDetector(
+                  onTap: () => setSt(() => dontShowAgain = !dontShowAgain),
+                  child: const Text('Don\'t show again',
+                      style: TextStyle(fontSize: 12)),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    _dismissedProxies.add(detected.address);
+                    if (dontShowAgain) {
+                      addDismissedProxy(detected.address);
+                    }
+                    Navigator.of(ctx).pop();
+                  },
+                  child: const Text('Ignore'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    // Capture credentials before controllers are disposed
+                    final server = serverCtrl.text.trim();
+                    final port = portCtrl.text.trim();
+                    final user = userCtrl.text;
+                    final pass = passCtrl.text;
+                    final name = nameCtrl.text.trim().isNotEmpty
+                        ? nameCtrl.text.trim()
+                        : 'Network Proxy ($server)';
+                    try {
+                      await coreManager!.addProxy({
+                        'type': 'http',
+                        'name': name,
+                        'server': server,
+                        'port': int.tryParse(port) ?? 8080,
+                        if (user.isNotEmpty) 'username': user,
+                        if (pass.isNotEmpty) 'password': pass,
+                      });
 
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Proxy added — checking SSL…')));
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Proxy added — checking SSL…')));
 
-                  // Build proxy URL with credentials for the SSL probe.
-                  // Format: http://user:pass@host:port (or http://host:port if no creds)
-                  String proxyAddr;
-                  if (user.isNotEmpty) {
-                    final encodedUser = Uri.encodeComponent(user);
-                    final encodedPass = Uri.encodeComponent(pass);
-                    proxyAddr = '$encodedUser:$encodedPass@$server:$port';
-                  } else {
-                    proxyAddr = '$server:$port';
-                  }
+                      // Build proxy URL with credentials for the SSL probe.
+                      // Format: http://user:pass@host:port (or http://host:port if no creds)
+                      String proxyAddr;
+                      if (user.isNotEmpty) {
+                        final encodedUser = Uri.encodeComponent(user);
+                        final encodedPass = Uri.encodeComponent(pass);
+                        proxyAddr = '$encodedUser:$encodedPass@$server:$port';
+                      } else {
+                        proxyAddr = '$server:$port';
+                      }
 
-                  // Re-probe with credentials — bypass the 30s cache
-                  final freshSsl = await coreManager!.getSslBumpStatus(
-                    proxyAddr: proxyAddr,
-                    fresh: true,
-                  );
+                      // Re-probe with credentials — bypass the 30s cache
+                      final freshSsl = await coreManager!.getSslBumpStatus(
+                        proxyAddr: proxyAddr,
+                        fresh: true,
+                      );
 
-                  if (!mounted) return;
-                  if (freshSsl.detected && freshSsl.hasCert) {
-                    // SSL interception confirmed — show cert install dialog
-                    _showInlineCertTrustDialog(freshSsl);
-                  } else if (freshSsl.error != null &&
-                      freshSsl.error!.contains('407')) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text(
-                          'Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
-                      duration: Duration(seconds: 5),
-                    ));
-                  } else if (freshSsl.detected && !freshSsl.hasCert) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text(
-                          'SSL interception detected — connect to proxy to capture certificate'),
-                      duration: Duration(seconds: 4),
-                    ));
-                  }
-                  // If not detected: no SSL interception, nothing to do.
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed: $e')));
-                  }
-                }
-              },
-              child: Text(ssl.detected && ssl.hasCert
-                  ? 'Add & Install Certificate'
-                  : 'Add to Lux'),
+                      if (!mounted) return;
+                      if (freshSsl.detected && freshSsl.hasCert) {
+                        // SSL interception confirmed — show cert install dialog
+                        _showInlineCertTrustDialog(freshSsl);
+                      } else if (freshSsl.error != null &&
+                          freshSsl.error!.contains('407')) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text(
+                              'Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
+                          duration: Duration(seconds: 5),
+                        ));
+                      } else if (freshSsl.detected && !freshSsl.hasCert) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text(
+                              'SSL interception detected — connect to proxy to capture certificate'),
+                          duration: Duration(seconds: 4),
+                        ));
+                      }
+                      // If not detected: no SSL interception, nothing to do.
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed: $e')));
+                      }
+                    }
+                  },
+                  child: Text(ssl.detected && ssl.hasCert
+                      ? 'Add & Install Certificate'
+                      : 'Add to Lux'),
+                ),
+              ],
             ),
           ],
         ),
@@ -633,6 +659,8 @@ class _HomeState extends State<Home>
   void _init(AppStateModel appState) async {
     trayManager.addListener(this);
     await windowManager.setPreventClose(true);
+    // Load persisted dismissed proxies before detection runs
+    await _loadDismissedProxies();
 
     // Detect network proxy early ΓÇö before lux_core starts, so system proxy
     // settings still reflect the real upstream proxy (not Lux's own 127.0.0.1)
