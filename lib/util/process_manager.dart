@@ -11,6 +11,8 @@ import 'elevate.dart';
 
 /// Name of the Windows Task Scheduler task used for silent elevation.
 const _taskName = 'LuxCore';
+/// Name of the high-priority logon task for lux.exe itself.
+const _appTaskName = 'LuxApp';
 
 /// Checks whether the LuxCore scheduled task is registered.
 Future<bool> _isTaskRegistered() async {
@@ -23,12 +25,11 @@ Future<bool> _isTaskRegistered() async {
 String _argsFilePath() =>
     '${Platform.environment['TEMP'] ?? 'C:\\Windows\\Temp'}\\lux_core_args.txt';
 
-/// Creates or updates the LuxCore scheduled task (requires one UAC prompt on first run).
-/// The task runs a launcher that reads args from a temp file — so args can
-/// change each session without needing to re-register the task.
+/// Creates the LuxCore scheduled task (requires one UAC prompt on first run).
+/// On-demand only — triggered by lux.exe via schtasks /run, not at logon.
+/// The task reads session args (port/secret) from a temp file written by lux.exe.
 Future<bool> _registerElevatedTask() async {
-  final argsFile = _argsFilePath();
-  // The task action: PowerShell reads args from file, then starts lux_core
+  final launcherPath = '${Platform.environment['LOCALAPPDATA']}\\Programs\\lux\\lux_core_launcher.ps1';
   final launcherScript = r'''
 $argsFile = "$env:TEMP\lux_core_args.txt"
 if (Test-Path $argsFile) {
@@ -38,14 +39,33 @@ if (Test-Path $argsFile) {
   Start-Process $exe -WindowStyle Hidden -ArgumentList $args
 }
 ''';
-  final launcherPath = '${Platform.environment['LOCALAPPDATA']}\\Programs\\lux\\lux_core_launcher.ps1';
   await File(launcherPath).writeAsString(launcherScript);
 
   final psScript = '''
 \$action  = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "$launcherPath"'
-\$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -MultipleInstances IgnoreNew -AllowStartIfOnBatteries \$true -DontStopIfGoingOnBatteries \$true
+\$settings = New-ScheduledTaskSettingsSet `
+  -ExecutionTimeLimit 0 `
+  -MultipleInstances IgnoreNew `
+  -AllowStartIfOnBatteries \$true `
+  -DontStopIfGoingOnBatteries \$true `
+  -Priority 0
 \$principal = New-ScheduledTaskPrincipal -UserId (whoami) -RunLevel Highest -LogonType Interactive
 Register-ScheduledTask -TaskName "$_taskName" -Action \$action -Settings \$settings -Principal \$principal -Force | Out-Null
+
+# Also register a high-priority logon task for lux.exe itself so it starts
+# before other startup apps and internet is up early in the session.
+\$luxExe = "${'${Platform.environment['LOCALAPPDATA']}\\Programs\\lux\\lux.exe'}"
+\$appAction   = New-ScheduledTaskAction -Execute \$luxExe
+\$appTrigger  = New-ScheduledTaskTrigger -AtLogOn -User (whoami)
+\$appSettings = New-ScheduledTaskSettingsSet `
+  -ExecutionTimeLimit 0 `
+  -MultipleInstances IgnoreNew `
+  -AllowStartIfOnBatteries \$true `
+  -DontStopIfGoingOnBatteries \$true `
+  -Priority 0
+\$appPrincipal = New-ScheduledTaskPrincipal -UserId (whoami) -RunLevel Highest -LogonType Interactive
+Register-ScheduledTask -TaskName "$_appTaskName" -Action \$appAction -Trigger \$appTrigger -Settings \$appSettings -Principal \$appPrincipal -Force | Out-Null
+
 Write-Output "OK"
 ''';
 
