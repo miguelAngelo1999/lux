@@ -19,6 +19,8 @@ class AppHeaderBar extends StatefulWidget {
   final void Function(String) onCurProxyInfoChange;
   /// Called after lux successfully connects — used to trigger SSL bump check.
   final VoidCallback? onConnected;
+  /// Extra widgets appended to the AppBar actions (used for window controls).
+  final List<Widget>? extraActions;
 
   const AppHeaderBar(
       {super.key,
@@ -26,7 +28,8 @@ class AppHeaderBar extends StatefulWidget {
       required this.urlStr,
       required this.curProxyInfo,
       required this.onCurProxyInfoChange,
-      this.onConnected});
+      this.onConnected,
+      this.extraActions});
 
   final String urlStr;
 
@@ -152,8 +155,10 @@ class _State extends State<AppHeaderBar> with WindowListener {
     refreshData();
 
     if (runtimeStatusChannel == null) {
-      widget.coreManager.getRuntimeStatusChannel().then((channel) {
+      widget.coreManager.getRuntimeStatusChannel().then((channel) async {
         runtimeStatusChannel = channel;
+        if (channel == null) return;
+        await channel.ready;
         runtimeStatusChannel?.stream.listen((message) {
           RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));
           setState(() {
@@ -194,6 +199,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
     );
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
+        actions: widget.extraActions,
         leading: IconButton(
             tooltip: 'Open web dashboard (advanced)',
             onPressed: openWebDashboard,

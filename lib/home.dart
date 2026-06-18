@@ -563,7 +563,7 @@ class _HomeState extends State<Home>
         children: [
           if (name.isNotEmpty)
             Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-          Text('Valid: ${info.notBefore} ΓåÆ ${info.notAfter}',
+          Text('Valid: ${info.notBefore} / ${info.notAfter}',
               style: const TextStyle(fontSize: 11, color: Colors.grey)),
         ],
       ),
@@ -584,7 +584,7 @@ class _HomeState extends State<Home>
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(result.success
               ? 'Certificate installed successfully'
-              : 'Partial install ΓÇö check Settings ΓåÆ SSL Inspection for details'),
+              : 'Partial install — check Settings \u2192 SSL Inspection for details'),
           backgroundColor: result.success ? Colors.green.shade700 : Colors.orange.shade700,
           duration: const Duration(seconds: 4),
         ));
@@ -595,9 +595,28 @@ class _HomeState extends State<Home>
     }
   }
 
+  /// Shows the Flutter QuickEditWindow near the system tray (bottom-right).
+  /// Used by the Windows tray "Edit Credentials" menu.
+  Future<void> _showFlutterQuickEdit(String proxyId) async {
+    const size = Size(340, 390);
+    await windowManager.setSize(size);
+    try {
+      final pos = await calcWindowPosition(size, Alignment.bottomRight);
+      await windowManager.setPosition(Offset(pos.dx - 12, pos.dy - 8));
+    } catch (_) {
+      // If screen retriever fails, just center it
+      await windowManager.center();
+    }
+    await windowManager.setSkipTaskbar(false);
+    await windowManager.show();
+    await windowManager.focus();
+    if (mounted) {
+      setState(() => _quickEditMode = true);
+    }
+  }
+
   // Reload proxy list and connection state into tray menu
-  Future<void> _refreshTray() async {
-    if (coreManager == null) return;
+  Future<void> _refreshTray() async {    if (coreManager == null) return;
     try {
       final isStarted = await coreManager!.getIsStarted();
       final proxyList = await coreManager!.getProxyList();
@@ -674,7 +693,9 @@ class _HomeState extends State<Home>
     // After core starts, probe for a network proxy in the background
     Future.delayed(const Duration(seconds: 2), () => _checkForNetworkProxy());
     if (eventChannel == null) {
-      coreManager?.getEventChannel().then((channel) {
+      coreManager?.getEventChannel().then((channel) async {
+        if (channel == null) return;
+        await channel.ready;
         eventChannel = channel;
         eventChannel?.stream.listen((rawData) async {
           if (rawData is! String) {
@@ -828,6 +849,9 @@ class _HomeState extends State<Home>
         } catch (e) {
           debugPrint('Native quick edit error: $e');
         }
+      } else if (Platform.isWindows && coreManager != null) {
+        final proxyId = key.replaceFirst('proxy_edit_', '');
+        _showFlutterQuickEdit(proxyId);
       }
     } else if (key == 'exit_app') {
       await coreManager?.exitCore();

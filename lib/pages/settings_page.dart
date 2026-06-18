@@ -743,7 +743,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           SnackBar(
             content: Text(result.success
                 ? 'Certificate installed successfully'
-                : 'Installation partially failed ΓÇö see details below'),
+                : 'Installation partially failed — see details below'),
             backgroundColor:
                 result.success ? Colors.green.shade700 : Colors.orange.shade700,
             duration: const Duration(seconds: 4),
@@ -783,7 +783,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 children: [
                   const Text(
                     'Your proxy is intercepting HTTPS traffic. Installing this CA '
-                    'will make your system trust all certificates it signs ΓÇö only '
+                    'will make your system trust all certificates it signs — only '
                     'do this if you trust the organization that controls this proxy.',
                     style: TextStyle(fontSize: 13),
                   ),
@@ -832,7 +832,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
                 onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('I trust this ΓÇö install'),
+                child: const Text('I trust this — install'),
               ),
             ],
           ),
@@ -895,7 +895,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     if (info == null) return const SizedBox.shrink();
     final display = info.organizationName.isNotEmpty ? info.organizationName : info.subject;
     final fp = info.sha256Fingerprint.length > 29
-        ? '${info.sha256Fingerprint.substring(0, 29)}ΓÇª'
+        ? '${info.sha256Fingerprint.substring(0, 29)}…'
         : info.sha256Fingerprint;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -915,7 +915,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           if (fp.isNotEmpty)
             Text('SHA-256: $fp',
                 style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey.shade700)),
-          Text('Valid: ${info.notBefore} ΓåÆ ${info.notAfter}',
+          Text('Valid: ${info.notBefore} / ${info.notAfter}',
               style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
         ],
       ),
@@ -933,7 +933,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         children: [
           SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
           SizedBox(width: 6),
-          Text('CheckingΓÇª', style: TextStyle(fontSize: 12)),
+          Text('Checking…', style: TextStyle(fontSize: 12)),
         ],
       );
     } else if (status == null) {
@@ -1012,7 +1012,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.verified_user, size: 16),
                 label: Text(
-                  _sslInstalling ? 'InstallingΓÇª' : 'Install CertificateΓÇª',
+                  _sslInstalling ? 'Installing…' : 'Install Certificate…',
                   style: const TextStyle(fontSize: 13),
                 ),
                 onPressed: _sslInstalling ? null : _installCert,
