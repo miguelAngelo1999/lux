@@ -37,8 +37,10 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
     refreshMode();
     windowManager.addListener(this);
     if (trafficChannel == null) {
-      widget.coreManager.getTrafficChannel().then((channel) {
+      widget.coreManager.getTrafficChannel().then((channel) async {
         trafficChannel = channel;
+        if (channel == null) return;
+        await channel.ready;
         trafficChannel?.stream.listen((message) {
           if (isWindowHidden) {
             return;

@@ -84,6 +84,25 @@ class _HomeState extends State<Home>
     }
   }
 
+  /// Shows the Flutter QuickEditWindow near the system tray (bottom-right).
+  /// Used by the Windows tray "Edit Credentials" menu.
+  Future<void> _showFlutterQuickEdit(String proxyId) async {
+    const size = Size(340, 390);
+    await windowManager.setSize(size);
+    try {
+      final pos = await calcWindowPosition(size, Alignment.bottomRight);
+      await windowManager.setPosition(Offset(pos.dx - 12, pos.dy - 8));
+    } catch (_) {
+      await windowManager.center();
+    }
+    await windowManager.setSkipTaskbar(false);
+    await windowManager.show();
+    await windowManager.focus();
+    if (mounted) {
+      setState(() => _quickEditMode = true);
+    }
+  }
+
   // Reload proxy list and connection state into tray menu
   Future<void> _refreshTray() async {
     if (coreManager == null) return;
@@ -156,7 +175,9 @@ class _HomeState extends State<Home>
       isCoreReady.value = true;
     });
     if (eventChannel == null) {
-      coreManager?.getEventChannel().then((channel) {
+      coreManager?.getEventChannel().then((channel) async {
+        if (channel == null) return;
+        await channel.ready;
         eventChannel = channel;
         eventChannel?.stream.listen((rawData) async {
           if (rawData is! String) {
@@ -310,6 +331,9 @@ class _HomeState extends State<Home>
         } catch (e) {
           debugPrint('Native quick edit error: $e');
         }
+      } else if (Platform.isWindows && coreManager != null) {
+        final proxyId = key.replaceFirst('proxy_edit_', '');
+        _showFlutterQuickEdit(proxyId);
       }
     } else if (key == 'exit_app') {
       await coreManager?.exitCore();
