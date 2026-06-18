@@ -41,6 +41,8 @@ void main(List<String> args) async {
       size: Size(800, 650),
       center: true,
       skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.hidden,
+      windowButtonVisibility: false,
     );
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
