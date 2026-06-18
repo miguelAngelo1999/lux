@@ -41,9 +41,11 @@ void main(List<String> args) async {
       size: Size(800, 650),
       center: true,
       skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.hidden,
     );
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
       windowManager.center();
       var isLaunchFromStartUp =
           Platform.isWindows && args.contains(launchFromStartupArg);
