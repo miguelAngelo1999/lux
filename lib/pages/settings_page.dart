@@ -149,8 +149,9 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               s.sensitiveInfoMode ?? false,
               (v) => _save(s.copyWith(sensitiveInfoMode: v)),
             ),
+            _resetDismissedProxiesTile(),
 
-            // ΓöÇΓöÇ Network ΓöÇΓöÇ
+            // ── Network ──
             const SizedBox(height: 16),
             _sectionHeader('Network'),
             _dropdownTile<ProxyMode>(
@@ -1105,6 +1106,29 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 ),
               )),
         ],
+      ),
+    );
+  }
+
+  Widget _resetDismissedProxiesTile() {
+    return ListTile(
+      dense: true,
+      title: const Text('Proxy Detection', style: TextStyle(fontSize: 14)),
+      subtitle: const Text('Re-show startup proxy detection dialogs',
+          style: TextStyle(fontSize: 12)),
+      trailing: TextButton(
+        onPressed: () async {
+          await clearDismissedProxies();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Proxy detection dialogs will show again on next launch'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        },
+        child: const Text('Reset', style: TextStyle(fontSize: 12)),
       ),
     );
   }

@@ -62,6 +62,12 @@ Future<void> addDismissedProxy(String address) async {
   }
 }
 
+Future<void> clearDismissedProxies() async {
+  final prefs = await _readPrefs();
+  prefs['dismissedProxies'] = <String>[];
+  await _writePrefs(prefs);
+}
+
 Future<Map<String, dynamic>> readSetting() async {
   try {
     final config = await readConfig();
