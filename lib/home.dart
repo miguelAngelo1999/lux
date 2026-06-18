@@ -89,10 +89,11 @@ class _HomeState extends State<Home>
   // ── Network proxy auto-detection ──────────────────────────────────────────
 
   final Set<String> _dismissedProxies = {};
+  bool _suppressProxyDetection = false;
 
   /// Early detection — reads system proxy via scutil BEFORE lux_core starts.
   Future<void> _detectProxyEarly() async {
-    if (!mounted) return;
+    if (!mounted || _suppressProxyDetection) return;
     try {
       final result = await Process.run('scutil', ['--proxy'],
           runInShell: false).timeout(const Duration(seconds: 3));
@@ -128,7 +129,7 @@ class _HomeState extends State<Home>
   }
 
   Future<void> _checkForNetworkProxy() async {
-    if (coreManager == null || !mounted) return;
+    if (coreManager == null || !mounted || _suppressProxyDetection) return;
     await Future.delayed(const Duration(seconds: 3));
     if (!mounted) return;
     try {
@@ -148,10 +149,12 @@ class _HomeState extends State<Home>
         : detected.source == 'wpad'
             ? 'WPAD'
             : 'environment';
+    bool dontAskAgain = false;
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
         title: const Row(
           children: [
             Icon(Icons.wifi_find, size: 20),
@@ -187,11 +190,28 @@ class _HomeState extends State<Home>
               const Text('⚠ This proxy requires authentication.',
                   style: TextStyle(fontSize: 12, color: Colors.orange)),
             ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                SizedBox(
+                  width: 20, height: 20,
+                  child: Checkbox(
+                    value: dontAskAgain,
+                    onChanged: (v) => setDialogState(() => dontAskAgain = v ?? false),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text("Don't ask again", style: TextStyle(fontSize: 12)),
+              ],
+            ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
+            onPressed: () {
+              if (dontAskAgain) _suppressProxyDetection = true;
+              Navigator.of(ctx).pop();
+            },
             child: const Text('Ignore'),
           ),
           FilledButton(
@@ -202,6 +222,7 @@ class _HomeState extends State<Home>
             child: const Text('Add to Lux'),
           ),
         ],
+      ),
       ),
     );
   }

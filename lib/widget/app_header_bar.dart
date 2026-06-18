@@ -192,9 +192,9 @@ class _State extends State<AppHeaderBar> with WindowListener {
     );
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
-        leadingWidth: Platform.isMacOS ? 100 : 56,
+        leadingWidth: Platform.isMacOS ? 110 : 56,
         leading: Padding(
-          padding: EdgeInsets.only(left: Platform.isMacOS ? 70 : 0),
+          padding: EdgeInsets.only(left: Platform.isMacOS ? 78 : 0),
           child: IconButton(
               tooltip: 'Open web dashboard (advanced)',
               onPressed: openWebDashboard,
