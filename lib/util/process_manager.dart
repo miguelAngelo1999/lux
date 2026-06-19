@@ -46,6 +46,8 @@ class ProcessManager {
           process = await Process.start(path, args, runInShell: false);
           process?.stdout.transform(utf8.decoder).forEach(debugPrint);
           process?.stderr.transform(utf8.decoder).forEach(debugPrint);
+          // Give lux_core a moment to bind to its port before ping attempts
+          await Future.delayed(const Duration(milliseconds: 500));
         } else {
           // Not elevated — use Start-Process -Verb RunAs (shows UAC).
           // This happens when the LuxApp task hasn't been registered yet
