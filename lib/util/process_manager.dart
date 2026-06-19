@@ -9,12 +9,16 @@ import 'package:lux/util/utils.dart';
 import '../error.dart';
 import 'elevate.dart';
 
-/// Returns true if the current process is running with admin privileges.
-Future<bool> _isRunningElevated() async {
+/// Returns true if the current process has administrator privileges.
+/// Used to decide whether to start lux_core directly (already elevated)
+/// or via Start-Process -Verb RunAs (triggers UAC).
+Future<bool> _isElevated() async {
   try {
     final r = await Process.run('powershell.exe', [
       '-noprofile', '-NonInteractive', '-command',
-      '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
+      '([Security.Principal.WindowsPrincipal]'
+          '[Security.Principal.WindowsIdentity]::GetCurrent())'
+          '.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
     ]);
     return r.stdout.toString().trim().toLowerCase() == 'true';
   } catch (_) {
@@ -34,36 +38,32 @@ class ProcessManager {
   Future<void> run() async {
     if (Platform.isWindows) {
       await verifyCoreBinary(path);
-      List<String> processArgs = [];
 
       if (needElevate) {
-        // Check if the LuxApp scheduled task is registered (installed via installer).
-        // If so, lux.exe is already running elevated and can start lux_core directly.
-        final isElevated = await _isRunningElevated();
-        if (isElevated) {
-          // Already elevated — start lux_core directly, no UAC needed
+        if (await _isElevated()) {
+          // lux.exe was started elevated (via LuxApp scheduled task).
+          // Start lux_core directly — it inherits elevation, no UAC needed.
           process = await Process.start(path, args, runInShell: false);
           process?.stdout.transform(utf8.decoder).forEach(debugPrint);
           process?.stderr.transform(utf8.decoder).forEach(debugPrint);
-          return;
+        } else {
+          // Not elevated — use Start-Process -Verb RunAs (shows UAC).
+          // This happens when the LuxApp task hasn't been registered yet
+          // (i.e. manual install without running the installer).
+          process = await Process.start('powershell.exe', [
+            '-noprofile',
+            "Start-Process '$path' -Verb RunAs -windowstyle hidden "
+                "-ArgumentList \"${args.join(' ')}\"",
+          ], runInShell: false);
         }
-        // Not elevated — fall back to RunAs (UAC prompt)
-        processArgs = [
-          '-noprofile',
-          "Start-Process '$path' -Verb RunAs -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
-        ];
       } else {
-        processArgs = [
+        // System proxy mode — no elevation needed, start directly.
+        process = await Process.start('powershell.exe', [
           '-noprofile',
-          "Start-Process '$path' -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
-        ];
+          "Start-Process '$path' -windowstyle hidden "
+              "-ArgumentList \"${args.join(' ')}\"",
+        ], runInShell: false);
       }
-
-      process = await Process.start(
-        'powershell.exe',
-        processArgs,
-        runInShell: false,
-      );
     } else {
       if (!kDebugMode) {
         DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
