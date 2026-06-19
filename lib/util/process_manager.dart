@@ -9,21 +9,26 @@ import 'package:lux/util/utils.dart';
 import '../error.dart';
 import 'elevate.dart';
 
+// Cache elevation status — check once, reuse forever.
+bool? _elevatedCache;
+
 /// Returns true if the current process has administrator privileges.
-/// Used to decide whether to start lux_core directly (already elevated)
-/// or via Start-Process -Verb RunAs (triggers UAC).
+/// Uses a cached result — only checks once per app session.
 Future<bool> _isElevated() async {
+  if (_elevatedCache != null) return _elevatedCache!;
   try {
+    // Use PowerShell but with a very short timeout — if it fails, assume not elevated.
     final r = await Process.run('powershell.exe', [
       '-noprofile', '-NonInteractive', '-command',
       '([Security.Principal.WindowsPrincipal]'
           '[Security.Principal.WindowsIdentity]::GetCurrent())'
           '.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
-    ]);
-    return r.stdout.toString().trim().toLowerCase() == 'true';
+    ]).timeout(const Duration(seconds: 5));
+    _elevatedCache = r.stdout.toString().trim().toLowerCase() == 'true';
   } catch (_) {
-    return false;
+    _elevatedCache = false;
   }
+  return _elevatedCache!;
 }
 
 class ProcessManager {
@@ -42,12 +47,21 @@ class ProcessManager {
       if (needElevate) {
         if (await _isElevated()) {
           // lux.exe was started elevated (via LuxApp scheduled task).
-          // Start lux_core directly — it inherits elevation, no UAC needed.
+          // Kill any orphan lux_core from previous sessions first.
+          try {
+            final existing = await Process.run(
+                'taskkill', ['/F', '/IM', 'lux_core.exe', '/T'],
+                runInShell: false);
+            if (existing.exitCode == 0) {
+              await Future.delayed(const Duration(milliseconds: 500));
+            }
+          } catch (_) {}
+          // Start lux_core directly — inherits elevation, no UAC needed.
           process = await Process.start(path, args, runInShell: false);
           process?.stdout.transform(utf8.decoder).forEach(debugPrint);
           process?.stderr.transform(utf8.decoder).forEach(debugPrint);
-          // Give lux_core a moment to bind to its port before ping attempts
-          await Future.delayed(const Duration(milliseconds: 500));
+          // Give lux_core time to bind its port (TUN/wintun init takes longer)
+          await Future.delayed(const Duration(seconds: 2));
         } else {
           // Not elevated — use Start-Process -Verb RunAs (shows UAC).
           // This happens when the LuxApp task hasn't been registered yet
