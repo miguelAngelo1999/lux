@@ -43,12 +43,7 @@ if (Test-Path $argsFile) {
 
   final psScript = '''
 \$action  = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "$launcherPath"'
-\$settings = New-ScheduledTaskSettingsSet `
-  -ExecutionTimeLimit 0 `
-  -MultipleInstances IgnoreNew `
-  -AllowStartIfOnBatteries \$true `
-  -DontStopIfGoingOnBatteries \$true `
-  -Priority 0
+\$settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew
 \$principal = New-ScheduledTaskPrincipal -UserId (whoami) -RunLevel Highest -LogonType Interactive
 Register-ScheduledTask -TaskName "$_taskName" -Action \$action -Settings \$settings -Principal \$principal -Force | Out-Null
 
@@ -57,12 +52,7 @@ Register-ScheduledTask -TaskName "$_taskName" -Action \$action -Settings \$setti
 \$luxExe = "${'${Platform.environment['LOCALAPPDATA']}\\Programs\\lux\\lux.exe'}"
 \$appAction   = New-ScheduledTaskAction -Execute \$luxExe
 \$appTrigger  = New-ScheduledTaskTrigger -AtLogOn -User (whoami)
-\$appSettings = New-ScheduledTaskSettingsSet `
-  -ExecutionTimeLimit 0 `
-  -MultipleInstances IgnoreNew `
-  -AllowStartIfOnBatteries \$true `
-  -DontStopIfGoingOnBatteries \$true `
-  -Priority 0
+\$appSettings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew
 \$appPrincipal = New-ScheduledTaskPrincipal -UserId (whoami) -RunLevel Highest -LogonType Interactive
 Register-ScheduledTask -TaskName "$_appTaskName" -Action \$appAction -Trigger \$appTrigger -Settings \$appSettings -Principal \$appPrincipal -Force | Out-Null
 
@@ -74,15 +64,26 @@ Write-Output "OK"
   await File(scriptFile).writeAsString(psScript);
 
   try {
-    final result = await Process.run('powershell.exe', [
+    // Write a sentinel file that the elevated script will create on success
+    final sentinelFile = 'C:\\Windows\\Temp\\lux_task_ok_$ts.txt';
+    // Append sentinel write to the script
+    await File(scriptFile).writeAsString(
+      (await File(scriptFile).readAsString()) +
+      '\nSet-Content "$sentinelFile" "OK"\n',
+    );
+
+    await Process.run('powershell.exe', [
       '-noprofile', '-NonInteractive', '-command',
       '\$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru '
           '-WindowStyle Hidden '
           '-ArgumentList @("-ExecutionPolicy","Bypass","-File","$scriptFile"); '
           'if (\$p) { \$p.ExitCode } else { 1 }',
     ]);
-    return result.exitCode == 0 &&
-        (int.tryParse(result.stdout.toString().trim()) ?? 1) == 0;
+
+    // Check sentinel file — more reliable than stdout capture across UAC
+    final ok = await File(sentinelFile).exists();
+    await File(sentinelFile).delete().catchError((_) => File(sentinelFile));
+    return ok;
   } finally {
     await File(scriptFile).delete().catchError((_) => File(scriptFile));
   }

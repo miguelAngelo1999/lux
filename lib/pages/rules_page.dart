@@ -27,6 +27,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     'DOMAIN-KEYWORD',
     'DOMAIN-REGEX',
     'IP-CIDR',
+    'DST-PORT',
     'PROCESS',
     'DNS-MAP',
     'URL-PATH',
@@ -148,6 +149,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     String ruleType = item?.ruleType ?? 'DOMAIN';
     String payload = item?.payload ?? '';
     String policy = item?.policy ?? 'PROXY';
+    String? protocol = item?.protocol; // null = both, 'tcp', 'udp'
 
     final result = await showDialog<bool>(
       context: context,
@@ -196,13 +198,24 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   decoration: const InputDecoration(
                       labelText: 'Policy', isDense: true),
                   items: [
-                    // Include current policy even if not in list
                     if (!_proxyNames.contains(policy))
                       DropdownMenuItem(value: policy, child: Text(policy)),
                     ..._proxyNames.map((p) =>
                         DropdownMenuItem(value: p, child: Text(p))),
                   ],
                   onChanged: (v) => setDialogState(() => policy = v!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  value: protocol,
+                  decoration: const InputDecoration(
+                      labelText: 'Protocol (optional)', isDense: true),
+                  items: const [
+                    DropdownMenuItem(value: null,  child: Text('Both (TCP + UDP)')),
+                    DropdownMenuItem(value: 'tcp', child: Text('TCP only')),
+                    DropdownMenuItem(value: 'udp', child: Text('UDP only')),
+                  ],
+                  onChanged: (v) => setDialogState(() => protocol = v),
                 ),
               ],
             ),
@@ -223,7 +236,9 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
 
     if (result != true || payload.isEmpty) return;
 
-    final newRaw = '$ruleType,$payload,$policy';
+    final newRaw = protocol != null
+        ? '$ruleType,$payload,$policy,$protocol'
+        : '$ruleType,$payload,$policy';
     if (item == null) {
       setState(() => _rules.insert(0, CustomizedRuleItem(
             ruleType: ruleType,
@@ -231,6 +246,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
             policy: policy,
             disabled: false,
             raw: newRaw,
+            protocol: protocol,
           )));
       try {
         await widget.coreManager.addCustomizedRules([newRaw]);
@@ -247,6 +263,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
             policy: policy,
             disabled: false,
             raw: newRaw,
+            protocol: protocol,
           );
         }
       });
@@ -266,6 +283,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   String _payloadHint(String ruleType) {
     switch (ruleType) {
       case 'IP-CIDR': return '192.168.0.0/24';
+      case 'DST-PORT': return '53317';
       case 'PROCESS': return 'App.app';
       case 'URL-PATH': return '/api/telemetry or POST:/api/v2/*';
       case 'URL-REGEX': return r'^https://.*\.example\.com/track';
@@ -338,6 +356,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
               SizedBox(width: 100, child: Text('Type', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               Expanded(child: Text('Payload', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               SizedBox(width: 80, child: Text('Policy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              SizedBox(width: 44, child: Text('Proto', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               SizedBox(width: 80),
             ],
           ),
@@ -452,6 +471,22 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                               ),
                             ),
                           ),
+                          // Protocol badge (tcp/udp) — only shown when set
+                          if (rule.protocol != null)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withAlpha(30),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  rule.protocol!.toUpperCase(),
+                                  style: const TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ),
                           // Actions - use compact overflow menu
                           SizedBox(
                             width: 80,
