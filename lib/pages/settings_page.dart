@@ -87,6 +87,18 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   Future<void> _save(Setting updated) async {
+    // On Windows, switching to TUN/Mixed requires elevation.
+    // If lux isn't already elevated, restart via the LuxApp scheduled task.
+    if (Platform.isWindows &&
+        (updated.mode == ProxyMode.tun || updated.mode == ProxyMode.mixed) &&
+        _setting?.mode == ProxyMode.system) {
+      final isElevated = await _checkElevated();
+      if (!isElevated) {
+        await _restartElevated(updated);
+        return;
+      }
+    }
+
     setState(() => _isSaving = true);
     try {
       await widget.coreManager.saveSetting(updated);
@@ -100,6 +112,85 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// Returns true if lux.exe is currently running with admin privileges.
+  Future<bool> _checkElevated() async {
+    try {
+      final r = await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        '([Security.Principal.WindowsPrincipal]'
+            '[Security.Principal.WindowsIdentity]::GetCurrent())'
+            '.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
+      ]);
+      return r.stdout.toString().trim().toLowerCase() == 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Save the new mode to config then restart lux elevated via the LuxApp task.
+  Future<void> _restartElevated(Setting updated) async {
+    if (!mounted) return;
+
+    // Check if LuxApp task exists (registered by installer)
+    final taskCheck = await Process.run(
+        'schtasks', ['/query', '/tn', 'LuxApp'], runInShell: false);
+    final hasTask = taskCheck.exitCode == 0;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.admin_panel_settings, size: 20),
+          SizedBox(width: 8),
+          Text('Elevation required'),
+        ]),
+        content: Text(hasTask
+            ? 'TUN/Mixed mode requires admin privileges.\n\n'
+                'Lux will restart automatically with elevation — '
+                'no UAC prompt needed.'
+            : 'TUN/Mixed mode requires admin privileges.\n\n'
+                'Lux will restart. You will see a UAC prompt.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Restart & Apply'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Save the mode to config first so it takes effect on restart
+    try {
+      await widget.coreManager.saveSetting(updated);
+    } catch (_) {}
+
+    // Restart lux elevated
+    if (hasTask) {
+      // Restart via scheduled task — no UAC
+      await widget.coreManager.exitCore();
+      await Future.delayed(const Duration(milliseconds: 500));
+      await Process.run('schtasks', ['/run', '/tn', 'LuxApp'],
+          runInShell: false);
+    } else {
+      // No task — restart via Start-Process -Verb RunAs (UAC prompt)
+      final luxExe = Platform.resolvedExecutable;
+      await widget.coreManager.exitCore();
+      await Future.delayed(const Duration(milliseconds: 500));
+      await Process.run('powershell.exe', [
+        '-noprofile',
+        "Start-Process '$luxExe' -Verb RunAs",
+      ], runInShell: false);
+    }
+    exit(0);
   }
 
   @override
