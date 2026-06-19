@@ -128,21 +128,23 @@ class ProcessManager {
         // Try task-based silent elevation first; fall back to classic RunAs.
         final launched = await _tryLaunchViaTask(path, args);
         if (!launched) {
-          // Classic UAC prompt — works always, shown each time until task registered.
+          // Classic UAC prompt — works always.
+          // Use -ArgumentList as array to avoid quoting issues with spaces in paths.
+          final argList = args.map((a) => "'$a'").join(',');
           process = await Process.start('powershell.exe', [
             '-noprofile',
-            "Start-Process '$path' -Verb RunAs -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
+            "Start-Process '$path' -Verb RunAs -WindowStyle Hidden -ArgumentList @($argList)",
           ], runInShell: false);
           // Register the task in the background so next launch is silent.
-          // This triggers ONE additional UAC prompt after lux_core is up.
           _registerElevatedTask().then((ok) {
             debugPrint('Task registration: $ok');
           });
         }
       } else {
+        final argList = args.map((a) => "'$a'").join(',');
         process = await Process.start('powershell.exe', [
           '-noprofile',
-          "Start-Process '$path' -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
+          "Start-Process '$path' -WindowStyle Hidden -ArgumentList @($argList)",
         ], runInShell: false);
       }
     } else {
