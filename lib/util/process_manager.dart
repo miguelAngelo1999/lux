@@ -101,6 +101,16 @@ Future<void> _runViaScheduledTask() async {
   await Process.run('schtasks', ['/run', '/tn', _taskName], runInShell: false);
 }
 
+/// Try to launch lux_core via the scheduled task if it's registered.
+/// Returns true if the task was triggered, false if task doesn't exist yet.
+Future<bool> _tryLaunchViaTask(String corePath, List<String> args) async {
+  if (!await _isTaskRegistered()) return false;
+  await _writeArgsFile(corePath, args);
+  await _runViaScheduledTask();
+  await Future.delayed(const Duration(seconds: 2));
+  return true;
+}
+
 class ProcessManager {
   Process? process;
 
@@ -115,26 +125,20 @@ class ProcessManager {
       await verifyCoreBinary(path);
 
       if (needElevate) {
-        // Check if task is already registered
-        final taskExists = await _isTaskRegistered();
-        if (!taskExists) {
-          // One-time setup: register with UAC prompt (only needed once per install)
-          final ok = await _registerElevatedTask();
-          if (!ok) {
-            // Fall back to classic RunAs if task registration failed
-            process = await Process.start('powershell.exe', [
-              '-noprofile',
-              "Start-Process '$path' -Verb RunAs -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
-            ], runInShell: false);
-            return;
-          }
+        // Try task-based silent elevation first; fall back to classic RunAs.
+        final launched = await _tryLaunchViaTask(path, args);
+        if (!launched) {
+          // Classic UAC prompt — works always, shown each time until task registered.
+          process = await Process.start('powershell.exe', [
+            '-noprofile',
+            "Start-Process '$path' -Verb RunAs -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
+          ], runInShell: false);
+          // Register the task in the background so next launch is silent.
+          // This triggers ONE additional UAC prompt after lux_core is up.
+          _registerElevatedTask().then((ok) {
+            debugPrint('Task registration: $ok');
+          });
         }
-        // Write session-specific args (port + secret change each run)
-        await _writeArgsFile(path, args);
-        // Silent launch via scheduled task — no UAC prompt
-        await _runViaScheduledTask();
-        // Give the task launcher a moment to spawn lux_core
-        await Future.delayed(const Duration(seconds: 2));
       } else {
         process = await Process.start('powershell.exe', [
           '-noprofile',
