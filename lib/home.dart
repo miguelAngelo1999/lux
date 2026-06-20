@@ -9,6 +9,7 @@ import 'package:lux/const/const.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/util/cert_installer.dart';
+import 'package:lux/util/installed_certs_store.dart';
 import 'package:lux/util/network_detector.dart';
 import 'package:lux/dashboard.dart';
 import 'package:lux/model/app.dart';
@@ -60,6 +61,7 @@ class _HomeState extends State<Home>
   var needRestart = false;
   dynamic coreError;
   bool _quickEditMode = false;
+  String? _lastDetectedCertFingerprint;
   final _quickEditChannel = const MethodChannel('lux_quick_edit');
 
   Future<void> _handleNativeQuickEdit(MethodCall call) async {
@@ -170,6 +172,12 @@ class _HomeState extends State<Home>
       // but still prompt for SSL cert installation if bump is detected
       if (alreadyConfigured) {
         if (sslStatus.detected && sslStatus.hasCert) {
+          final fp = sslStatus.certInfo?.sha256Fingerprint ?? '';
+          if (await InstalledCertsStore.isInstalled(fp)) {
+            // Cert already trusted, no prompt needed
+            return;
+          }
+          _lastDetectedCertFingerprint = fp;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _showInlineCertTrustDialog(sslStatus);
           });
@@ -482,6 +490,12 @@ class _HomeState extends State<Home>
 
                       if (!mounted) return;
                       if (freshSsl.detected && freshSsl.hasCert) {
+                        final fp = freshSsl.certInfo?.sha256Fingerprint ?? '';
+                        if (await InstalledCertsStore.isInstalled(fp)) {
+                          // Cert already trusted, no prompt needed
+                          return;
+                        }
+                        _lastDetectedCertFingerprint = fp;
                         // SSL interception confirmed — show cert install dialog
                         _showInlineCertTrustDialog(freshSsl);
                       } else if (freshSsl.error != null &&
@@ -625,6 +639,9 @@ class _HomeState extends State<Home>
         return;
       }
       final result = await CertInstaller.install(pemBytes);
+      if (result.success && _lastDetectedCertFingerprint != null) {
+        await InstalledCertsStore.markInstalled(_lastDetectedCertFingerprint!);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(result.success
