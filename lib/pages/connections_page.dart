@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_manager.dart';
@@ -77,21 +76,13 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
     try {
       final channel = await widget.coreManager.getConnectionsChannel();
       if (!mounted) return;
-      // web_socket_channel 3.x requires awaiting ready before listening
       await channel.ready;
       if (!mounted) return;
       setState(() => _channel = channel);
       channel.stream.listen(
         (raw) {
           try {
-            // WebSocket frames may arrive as String or binary Uint8List
-            final String text;
-            if (raw is Uint8List) {
-              text = utf8.decode(raw);
-            } else {
-              text = raw as String;
-            }
-            final data = json.decode(text);
+            final data = json.decode(raw as String);
             List<dynamic> connList;
             if (data is List) {
               connList = data;
@@ -127,10 +118,10 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
   List<ConnectionEntry> get _filtered {
     if (_search.isEmpty) return _conns;
     return _conns.where((c) =>
-        c.host.toLowerCase().contains(_search) ||
-        (c.fullUrl?.toLowerCase().contains(_search) ?? false) ||
-        c.rule.toLowerCase().contains(_search) ||
-        c.process.toLowerCase().contains(_search)
+      c.host.toLowerCase().contains(_search) ||
+      (c.fullUrl?.toLowerCase().contains(_search) ?? false) ||
+      c.rule.toLowerCase().contains(_search) ||
+      c.process.toLowerCase().contains(_search)
     ).toList();
   }
 

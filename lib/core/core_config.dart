@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lux/util/utils.dart';
 import 'package:path/path.dart' as path;
@@ -12,6 +15,57 @@ Future<Map<String, dynamic>> readConfig() async {
   } catch (e) {
     return {};
   }
+}
+
+// ── Local app preferences (lux_prefs.json) ──────────────────────────────────
+// Separate from config.json (managed by lux_core) so we never corrupt it.
+
+Future<String> _prefsPath() async {
+  final homeDir = await getHomeDir();
+  return path.join(homeDir, 'lux_prefs.json');
+}
+
+Future<Map<String, dynamic>> _readPrefs() async {
+  try {
+    final p = await _prefsPath();
+    final f = File(p);
+    if (!f.existsSync()) return {};
+    final raw = f.readAsStringSync();
+    final decoded = jsonDecode(raw);
+    return decoded is Map<String, dynamic> ? decoded : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+Future<void> _writePrefs(Map<String, dynamic> prefs) async {
+  try {
+    final p = await _prefsPath();
+    File(p).writeAsStringSync(jsonEncode(prefs));
+  } catch (_) {}
+}
+
+Future<Set<String>> readDismissedProxies() async {
+  final prefs = await _readPrefs();
+  final raw = prefs['dismissedProxies'];
+  if (raw is List) return raw.cast<String>().toSet();
+  return {};
+}
+
+Future<void> addDismissedProxy(String address) async {
+  final prefs = await _readPrefs();
+  final existing = (prefs['dismissedProxies'] as List?)?.cast<String>() ?? [];
+  if (!existing.contains(address)) {
+    existing.add(address);
+    prefs['dismissedProxies'] = existing;
+    await _writePrefs(prefs);
+  }
+}
+
+Future<void> clearDismissedProxies() async {
+  final prefs = await _readPrefs();
+  prefs['dismissedProxies'] = <String>[];
+  await _writePrefs(prefs);
 }
 
 Future<Map<String, dynamic>> readSetting() async {
@@ -441,47 +495,6 @@ class SslBumpStatus {
   }
 }
 
-/// Settings for the MITM SSL inspection engine.
-class SslInspectionSettings {
-  final bool enabled;
-  final String? caFingerprint;
-  final DateTime? caGeneratedAt;
-
-  const SslInspectionSettings({
-    required this.enabled,
-    this.caFingerprint,
-    this.caGeneratedAt,
-  });
-
-  factory SslInspectionSettings.fromJson(Map<String, dynamic> json) {
-    return SslInspectionSettings(
-      enabled: json['enabled'] as bool? ?? false,
-      caFingerprint: json['caFingerprint'] as String?,
-      caGeneratedAt: json['caGeneratedAt'] != null
-          ? DateTime.tryParse(json['caGeneratedAt'] as String)
-          : null,
-    );
-  }
-}
-
-/// A single entry in the SSL inspection list.
-class InspectionListEntry {
-  final String pattern;
-  final bool enabled;
-
-  const InspectionListEntry({
-    required this.pattern,
-    required this.enabled,
-  });
-
-  factory InspectionListEntry.fromJson(Map<String, dynamic> json) {
-    return InspectionListEntry(
-      pattern: json['pattern'] as String? ?? '',
-      enabled: json['enabled'] as bool? ?? true,
-    );
-  }
-}
-
 // Define the data classes
 class Speed {
   final Proxy proxy;
@@ -686,7 +699,6 @@ class Setting {
   }
 }
 
-
 /// Result of a network proxy auto-detection probe.
 class DetectedProxy {
   final String host;
@@ -707,7 +719,7 @@ class DetectedProxy {
         host: json['host'] as String? ?? '',
         port: json['port'] as String? ?? '8080',
         scheme: json['scheme'] as String? ?? 'http',
-        needsAuth: json['needsAuth'] as bool? ?? false,
+        needsAuth: (json['requiresAuth'] as bool? ?? json['needsAuth'] as bool?) ?? false,
         source: json['source'] as String? ?? '',
       );
 

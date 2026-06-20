@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
@@ -9,6 +8,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lux/error.dart';
 import 'package:lux/util/process_manager.dart';
+import 'package:lux/util/proxy_configurator.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../tr.dart';
@@ -151,6 +151,8 @@ class CoreManager {
           sendTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         ));
+    // Clear proxy settings for CLI tools when disconnecting
+    ProxyConfigurator.clear();
   }
 
   Future<void> start() async {
@@ -159,6 +161,14 @@ class CoreManager {
           sendTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         ));
+    // Set proxy settings for CLI tools when connecting
+    try {
+      final setting = await getSetting();
+      ProxyConfigurator.apply('127.0.0.1:${setting.localServerPort}');
+    } catch (_) {
+      // Fallback to default port
+      ProxyConfigurator.apply('127.0.0.1:1090');
+    }
   }
 
   Future<bool> getIsStarted() async {
@@ -243,6 +253,8 @@ class CoreManager {
   }
 
   Future<void> exitCore() async {
+    // Clear proxy settings before exiting
+    ProxyConfigurator.clear();
     if (Platform.isWindows) {
       try {
         await dio.post('$baseHttpUrl/manager/exit');
@@ -351,7 +363,7 @@ class CoreManager {
     await dio.post('$baseHttpUrl/proxies/$id', data: proxy);
   }
 
-  /// Save settings — reads current raw config and merges only the changed fields.
+  /// Save settings ΓÇö reads current raw config and merges only the changed fields.
   /// Never overwrites DNS server lists or other fields not managed by the settings page.
   Future<void> saveSetting(Setting setting) async {
     final current = await dio.get('$baseHttpUrl/setting');
@@ -367,7 +379,7 @@ class CoreManager {
     raw['autoConnect'] = setting.autoConnect;
     raw['defaultInterface'] = setting.defaultInterface;
 
-    // Local server — preserve existing structure
+    // Local server ΓÇö preserve existing structure
     final ls = Map<String, dynamic>.from(raw['localServer'] as Map? ?? {});
     ls['port'] = setting.localServerPort;
     ls['allowLan'] = setting.allowLan;
@@ -377,13 +389,13 @@ class CoreManager {
     if (setting.shouldFindProcess != null) raw['shouldFindProcess'] = setting.shouldFindProcess;
     if (setting.sensitiveInfoMode != null) raw['sensitiveInfoMode'] = setting.sensitiveInfoMode;
 
-    // DNS — only update fakeIp and disableCache, NEVER touch server lists
+    // DNS ΓÇö only update fakeIp and disableCache, NEVER touch server lists
     final dns = Map<String, dynamic>.from(raw['dns'] as Map? ?? {});
     if (setting.fakeIp != null) dns['fakeIp'] = setting.fakeIp;
     if (setting.disableDnsCache != null) dns['disableCache'] = setting.disableDnsCache;
     raw['dns'] = dns;
 
-    // HijackDns — preserve networkService and alwaysReset
+    // HijackDns ΓÇö preserve networkService and alwaysReset
     final hd = Map<String, dynamic>.from(raw['hijackDns'] as Map? ?? {});
     hd['enabled'] = setting.hijackDns;
     raw['hijackDns'] = hd;
@@ -430,13 +442,18 @@ class CoreManager {
     await dio.delete('$baseHttpUrl/connection');
   }
 
-  // ── SSL Inspection ─────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   /// Probes for SSL bumping. Returns the parsed status map from the backend.
-  /// Keys: detected (bool), checkedAt (String), error (String?), hasCert (bool).
-  Future<SslBumpStatus> getSslBumpStatus() async {
+  /// Pass [proxyAddr] as "host:port" to route the probe through a specific proxy.
+  /// Pass [fresh] = true to bypass the 30s server-side cache.
+  Future<SslBumpStatus> getSslBumpStatus({String? proxyAddr, bool fresh = false}) async {
     try {
-      final res = await dio.get('$baseHttpUrl/ssl-inspect/status',
+      final params = <String, String>{};
+      if (fresh) params['fresh'] = 'true';
+      if (proxyAddr != null && proxyAddr.isNotEmpty) params['proxy'] = proxyAddr;
+      final uri = Uri.http(baseUrl, '/ssl-inspect/status', params.isEmpty ? null : params);
+      final res = await dio.getUri(uri,
           options: Options(receiveTimeout: const Duration(seconds: 20)));
       return SslBumpStatus.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
@@ -469,52 +486,6 @@ class CoreManager {
     }
   }
 
-  // ── MITM SSL Inspection Engine ─────────────────────────────────────────────
-
-  Future<SslInspectionSettings> getSslInspectionSettings() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspect/settings');
-    return SslInspectionSettings.fromJson(res.data as Map<String, dynamic>);
-  }
-
-  Future<void> setSslInspectionEnabled(bool enabled) async {
-    await dio.put('$baseHttpUrl/ssl-inspect/settings', data: {'enabled': enabled});
-  }
-
-  /// Returns the MITM CA certificate as raw PEM bytes.
-  Future<Uint8List> getCACertPem() async {
-    final res = await dio.get(
-      '$baseHttpUrl/ssl-inspect/ca/pem',
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return Uint8List.fromList(res.data as List<int>);
-  }
-
-  Future<List<InspectionListEntry>> getInspectionList() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspect/inspection-list');
-    final entries = res.data['entries'] as List? ?? [];
-    return entries
-        .map((e) => InspectionListEntry.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<void> addInspectionDomain(String pattern) async {
-    await dio.put('$baseHttpUrl/ssl-inspect/inspection-list', data: {'pattern': pattern});
-  }
-
-  Future<void> removeInspectionDomain(String pattern) async {
-    await dio.delete('$baseHttpUrl/ssl-inspect/inspection-list', data: {'pattern': pattern});
-  }
-
-  Future<void> toggleInspectionDomain(String pattern) async {
-    await dio.post('$baseHttpUrl/ssl-inspect/inspection-list/toggle', data: {'pattern': pattern});
-  }
-
-  Future<List<String>> getBypassList() async {
-    final res = await dio.get('$baseHttpUrl/ssl-inspect/bypass-list');
-    final patterns = res.data['patterns'] as List? ?? [];
-    return patterns.map((e) => e as String).toList();
-  }
-
   /// Auto-detect an upstream proxy on the current network.
   /// Uses scutil (macOS), WPAD probe, and environment variables.
   /// Returns null if no proxy is detected or lux_core is not running.
@@ -523,12 +494,15 @@ class CoreManager {
       final res = await dio.get('$baseHttpUrl/proxies/detect',
           options: Options(
             sendTimeout: const Duration(seconds: 5),
-            receiveTimeout: const Duration(seconds: 8),
+            receiveTimeout: const Duration(seconds: 15),
           ));
       if (res.statusCode == 200 && res.data is Map) {
         final d = res.data as Map<String, dynamic>;
-        if (d['found'] == true) {
-          return DetectedProxy.fromJson(d);
+        if (d['detected'] == true) {
+          final proxies = d['proxies'] as List?;
+          if (proxies != null && proxies.isNotEmpty) {
+            return DetectedProxy.fromJson(proxies.first as Map<String, dynamic>);
+          }
         }
       }
       return null;

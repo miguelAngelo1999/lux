@@ -26,14 +26,12 @@ class ProcessManager {
       if (needElevate) {
         processArgs = [
           '-noprofile',
-          "Start-Process '$path' -Verb RunAs -windowstyle hidden",
-          "-ArgumentList \"${args.join(' ')}\""
+          "Start-Process '$path' -Verb RunAs -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
         ];
       } else {
         processArgs = [
           '-noprofile',
-          "Start-Process '$path'  -windowstyle hidden",
-          "-ArgumentList \"${args.join(' ')}\""
+          "Start-Process '$path' -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
         ];
       }
 

@@ -12,15 +12,15 @@ import 'package:lux/widget/app_header_bar.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/core_manager.dart';
-
 class Dashboard extends StatefulWidget {
   final String baseUrl;
   final String urlStr;
   final String homeDir;
   final CoreManager coreManager;
+  final VoidCallback? onConnected;
 
   const Dashboard(this.homeDir, this.baseUrl, this.urlStr, this.coreManager,
-      {super.key});
+      {super.key, this.onConnected});
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -94,16 +94,30 @@ class _DashboardState extends State<Dashboard> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    // On Windows with hidden title bar, wrap in DragToMoveArea and pass
+    // window control buttons as AppBar actions (no Stack overlap).
+    final windowControls = Platform.isWindows
+        ? <Widget>[_WindowControls()]
+        : null;
+
+    final headerBar = AppHeaderBar(
+      coreManager: widget.coreManager,
+      urlStr: widget.urlStr,
+      curProxyInfo: curProxyInfo,
+      onCurProxyInfoChange: onCurProxyInfoChange,
+      onConnected: widget.onConnected,
+      extraActions: windowControls,
+    );
+
+    final appBar = PreferredSize(
+      preferredSize: const Size.fromHeight(50),
+      child: Platform.isWindows
+          ? DragToMoveArea(child: headerBar)
+          : headerBar,
+    );
+
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(50),
-        child: AppHeaderBar(
-          coreManager: widget.coreManager,
-          urlStr: widget.urlStr,
-          curProxyInfo: curProxyInfo,
-          onCurProxyInfoChange: onCurProxyInfoChange,
-        ),
-      ),
+      appBar: appBar,
       body: Row(
         children: [
           // Left navigation rail
@@ -126,6 +140,124 @@ class _DashboardState extends State<Dashboard> with WindowListener {
         ],
       ),
       bottomNavigationBar: AppBottomBar(widget.coreManager),
+    );
+  }
+}
+
+/// Minimal window control buttons (minimize / maximize / close) for
+/// the borderless window on Windows.
+class _WindowControls extends StatefulWidget {
+  @override
+  State<_WindowControls> createState() => _WindowControlsState();
+}
+
+class _WindowControlsState extends State<_WindowControls> with WindowListener {
+  bool _isMaximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+    windowManager.isMaximized().then((v) {
+      if (mounted) setState(() => _isMaximized = v);
+    });
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowMaximize() => setState(() => _isMaximized = true);
+  @override
+  void onWindowUnmaximize() => setState(() => _isMaximized = false);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = isDark ? Colors.white70 : Colors.black54;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ControlBtn(
+          icon: Icons.remove,
+          fg: fg,
+          tooltip: 'Minimize',
+          onTap: () => windowManager.minimize(),
+        ),
+        _ControlBtn(
+          icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
+          fg: fg,
+          tooltip: _isMaximized ? 'Restore' : 'Maximize',
+          onTap: () => _isMaximized
+              ? windowManager.unmaximize()
+              : windowManager.maximize(),
+        ),
+        _ControlBtn(
+          icon: Icons.close,
+          fg: fg,
+          tooltip: 'Close',
+          hoverColor: Colors.red,
+          onTap: () => windowManager.close(),
+        ),
+      ],
+    );
+  }
+}
+
+class _ControlBtn extends StatefulWidget {
+  final IconData icon;
+  final Color fg;
+  final String tooltip;
+  final Color? hoverColor;
+  final VoidCallback onTap;
+
+  const _ControlBtn({
+    required this.icon,
+    required this.fg,
+    required this.tooltip,
+    required this.onTap,
+    this.hoverColor,
+  });
+
+  @override
+  State<_ControlBtn> createState() => _ControlBtnState();
+}
+
+class _ControlBtnState extends State<_ControlBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = _hovered
+        ? (widget.hoverColor ?? Colors.grey.withValues(alpha: 0.3))
+        : Colors.transparent;
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            width: 46,
+            height: 50,
+            color: bg,
+            child: Icon(
+              widget.icon,
+              size: 16,
+              color: _hovered && widget.hoverColor != null
+                  ? Colors.white
+                  : widget.fg,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

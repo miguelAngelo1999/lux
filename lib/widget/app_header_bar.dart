@@ -1,6 +1,5 @@
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lux/model/app.dart';
@@ -18,13 +17,19 @@ class AppHeaderBar extends StatefulWidget {
   final CoreManager coreManager;
   final String curProxyInfo;
   final void Function(String) onCurProxyInfoChange;
+  /// Called after lux successfully connects — used to trigger SSL bump check.
+  final VoidCallback? onConnected;
+  /// Extra widgets appended to the AppBar actions (used for window controls).
+  final List<Widget>? extraActions;
 
   const AppHeaderBar(
       {super.key,
       required this.coreManager,
       required this.urlStr,
       required this.curProxyInfo,
-      required this.onCurProxyInfoChange});
+      required this.onCurProxyInfoChange,
+      this.onConnected,
+      this.extraActions});
 
   final String urlStr;
 
@@ -87,6 +92,8 @@ class _State extends State<AppHeaderBar> with WindowListener {
         setState(() {
           isStarted = true;
         });
+        // Trigger SSL bump check after connecting
+        Future.delayed(const Duration(seconds: 5), () => widget.onConnected?.call());
       } else {
         await widget.coreManager.stop();
         setState(() {
@@ -149,10 +156,10 @@ class _State extends State<AppHeaderBar> with WindowListener {
 
     if (runtimeStatusChannel == null) {
       widget.coreManager.getRuntimeStatusChannel().then((channel) async {
+        runtimeStatusChannel = channel;
         if (channel == null) return;
         await channel.ready;
-        runtimeStatusChannel = channel;
-        runtimeStatusChannel!.stream.listen((message) {
+        runtimeStatusChannel?.stream.listen((message) {
           RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));
           setState(() {
             if (!isLoadingSwitch) {
@@ -192,14 +199,11 @@ class _State extends State<AppHeaderBar> with WindowListener {
     );
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
-        leadingWidth: Platform.isMacOS ? 110 : 56,
-        leading: Padding(
-          padding: EdgeInsets.only(left: Platform.isMacOS ? 78 : 0),
-          child: IconButton(
-              tooltip: 'Open web dashboard (advanced)',
-              onPressed: openWebDashboard,
-              icon: const Icon(Icons.open_in_browser, size: 18)),
-        ),
+        actions: widget.extraActions,
+        leading: IconButton(
+            tooltip: 'Open web dashboard (advanced)',
+            onPressed: openWebDashboard,
+            icon: const Icon(Icons.open_in_browser, size: 18)),
         title: Row(
           children: [
             SizedBox(

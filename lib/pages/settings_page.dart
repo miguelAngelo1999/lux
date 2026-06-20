@@ -23,17 +23,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Setting? _setting;
   bool _isLoading = true;
   bool _isSaving = false;
-  // SSL bump detection state (upstream proxy SSL inspection)
+  // SSL inspection state
   SslBumpStatus? _sslStatus;
   bool _sslChecking = false;
   bool _sslInstalling = false;
   InstallResult? _installResult;
-
-  // MITM SSL inspection engine state (Lux-as-MITM)
-  SslInspectionSettings? _sslSettings;
-  List<InspectionListEntry> _inspectionList = [];
-  List<String> _bypassList = [];
-  bool _sslLoading = false;
 
   List<String> _interfaces = [];
 
@@ -90,21 +84,21 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
-
-    // Load MITM SSL inspection state (silently — backend may not support yet)
-    try {
-      final ssl = await widget.coreManager.getSslInspectionSettings();
-      final list = await widget.coreManager.getInspectionList();
-      final bypass = await widget.coreManager.getBypassList();
-      if (mounted) setState(() {
-        _sslSettings = ssl;
-        _inspectionList = list;
-        _bypassList = bypass;
-      });
-    } catch (_) {}
   }
 
   Future<void> _save(Setting updated) async {
+    // On Windows, switching to TUN/Mixed requires elevation.
+    // If lux isn't already elevated, restart via the LuxApp scheduled task.
+    if (Platform.isWindows &&
+        (updated.mode == ProxyMode.tun || updated.mode == ProxyMode.mixed) &&
+        _setting?.mode == ProxyMode.system) {
+      final isElevated = await _checkElevated();
+      if (!isElevated) {
+        await _restartElevated(updated);
+        return;
+      }
+    }
+
     setState(() => _isSaving = true);
     try {
       await widget.coreManager.saveSetting(updated);
@@ -120,6 +114,85 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
+  /// Returns true if lux.exe is currently running with admin privileges.
+  Future<bool> _checkElevated() async {
+    try {
+      final r = await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        '([Security.Principal.WindowsPrincipal]'
+            '[Security.Principal.WindowsIdentity]::GetCurrent())'
+            '.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
+      ]);
+      return r.stdout.toString().trim().toLowerCase() == 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Save the new mode to config then restart lux elevated via the LuxApp task.
+  Future<void> _restartElevated(Setting updated) async {
+    if (!mounted) return;
+
+    // Check if LuxApp task exists (registered by installer)
+    final taskCheck = await Process.run(
+        'schtasks', ['/query', '/tn', 'LuxApp'], runInShell: false);
+    final hasTask = taskCheck.exitCode == 0;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.admin_panel_settings, size: 20),
+          SizedBox(width: 8),
+          Text('Elevation required'),
+        ]),
+        content: Text(hasTask
+            ? 'TUN/Mixed mode requires admin privileges.\n\n'
+                'Lux will restart automatically with elevation — '
+                'no UAC prompt needed.'
+            : 'TUN/Mixed mode requires admin privileges.\n\n'
+                'Lux will restart. You will see a UAC prompt.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Restart & Apply'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Save the mode to config first so it takes effect on restart
+    try {
+      await widget.coreManager.saveSetting(updated);
+    } catch (_) {}
+
+    // Restart lux elevated
+    if (hasTask) {
+      // Restart via scheduled task — no UAC
+      await widget.coreManager.exitCore();
+      await Future.delayed(const Duration(milliseconds: 500));
+      await Process.run('schtasks', ['/run', '/tn', 'LuxApp'],
+          runInShell: false);
+    } else {
+      // No task — restart via Start-Process -Verb RunAs (UAC prompt)
+      final luxExe = Platform.resolvedExecutable;
+      await widget.coreManager.exitCore();
+      await Future.delayed(const Duration(milliseconds: 500));
+      await Process.run('powershell.exe', [
+        '-noprofile',
+        "Start-Process '$luxExe' -Verb RunAs",
+      ], runInShell: false);
+    }
+    exit(0);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading || _setting == null) {
@@ -133,7 +206,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ── General ──
+            // ΓöÇΓöÇ General ΓöÇΓöÇ
             _sectionHeader('General'),
             _dropdownTile<String>(
               'Language',
@@ -167,6 +240,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               s.sensitiveInfoMode ?? false,
               (v) => _save(s.copyWith(sensitiveInfoMode: v)),
             ),
+            _resetDismissedProxiesTile(),
 
             // ── Network ──
             const SizedBox(height: 16),
@@ -197,7 +271,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               (v) => _save(s.copyWith(allowLan: v)),
             ),
 
-            // ── TUN/Mixed only ──
+            // ΓöÇΓöÇ TUN/Mixed only ΓöÇΓöÇ
             if (isTun) ...[
               const SizedBox(height: 16),
               _sectionHeader('TUN / Mixed Mode'),
@@ -220,7 +294,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 (v) => _save(s.copyWith(fakeIp: v)),
               ),
 
-              // ── DNS Servers ──
+              // ΓöÇΓöÇ DNS Servers ΓöÇΓöÇ
               const SizedBox(height: 8),
               if (s.fakeIp != true)
                 _dnsListTile('Remote DNS', 'Resolve foreign domains', _dnsRemote,
@@ -245,7 +319,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               ),
             ],
 
-            // ── Auto Mode ──
+            // ΓöÇΓöÇ Auto Mode ΓöÇΓöÇ
             const SizedBox(height: 16),
             _sectionHeader('Auto Mode'),
             _switchTile(
@@ -274,12 +348,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             _sectionHeader('Advanced'),
             _configFileTile(),
 
-            // ── SSL Inspection (bump detection) ──
+            // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇ
             const SizedBox(height: 16),
             _sectionHeader('SSL Inspection'),
             _sslInspectionSection(),
 
-            // ── Config Backup ──
+            // ΓöÇΓöÇ Config Backup ΓöÇΓöÇ
             const SizedBox(height: 16),
             _sectionHeader('Config Backup'),
             _importExportTile(),
@@ -301,7 +375,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
   }
 
-  // ── DNS editing helpers ──────────────────────────────────────────────────
+  // ΓöÇΓöÇ DNS editing helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   Future<void> _saveDnsList(String key, List<String> servers) async {
     setState(() => _isSaving = true);
@@ -401,7 +475,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
-  // ── Language / Theme helpers ─────────────────────────────────────────────
+  // ΓöÇΓöÇ Language / Theme helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   String _currentLanguage() {
     final appState = Provider.of<AppStateModel>(context, listen: false);
@@ -414,7 +488,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   String _languageLabel(String v) {
     switch (v) {
       case 'en': return 'English';
-      case 'zh-CN': return '中文';
+      case 'zh-CN': return 'Σ╕¡µûç';
       default: return 'System';
     }
   }
@@ -467,9 +541,9 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
-  // ── Config File tile ────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Config File tile ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-  // ── Config Import / Export ────────────────────────────────────────────────
+  // ΓöÇΓöÇ Config Import / Export ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   Widget _importExportTile() {
     return ListTile(
@@ -680,7 +754,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
-  // ── SSL Inspection ──────────────────────────────────────────────────────
+  // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   Future<void> _checkSslBump() async {
     setState(() {
@@ -688,7 +762,35 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       _installResult = null;
     });
     try {
-      final status = await widget.coreManager.getSslBumpStatus();
+      // Get the currently selected proxy to route the probe through it.
+      // This is what actually sees the SSL bump — probing direct misses it.
+      String? proxyAddr;
+      try {
+        final proxyList = await widget.coreManager.getProxyList();
+        final selectedId = proxyList.id;
+        if (selectedId.isNotEmpty && selectedId != 'DIRECT') {
+          final detail = await widget.coreManager.getProxyDetail(selectedId);
+          if (detail != null &&
+              detail.server != null &&
+              detail.port != null &&
+              (detail.type == 'http' || detail.type == 'https')) {
+            proxyAddr = '${detail.server}:${detail.port}';
+            // Include credentials if present
+            final user = detail.raw['username'] as String? ?? '';
+            final pass = detail.password ?? '';
+            if (user.isNotEmpty) {
+              final eu = Uri.encodeComponent(user);
+              final ep = Uri.encodeComponent(pass);
+              proxyAddr = '$eu:$ep@${detail.server}:${detail.port}';
+            }
+          }
+        }
+      } catch (_) {}
+
+      final status = await widget.coreManager.getSslBumpStatus(
+        proxyAddr: proxyAddr,
+        fresh: true,
+      );
       if (mounted) setState(() => _sslStatus = status);
     } catch (e) {
       if (mounted) {
@@ -791,8 +893,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      border: Border.all(color: Colors.orange.shade200),
+                      color: Colors.orange.shade800.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.orange.shade600),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Row(
@@ -890,22 +992,22 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.amber.shade300),
+        border: Border.all(color: Colors.amber.shade600),
         borderRadius: BorderRadius.circular(6),
-        color: Colors.amber.shade50.withValues(alpha: 0.4),
+        color: Colors.amber.shade800.withValues(alpha: 0.15),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Intercepting CA',
-              style: TextStyle(fontSize: 10, color: Colors.amber.shade800, fontWeight: FontWeight.w600)),
+              style: TextStyle(fontSize: 10, color: Colors.amber.shade400, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           if (display.isNotEmpty)
             Text(display, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
           if (fp.isNotEmpty)
             Text('SHA-256: $fp',
                 style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey.shade700)),
-          Text('Valid: ${info.notBefore} → ${info.notAfter}',
+          Text('Valid: ${info.notBefore} / ${info.notAfter}',
               style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
         ],
       ),
@@ -1099,6 +1201,29 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
   }
 
+  Widget _resetDismissedProxiesTile() {
+    return ListTile(
+      dense: true,
+      title: const Text('Proxy Detection', style: TextStyle(fontSize: 14)),
+      subtitle: const Text('Re-show startup proxy detection dialogs',
+          style: TextStyle(fontSize: 12)),
+      trailing: TextButton(
+        onPressed: () async {
+          await clearDismissedProxies();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Proxy detection dialogs will show again on next launch'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        },
+        child: const Text('Reset', style: TextStyle(fontSize: 12)),
+      ),
+    );
+  }
+
   Widget _sectionHeader(String title) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(title,
@@ -1191,7 +1316,7 @@ String getModeLabel(ProxyMode m) {
   }
 }
 
-// ── DNS Picker Dialog ─────────────────────────────────────────────────────────
+// ΓöÇΓöÇ DNS Picker Dialog ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class _DnsOption {
   final String value;
@@ -1202,18 +1327,18 @@ class _DnsOption {
 }
 
 const _allDnsOptions = <_DnsOption>[
-  _DnsOption('tcp://8.8.8.8:53', 'Google DNS', 'TCP · 8.8.8.8:53 · Fast, global'),
-  _DnsOption('tcp://1.1.1.1:53', 'Cloudflare DNS', 'TCP · 1.1.1.1:53 · Privacy-focused'),
-  _DnsOption('tcp://114.114.114.114:53', '114 DNS', 'TCP · 114.114.114.114:53 · China mainland'),
-  _DnsOption('tcp://119.29.29.29:53', 'DNSPod', 'TCP · 119.29.29.29:53 · Tencent China'),
-  _DnsOption('tcp://223.5.5.5:53', 'AliDNS', 'TCP · 223.5.5.5:53 · Alibaba China'),
-  _DnsOption('https://dns.google/dns-query', 'Google DoH', 'HTTPS · Encrypted DNS-over-HTTPS'),
-  _DnsOption('https://cloudflare-dns.com/dns-query', 'Cloudflare DoH', 'HTTPS · Encrypted DNS-over-HTTPS'),
-  _DnsOption('https://doh.pub/dns-query', 'DNSPod DoH', 'HTTPS · Tencent encrypted DNS (China)'),
+  _DnsOption('tcp://8.8.8.8:53', 'Google DNS', 'TCP ┬╖ 8.8.8.8:53 ┬╖ Fast, global'),
+  _DnsOption('tcp://1.1.1.1:53', 'Cloudflare DNS', 'TCP ┬╖ 1.1.1.1:53 ┬╖ Privacy-focused'),
+  _DnsOption('tcp://114.114.114.114:53', '114 DNS', 'TCP ┬╖ 114.114.114.114:53 ┬╖ China mainland'),
+  _DnsOption('tcp://119.29.29.29:53', 'DNSPod', 'TCP ┬╖ 119.29.29.29:53 ┬╖ Tencent China'),
+  _DnsOption('tcp://223.5.5.5:53', 'AliDNS', 'TCP ┬╖ 223.5.5.5:53 ┬╖ Alibaba China'),
+  _DnsOption('https://dns.google/dns-query', 'Google DoH', 'HTTPS ┬╖ Encrypted DNS-over-HTTPS'),
+  _DnsOption('https://cloudflare-dns.com/dns-query', 'Cloudflare DoH', 'HTTPS ┬╖ Encrypted DNS-over-HTTPS'),
+  _DnsOption('https://doh.pub/dns-query', 'DNSPod DoH', 'HTTPS ┬╖ Tencent encrypted DNS (China)'),
   _DnsOption('dhcp://auto', 'DHCP Auto', 'Uses DNS from your router/DHCP server'),
   _DnsOption('system://auto', 'System Auto', 'Uses your OS-configured DNS servers'),
-  _DnsOption('udp://8.8.8.8:53', 'Google UDP', 'UDP · 8.8.8.8:53 · Traditional DNS'),
-  _DnsOption('udp://1.1.1.1:53', 'Cloudflare UDP', 'UDP · 1.1.1.1:53 · Traditional DNS'),
+  _DnsOption('udp://8.8.8.8:53', 'Google UDP', 'UDP ┬╖ 8.8.8.8:53 ┬╖ Traditional DNS'),
+  _DnsOption('udp://1.1.1.1:53', 'Cloudflare UDP', 'UDP ┬╖ 1.1.1.1:53 ┬╖ Traditional DNS'),
 ];
 
 class _DnsPickerDialog extends StatefulWidget {
@@ -1330,7 +1455,7 @@ class _DnsPickerDialogState extends State<_DnsPickerDialog> {
             ),
             const SizedBox(height: 6),
             Text(
-              '${_selected.length} selected · tap to toggle',
+              '${_selected.length} selected ┬╖ tap to toggle',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 8),
@@ -1384,230 +1509,4 @@ class _DnsPickerDialogState extends State<_DnsPickerDialog> {
       ],
     );
   }
-}
-
-// ── MITM SSL Inspection Engine UI ────────────────────────────────────────────
-
-extension _MitmSslSettings on _SettingsPageState {
-  Widget _buildSslInspectionSection() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SwitchListTile(
-        title: const Text('SSL Inspection', style: TextStyle(fontSize: 14)),
-        subtitle: const Text('Decrypt HTTPS for selected domains only', style: TextStyle(fontSize: 12)),
-        value: _sslSettings?.enabled ?? false,
-        dense: true,
-        onChanged: (_isSaving || _sslLoading) ? null : (v) => _toggleSslInspection(v),
-      ),
-      if (_sslSettings?.enabled == true && _sslSettings?.caFingerprint != null) ...[
-        ListTile(
-          dense: true,
-          title: const Text('Root CA', style: TextStyle(fontSize: 13)),
-          subtitle: Text(
-            'SHA256: ${_sslSettings!.caFingerprint!.substring(0, 16)}...\n'
-            'Generated: ${_sslSettings!.caGeneratedAt?.toLocal().toString().split(".").first ?? "unknown"}',
-            style: const TextStyle(fontSize: 11),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Wrap(spacing: 8, children: [
-            OutlinedButton.icon(
-              icon: const Icon(Icons.download, size: 14),
-              label: const Text('Export CA', style: TextStyle(fontSize: 12)),
-              onPressed: _exportCA,
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.verified_user, size: 14),
-              label: const Text('Install & Trust', style: TextStyle(fontSize: 12)),
-              onPressed: _installMitmCA,
-            ),
-            if (Platform.isWindows)
-              OutlinedButton.icon(
-                icon: const Icon(Icons.verified_user_outlined, size: 14),
-                label: const Text('Install in Trust Store', style: TextStyle(fontSize: 12)),
-                onPressed: _installCAWindows,
-              ),
-          ]),
-        ),
-      ],
-      if (_sslSettings?.enabled == true) ...[
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('Inspected Domains', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        ),
-        ..._inspectionList.map((entry) => ListTile(
-          dense: true,
-          leading: Icon(entry.enabled ? Icons.circle : Icons.circle_outlined, size: 10,
-              color: entry.enabled ? Colors.green : Colors.grey),
-          title: Text(entry.pattern, style: const TextStyle(fontSize: 13)),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            IconButton(
-              icon: Icon(entry.enabled ? Icons.toggle_on : Icons.toggle_off, size: 20),
-              onPressed: () => _toggleDomain(entry.pattern),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, size: 14, color: Colors.red),
-              onPressed: () => _removeDomain(entry.pattern),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            ),
-          ]),
-        )),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: _AddDomainRow(onAdd: _addDomain),
-        ),
-        TextButton(
-          onPressed: _showBypassList,
-          child: const Text('View bypass list (read-only)', style: TextStyle(fontSize: 12)),
-        ),
-      ],
-    ]);
-  }
-
-  Future<void> _toggleSslInspection(bool v) async {
-    if (v && _sslSettings?.caFingerprint == null) {
-      final confirmed = await showDialog<bool>(context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Enable SSL Inspection?'),
-          content: const Text(
-            'SSL Inspection decrypts HTTPS traffic for the domains you select. '
-            'You must install the Lux Root CA certificate into your system trust store. '
-            'You are responsible for the security implications.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enable')),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-    }
-    setState(() => _sslLoading = true);
-    try {
-      await widget.coreManager.setSslInspectionEnabled(v);
-      await _load();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-    } finally {
-      if (mounted) setState(() => _sslLoading = false);
-    }
-  }
-
-  Future<void> _exportCA() async {
-    try {
-      final bytes = await widget.coreManager.getCACertPem();
-      final tmp = File('${Directory.systemTemp.path}/lux-ca.crt');
-      await tmp.writeAsBytes(bytes);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved to ${tmp.path}')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red));
-    }
-  }
-
-  Future<void> _installMitmCA() async {
-    try {
-      final bytes = await widget.coreManager.getCACertPem();
-      final result = await CertInstaller.install(bytes.toList());
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(result.success
-              ? 'Lux CA installed — System Keychain, curl, Node.js, Firefox, Thunderbird'
-              : 'Partial install — see details'),
-          backgroundColor: result.success ? Colors.green.shade700 : Colors.orange.shade700,
-          duration: const Duration(seconds: 5),
-        ));
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Install failed: $e'), backgroundColor: Colors.red));
-    }
-  }
-
-  Future<void> _installCAWindows() async {
-    try {
-      final bytes = await widget.coreManager.getCACertPem();
-      final tmp = File('C:\\Windows\\Temp\\lux-ca-install.crt');
-      await tmp.writeAsBytes(bytes);
-      final result = await Process.run('powershell.exe', [
-        '-noprofile', '-command',
-        'Start-Process certutil -ArgumentList @("-addstore","Root","C:\\Windows\\Temp\\lux-ca-install.crt") -Verb RunAs -Wait -WindowStyle Hidden',
-      ], runInShell: false);
-      try { await tmp.delete(); } catch (_) {}
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.exitCode == 0
-            ? 'Lux CA installed in Windows trust store ✓'
-            : 'Install returned exit ${result.exitCode} — check if you approved the UAC prompt')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Install failed: $e'), backgroundColor: Colors.red));
-    }
-  }
-
-  Future<void> _addDomain(String pattern) async {
-    try {
-      await widget.coreManager.addInspectionDomain(pattern);
-      final l = await widget.coreManager.getInspectionList();
-      if (mounted) setState(() => _inspectionList = l);
-    } catch (_) {}
-  }
-
-  Future<void> _toggleDomain(String pattern) async {
-    try {
-      await widget.coreManager.toggleInspectionDomain(pattern);
-      final l = await widget.coreManager.getInspectionList();
-      if (mounted) setState(() => _inspectionList = l);
-    } catch (_) {}
-  }
-
-  Future<void> _removeDomain(String pattern) async {
-    try {
-      await widget.coreManager.removeInspectionDomain(pattern);
-      final l = await widget.coreManager.getInspectionList();
-      if (mounted) setState(() => _inspectionList = l);
-    } catch (_) {}
-  }
-
-  void _showBypassList() {
-    showModalBottomSheet(context: context, builder: (ctx) => ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('Bypass List (never inspected)', style: Theme.of(ctx).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        ..._bypassList.map((p) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Text(p, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
-        )),
-      ],
-    ));
-  }
-}
-
-class _AddDomainRow extends StatefulWidget {
-  final void Function(String) onAdd;
-  const _AddDomainRow({required this.onAdd});
-  @override State<_AddDomainRow> createState() => _AddDomainRowState();
-}
-
-class _AddDomainRowState extends State<_AddDomainRow> {
-  final _ctrl = TextEditingController();
-  @override void dispose() { _ctrl.dispose(); super.dispose(); }
-  @override Widget build(BuildContext context) => Row(children: [
-    Expanded(child: TextField(controller: _ctrl,
-      decoration: const InputDecoration(
-        hintText: 'example.com or *.example.com',
-        isDense: true, border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
-      style: const TextStyle(fontSize: 12),
-      onSubmitted: (v) { if (v.isNotEmpty) { widget.onAdd(v); _ctrl.clear(); } },
-    )),
-    const SizedBox(width: 8),
-    FilledButton(
-      onPressed: () { if (_ctrl.text.isNotEmpty) { widget.onAdd(_ctrl.text); _ctrl.clear(); } },
-      child: const Text('Add', style: TextStyle(fontSize: 12)),
-    ),
-  ]);
 }

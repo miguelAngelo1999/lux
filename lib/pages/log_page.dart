@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -64,7 +63,6 @@ class _LogPageState extends State<LogPage> {
     try {
       final channel = await widget.coreManager.getLogChannel();
       if (!mounted) return;
-      // web_socket_channel 3.x requires awaiting ready before listening
       await channel.ready;
       if (!mounted) return;
       setState(() {
@@ -74,28 +72,16 @@ class _LogPageState extends State<LogPage> {
       channel.stream.listen(
         (raw) {
           try {
-            // WebSocket frames may arrive as String or binary Uint8List
-            final String text;
-            if (raw is Uint8List) {
-              text = utf8.decode(raw);
-            } else {
-              text = raw as String;
-            }
             // Log endpoint sends an array of JSON-encoded log strings
-            final batch = json.decode(text) as List<dynamic>;
+            final batch = json.decode(raw as String) as List<dynamic>;
             for (final item in batch) {
               try {
                 final data = json.decode(item as String) as Map<String, dynamic>;
-                // Convert ms timestamp or ISO string to display string
+                // Convert ms timestamp to ISO string
                 final ts = data['time'];
-                final String timeStr;
-                if (ts is int) {
-                  timeStr = DateTime.fromMillisecondsSinceEpoch(ts).toIso8601String();
-                } else if (ts is String) {
-                  timeStr = ts;
-                } else {
-                  timeStr = '';
-                }
+                final timeStr = ts is int
+                    ? DateTime.fromMillisecondsSinceEpoch(ts).toIso8601String()
+                    : ts?.toString() ?? '';
                 final entry = LogEntry(
                   level: data['level'] as String? ?? 'info',
                   time: timeStr,
