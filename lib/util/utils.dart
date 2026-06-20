@@ -40,16 +40,25 @@ void exitApp() async {
 Future<void> setAutoConnect(CoreManager? coreManager) async {
   var isAutoConnect = await readAutoConnect();
   if (isAutoConnect) {
-    try {
-      await Future.delayed(const Duration(seconds: 2));
-      await coreManager?.start();
-      notifier.show(tr().connectOnOpenMsg);
-    } catch (e) {
-      String? msg = e.toString();
-      if (e is DioException) {
-        msg = e.message;
+    // Try immediately, then retry up to 5 times with increasing delay
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        await coreManager?.start();
+        notifier.show(tr().connectOnOpenMsg);
+        return; // Success — stop retrying
+      } catch (e) {
+        if (attempt < 4) {
+          // Wait before retrying: 500ms, 1s, 2s, 4s
+          await Future.delayed(Duration(milliseconds: 500 * (1 << attempt)));
+        } else {
+          // Final failure
+          String? msg = e.toString();
+          if (e is DioException) {
+            msg = e.message;
+          }
+          notifier.show(tr().connectOnOpenErrMsg(msg.toString()));
+        }
       }
-      notifier.show(tr().connectOnOpenErrMsg(msg.toString()));
     }
   }
 }
