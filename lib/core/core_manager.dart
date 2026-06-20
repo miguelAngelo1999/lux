@@ -8,6 +8,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lux/error.dart';
 import 'package:lux/util/process_manager.dart';
+import 'package:lux/util/proxy_configurator.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../tr.dart';
@@ -150,6 +151,8 @@ class CoreManager {
           sendTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         ));
+    // Clear proxy settings for CLI tools when disconnecting
+    ProxyConfigurator.clear();
   }
 
   Future<void> start() async {
@@ -158,6 +161,14 @@ class CoreManager {
           sendTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         ));
+    // Set proxy settings for CLI tools when connecting
+    try {
+      final setting = await getSetting();
+      ProxyConfigurator.apply('127.0.0.1:${setting.localServerPort}');
+    } catch (_) {
+      // Fallback to default port
+      ProxyConfigurator.apply('127.0.0.1:1090');
+    }
   }
 
   Future<bool> getIsStarted() async {
@@ -242,6 +253,8 @@ class CoreManager {
   }
 
   Future<void> exitCore() async {
+    // Clear proxy settings before exiting
+    ProxyConfigurator.clear();
     if (Platform.isWindows) {
       try {
         await dio.post('$baseHttpUrl/manager/exit');
