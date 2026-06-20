@@ -152,14 +152,31 @@ class _HomeState extends State<Home>
       if (detected == null || !mounted) return;
       _detectedProxyAddr = detected.address;
 
-      // Run SSL bump probe in parallel through the detected proxy
-      // before lux has changed any system settings.
+      // Check if this proxy is already configured in Lux
+      final proxyList = await coreManager!.getProxyList();
+      final alreadyConfigured = proxyList.proxies.any((p) =>
+          p.server != null &&
+          '${p.server}:${p.port}' == detected.address);
+
+      // Run SSL bump probe regardless — ensure certs are installed
       final sslStatus = await coreManager!.getSslBumpStatus(
         proxyAddr: detected.address,
         fresh: true,
       );
 
       if (!mounted) return;
+
+      // If proxy already configured, skip the "add proxy" dialog
+      // but still prompt for SSL cert installation if bump is detected
+      if (alreadyConfigured) {
+        if (sslStatus.detected && sslStatus.hasCert) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _showInlineCertTrustDialog(sslStatus);
+          });
+        }
+        return;
+      }
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showProxyAndCertDialog(detected, sslStatus);
       });
@@ -666,12 +683,7 @@ class _HomeState extends State<Home>
 
     // Detect network proxy early — before lux_core starts, so system proxy
     // settings still reflect the real upstream proxy (not Lux's own 127.0.0.1)
-    // Skip if autoConnect is enabled — user already has a proxy configured.
-    readAutoConnect().then((autoConnect) {
-      if (!autoConnect) {
-        Future.delayed(const Duration(milliseconds: 500), () => _detectProxyEarly());
-      }
-    });
+    Future.delayed(const Duration(milliseconds: 500), () => _detectProxyEarly());
 
     var corePath = path.join(Paths.assetsBin.path, LuxCoreName.name);
     var curHomeDir = await getHomeDir();
@@ -727,12 +739,8 @@ class _HomeState extends State<Home>
       isCoreReady.value = true;
     });
     // After core starts, probe for a network proxy in the background
-    // Skip if autoConnect — user already has proxy configured, no detection needed.
-    readAutoConnect().then((autoConnect) {
-      if (!autoConnect) {
-        Future.delayed(const Duration(seconds: 2), () => _checkForNetworkProxy());
-      }
-    });
+    // and ensure SSL bump certs are installed if needed.
+    Future.delayed(const Duration(seconds: 2), () => _checkForNetworkProxy());
     // Detect corporate vs home network and switch rules accordingly
     Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
     if (eventChannel == null) {
