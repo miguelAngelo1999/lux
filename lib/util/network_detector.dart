@@ -42,8 +42,12 @@ class NetworkDetector {
         selectedProxy.port ?? 8080,
       );
 
-      if (isReachable && !_isCorpNetwork) {
-        // Switching TO corporate network
+      // Also check current rule to detect stale state from previous session
+      final ruleList = await coreManager.getRuleList();
+      final isCurrentlyBypassed = ruleList.selectedId == 'bypass_all';
+
+      if (isReachable && (!_isCorpNetwork || isCurrentlyBypassed)) {
+        // Switching TO corporate network (or restoring from stale bypass)
         _isCorpNetwork = true;
         await _restoreNormalRule();
         debugPrint('[NetworkDetector] Corporate proxy reachable → proxy mode');
