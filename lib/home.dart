@@ -173,8 +173,8 @@ class _HomeState extends State<Home>
       if (alreadyConfigured) {
         if (sslStatus.detected && sslStatus.hasCert) {
           final fp = sslStatus.certInfo?.sha256Fingerprint ?? '';
-          if (await InstalledCertsStore.isInstalled(fp)) {
-            // Cert already trusted, no prompt needed
+          if (await InstalledCertsStore.isFullyInstalled(fp)) {
+            // Cert already trusted in all available stores
             return;
           }
           _lastDetectedCertFingerprint = fp;
@@ -491,8 +491,8 @@ class _HomeState extends State<Home>
                       if (!mounted) return;
                       if (freshSsl.detected && freshSsl.hasCert) {
                         final fp = freshSsl.certInfo?.sha256Fingerprint ?? '';
-                        if (await InstalledCertsStore.isInstalled(fp)) {
-                          // Cert already trusted, no prompt needed
+                        if (await InstalledCertsStore.isFullyInstalled(fp)) {
+                          // Cert already trusted in all available stores
                           return;
                         }
                         _lastDetectedCertFingerprint = fp;
@@ -640,7 +640,12 @@ class _HomeState extends State<Home>
       }
       final result = await CertInstaller.install(pemBytes);
       if (result.success && _lastDetectedCertFingerprint != null) {
-        await InstalledCertsStore.markInstalled(_lastDetectedCertFingerprint!);
+        final successStores = result.steps
+            .where((s) => s.success)
+            .map((s) => s.name)
+            .toList();
+        await InstalledCertsStore.markInstalled(
+            _lastDetectedCertFingerprint!, successStores);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
