@@ -664,9 +664,14 @@ class _HomeState extends State<Home>
     // Load persisted dismissed proxies before detection runs
     await _loadDismissedProxies();
 
-    // Detect network proxy early ΓÇö before lux_core starts, so system proxy
+    // Detect network proxy early — before lux_core starts, so system proxy
     // settings still reflect the real upstream proxy (not Lux's own 127.0.0.1)
-    Future.delayed(const Duration(milliseconds: 500), () => _detectProxyEarly());
+    // Skip if autoConnect is enabled — user already has a proxy configured.
+    readAutoConnect().then((autoConnect) {
+      if (!autoConnect) {
+        Future.delayed(const Duration(milliseconds: 500), () => _detectProxyEarly());
+      }
+    });
 
     var corePath = path.join(Paths.assetsBin.path, LuxCoreName.name);
     var curHomeDir = await getHomeDir();
@@ -722,7 +727,12 @@ class _HomeState extends State<Home>
       isCoreReady.value = true;
     });
     // After core starts, probe for a network proxy in the background
-    Future.delayed(const Duration(seconds: 2), () => _checkForNetworkProxy());
+    // Skip if autoConnect — user already has proxy configured, no detection needed.
+    readAutoConnect().then((autoConnect) {
+      if (!autoConnect) {
+        Future.delayed(const Duration(seconds: 2), () => _checkForNetworkProxy());
+      }
+    });
     // Detect corporate vs home network and switch rules accordingly
     Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
     if (eventChannel == null) {
