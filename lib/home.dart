@@ -9,6 +9,7 @@ import 'package:lux/const/const.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/util/cert_installer.dart';
+import 'package:lux/util/network_detector.dart';
 import 'package:lux/dashboard.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
@@ -51,6 +52,7 @@ class _HomeState extends State<Home>
   String urlStr = "";
   String homeDir = "";
   CoreManager? coreManager;
+  NetworkDetector? _networkDetector;
   ValueNotifier<bool> isCoreReady = ValueNotifier<bool>(false);
   Widget? dashboardWidget;
   WebSocketChannel? eventChannel;
@@ -689,6 +691,7 @@ class _HomeState extends State<Home>
     coreManager = CoreManager(curBaseUrl, process, secret, () {
       _onCoreReady(appState);
     });
+    _networkDetector = NetworkDetector(coreManager!);
 
     setState(() {
       homeDir = curHomeDir;
@@ -720,6 +723,8 @@ class _HomeState extends State<Home>
     });
     // After core starts, probe for a network proxy in the background
     Future.delayed(const Duration(seconds: 2), () => _checkForNetworkProxy());
+    // Detect corporate vs home network and switch rules accordingly
+    Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
     if (eventChannel == null) {
       coreManager?.getEventChannel().then((channel) async {
         if (channel == null) return;
@@ -914,6 +919,8 @@ class _HomeState extends State<Home>
     if (coreManager == null) {
       return;
     }
+    // Re-detect network after wake (may have switched networks during sleep)
+    Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
     if (needRestart) {
       needRestart = false;
       final List<ConnectivityResult> connectivityResult =
