@@ -115,11 +115,12 @@ class _HomeState extends State<Home>
           settings[parts[0].trim()] = parts[1].trim();
         }
       }
+
+      // Check explicit HTTP/HTTPS proxy
       for (final prefix in ['HTTP', 'HTTPS']) {
         if (settings['${prefix}Enable'] == '1') {
           final host = settings['${prefix}Proxy'] ?? '';
           final port = settings['${prefix}Port'] ?? '8080';
-          // Skip Lux's own proxy
           if (host.isEmpty || host == '127.0.0.1' || host == 'localhost') continue;
           if (_dismissedProxies.contains('$host:$port')) continue;
           final detected = DetectedProxy(
@@ -137,6 +138,41 @@ class _HomeState extends State<Home>
           });
           return;
         }
+      }
+
+      // Check PAC/WPAD auto-config proxy
+      if (settings['ProxyAutoConfigEnable'] == '1') {
+        final pacUrl = settings['ProxyAutoConfigURLString'] ?? '';
+        if (pacUrl.isNotEmpty) {
+          // Parse proxy from PAC URL host or defer to lux_core detection later
+          // For now, show a generic detection prompt
+          final uri = Uri.tryParse(pacUrl);
+          final host = uri?.host ?? '';
+          if (host.isNotEmpty && host != '127.0.0.1' && host != 'localhost') {
+            if (_dismissedProxies.contains(host)) return;
+            final detected = DetectedProxy(
+              host: host,
+              port: uri?.port.toString() ?? '8080',
+              scheme: 'http',
+              needsAuth: false,
+              source: 'wpad',
+            );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showProxyAndCertDialog(
+                detected,
+                SslBumpStatus(detected: false, hasCert: false),
+              );
+            });
+            return;
+          }
+        }
+      }
+
+      // Check ProxyAutoDiscoveryEnable (WPAD via DHCP)
+      if (settings['ProxyAutoDiscoveryEnable'] == '1') {
+        // WPAD is enabled — defer to lux_core's DHCP/DNS WPAD probe after startup
+        // Early detection can't resolve WPAD without network requests
+        debugPrint('WPAD auto-discovery enabled — deferring to lux_core detection');
       }
     } catch (_) {}
     // Fall back to lux_core detection after it starts
