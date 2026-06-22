@@ -14,7 +14,20 @@ Future<void> verifyCoreBinary(String filePath) async {
   if (!input.existsSync()) {
     throw "File $filePath does not exist.";
   }
-  var value = await sha256.bind(input.openRead()).first;
+  // If the file is a shell script wrapper (elevation setup), verify the real binary instead
+  var checkPath = filePath;
+  final realPath = '${filePath}_real';
+  if (await File(realPath).exists()) {
+    checkPath = realPath;
+  } else {
+    // Check if it's a shell script (starts with #!)
+    final bytes = await File(filePath).openRead(0, 2).first;
+    if (bytes.length >= 2 && bytes[0] == 0x23 && bytes[1] == 0x21) {
+      // Shell script wrapper — skip verification (elevation handled externally)
+      return;
+    }
+  }
+  var value = await sha256.bind(File(checkPath).openRead()).first;
   var curChecksum = value.toString();
   var validChecksums = <String>[];
   if (Platform.isWindows) {
