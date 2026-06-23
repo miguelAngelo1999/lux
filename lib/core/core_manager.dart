@@ -44,6 +44,9 @@ class CoreManager {
 
   final Function onReady;
   final dio = Dio();
+  // Lightweight Dio for simple list calls — no BackgroundTransformer isolate overhead.
+  // Isolate spawn adds 50-500ms per call which makes small list refreshes feel slow.
+  final dioFast = Dio();
   var needRestart = false;
   late String baseHttpUrl;
   late String baseWsUrl;
@@ -62,8 +65,8 @@ class CoreManager {
     dio.transformer = BackgroundTransformer()..jsonDecodeCallback = parseJson;
     dio.options.receiveTimeout = const Duration(seconds: 10);
 
-    // Bypass system proxy for localhost API calls to lux_core.
-    dio.httpClientAdapter = IOHttpClientAdapter(
+    // Shared local-proxy-bypass adapter factory
+    IOHttpClientAdapter _makeLocalAdapter() => IOHttpClientAdapter(
       createHttpClient: () {
         final client = HttpClient();
         client.findProxy = (uri) {
@@ -75,6 +78,20 @@ class CoreManager {
         return client;
       },
     );
+
+    // Bypass system proxy for localhost API calls to lux_core.
+    dio.httpClientAdapter = _makeLocalAdapter();
+
+    // dioFast: no BackgroundTransformer — inline JSON decode on the main thread.
+    // For small payloads (proxy list, subscription list) isolate spawn latency
+    // (~50-500ms cold) is far worse than just decoding inline.
+    dioFast.options.receiveTimeout = const Duration(seconds: 10);
+    dioFast.httpClientAdapter = _makeLocalAdapter();
+    dioFast.interceptors.add(InterceptorsWrapper(onRequest:
+        (RequestOptions options, RequestInterceptorHandler handler) async {
+      options.headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
+      return handler.next(options);
+    }));
 
     dio.interceptors.add(InterceptorsWrapper(onRequest:
         (RequestOptions options, RequestInterceptorHandler handler) async {
@@ -198,12 +215,12 @@ class CoreManager {
   }
 
   Future<ProxyList> getProxyList() async {
-    final proxiesRes = await dio.get('$baseHttpUrl/proxies');
+    final proxiesRes = await dioFast.get('$baseHttpUrl/proxies');
     return ProxyList.fromJson(proxiesRes.data);
   }
 
   Future<RuleList> getRuleList() async {
-    final rulesRes = await dio.get('$baseHttpUrl/rules');
+    final rulesRes = await dioFast.get('$baseHttpUrl/rules');
     return RuleList.fromJson(rulesRes.data);
   }
 
@@ -324,7 +341,7 @@ class CoreManager {
   }
 
   Future<SubscriptionList> getSubscriptionList() async {
-    final res = await dio.get('$baseHttpUrl/subscription/all');
+    final res = await dioFast.get('$baseHttpUrl/subscription/all');
     return SubscriptionList.fromJson(res.data);
   }
 

@@ -149,19 +149,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   }
 
   void _handleDeleteItem(ProxyItem item) async {
-    // Optimistic update — remove from UI immediately before the HTTP call
-    final wasSelected = item.id == proxyListGroup.selectedId;
-    setState(() {
-      proxyListGroup = ProxyListGroup(
-        allProxies: proxyListGroup.allProxies.where((p) => p.id != item.id).toList(),
-        subscriptions: subscriptionList,
-        selectedId: proxyListGroup.selectedId,
-      );
-    });
-    if (wasSelected) widget.onCurProxyInfoChange("");
-
-    // Backend call + lightweight background sync (no await on purpose)
-    widget.coreManager.deleteProxies([item.id]).then((_) => _refreshProxiesOnly());
+    await widget.coreManager.deleteProxies([item.id]);
+    if (item.id == proxyListGroup.selectedId) {
+      widget.onCurProxyInfoChange("");
+    }
+    _refreshProxiesOnly();
   }
 
   void _handleEditItem(ProxyItem item) async {
