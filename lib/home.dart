@@ -183,13 +183,10 @@ class _HomeState extends State<Home>
 
   Future<void> _checkForNetworkProxy() async {
     if (coreManager == null || !mounted) return;
-    print('[ProxyDetect] starting, waiting 3s...');
     await Future.delayed(const Duration(seconds: 3));
-    if (!mounted) { print('[ProxyDetect] not mounted after delay'); return; }
+    if (!mounted) return;
     try {
-      print('[ProxyDetect] calling detectNetworkProxy...');
       final detected = await coreManager!.detectNetworkProxy();
-      print('[ProxyDetect] detected: ${detected?.address}');
       if (detected == null || !mounted) return;
       _detectedProxyAddr = detected.address;
 
@@ -205,12 +202,11 @@ class _HomeState extends State<Home>
 
       if (!mounted) return;
 
-      print('[ProxyDetect] showing dialog for ${detected.address}');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showProxyAndCertDialog(detected, sslStatus);
       });
     } catch (e) {
-      print('[ProxyDetect] error: $e');
+      debugPrint('Proxy detection error: $e');
       debugPrint('Proxy detection error: $e');
     }
   }
