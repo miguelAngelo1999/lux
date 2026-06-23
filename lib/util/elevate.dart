@@ -50,26 +50,40 @@ Future<int> elevate(String path, message) async {
   final realPath = '$dir/lux_core_real';
   final user = Platform.environment['USER'] ?? 'root';
 
-  // Build the setup command: move binary → create wrapper → set up sudoers
-  final setupCommands = <String>[];
-  if (!await File(realPath).exists()) {
-    setupCommands.add('mv "$path" "$realPath"');
-  }
-  setupCommands.add('printf \'#!/bin/bash\\nexec sudo "$realPath" "\$@"\\n\' > "$path"');
-  setupCommands.add('chmod 755 "$path"');
-  setupCommands.add('chown root:wheel "$realPath"');
-  setupCommands.add('chmod 770 "$realPath"');
-  setupCommands.add('echo "$user ALL=(root) NOPASSWD: $realPath *" > /etc/sudoers.d/lux_core');
-  setupCommands.add('chmod 0440 /etc/sudoers.d/lux_core');
+  // Write the setup script to a temp file to avoid quoting hell in osascript
+  final scriptFile = File('/tmp/lux_elevate_setup.sh');
+  final scriptContent = '''#!/bin/bash
+set -e
+BIN="$path"
+REAL="$realPath"
+USER_NAME="$user"
 
-  final escapedCommand = setupCommands.join(' && ');
-  var messageArg = " with prompt \"$message\"";
-  var escapedScript =
-      "tell current application\n   activate\n   do shell script \"$escapedCommand\"$messageArg with administrator privileges without altering line endings\nend tell";
+if [ ! -f "\$REAL" ]; then
+  mv "\$BIN" "\$REAL"
+fi
+
+printf '#!/bin/bash\\nexec sudo "\$REAL" "\$@"\\n' > "\$BIN"
+chmod 755 "\$BIN"
+chown root:wheel "\$REAL"
+chmod 770 "\$REAL"
+echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *" > /etc/sudoers.d/lux_core
+chmod 0440 /etc/sudoers.d/lux_core
+''';
+  await scriptFile.writeAsString(scriptContent);
+  await Process.run('chmod', ['+x', scriptFile.path]);
+
+  // Run the script with admin privileges via osascript
+  final escapedScript =
+      'do shell script "bash /tmp/lux_elevate_setup.sh" with prompt "$message" with administrator privileges';
 
   var process = await Process.start(sudoCommandPath, ["-e", escapedScript]);
 
   process.stdout.transform(utf8.decoder).forEach(debugPrint);
   process.stderr.transform(utf8.decoder).forEach(debugPrint);
-  return await process.exitCode;
+  final code = await process.exitCode;
+
+  // Clean up temp script
+  try { await scriptFile.delete(); } catch (_) {}
+
+  return code;
 }
