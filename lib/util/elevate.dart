@@ -50,24 +50,19 @@ Future<int> elevate(String path, message) async {
   final realPath = '$dir/lux_core_real';
   final user = Platform.environment['USER'] ?? 'root';
 
-  // Build the setup commands
-  final commands = [
-    // Remove quarantine
-    'xattr -cr "${File(path).parent.parent.parent.parent.parent.parent.path}"',
-    // Move binary to _real
-    if (!await File(realPath).exists()) 'mv "$path" "$realPath"',
-    // Create wrapper script
-    if (!await File(realPath).exists() || !(await File(path).exists() && (await File(path).readAsString()).contains('lux_core_real')))
-      'printf \'#!/bin/bash\\nexec sudo "$dir/lux_core_real" "\$@"\\n\' > "$path" && chmod 755 "$path"',
-    // Set up sudoers
-    'echo "$user ALL=(root) NOPASSWD: $realPath *" > /etc/sudoers.d/lux_core',
-    'chmod 0440 /etc/sudoers.d/lux_core',
-    'visudo -c -f /etc/sudoers.d/lux_core || rm -f /etc/sudoers.d/lux_core',
-  ].where((c) => c.isNotEmpty).join(' && ');
+  // Build the setup command: move binary → create wrapper → set up sudoers
+  final setupCommands = <String>[];
+  if (!await File(realPath).exists()) {
+    setupCommands.add('mv "$path" "$realPath"');
+  }
+  setupCommands.add('printf \'#!/bin/bash\\nexec sudo "$realPath" "\$@"\\n\' > "$path"');
+  setupCommands.add('chmod 755 "$path"');
+  setupCommands.add('chown root:wheel "$realPath"');
+  setupCommands.add('chmod 770 "$realPath"');
+  setupCommands.add('echo "$user ALL=(root) NOPASSWD: $realPath *" > /etc/sudoers.d/lux_core');
+  setupCommands.add('chmod 0440 /etc/sudoers.d/lux_core');
 
-  // Fall back to the standard osascript elevation for the one-time setup
-  var escapedCommand =
-      "sudo chown root:wheel $path&&sudo chmod 770 $path&&sudo chmod +sx $path";
+  final escapedCommand = setupCommands.join(' && ');
   var messageArg = " with prompt \"$message\"";
   var escapedScript =
       "tell current application\n   activate\n   do shell script \"$escapedCommand\"$messageArg with administrator privileges without altering line endings\nend tell";
