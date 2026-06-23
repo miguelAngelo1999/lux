@@ -74,27 +74,29 @@ class _LogPageState extends State<LogPage> {
           try {
             // Log endpoint sends an array of JSON-encoded log strings
             final batch = json.decode(raw as String) as List<dynamic>;
+            final newEntries = <LogEntry>[];
             for (final item in batch) {
               try {
                 final data = json.decode(item as String) as Map<String, dynamic>;
-                // Convert ms timestamp to ISO string
                 final ts = data['time'];
                 final timeStr = ts is int
                     ? DateTime.fromMillisecondsSinceEpoch(ts).toIso8601String()
                     : ts?.toString() ?? '';
-                final entry = LogEntry(
+                newEntries.add(LogEntry(
                   level: data['level'] as String? ?? 'info',
                   time: timeStr,
                   message: data['msg'] as String? ?? '',
-                );
-                if (mounted) {
-                  setState(() {
-                    _logs.add(entry);
-                    if (_logs.length > 2000) _logs.removeAt(0);
-                  });
-                }
+                ));
               } catch (_) {}
             }
+            if (newEntries.isEmpty || !mounted) return;
+            // Single setState for the whole batch — not one per entry
+            setState(() {
+              _logs.addAll(newEntries);
+              if (_logs.length > 2000) {
+                _logs.removeRange(0, _logs.length - 2000);
+              }
+            });
             // Auto-scroll
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_scrollCtrl.hasClients) {
@@ -282,7 +284,7 @@ class _LogPageState extends State<LogPage> {
                           ),
                           const SizedBox(width: 6),
                           Expanded(
-                            child: SelectableText(
+                            child: Text(
                               e.message,
                               style: TextStyle(
                                   fontSize: 12,

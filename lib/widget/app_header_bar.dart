@@ -19,6 +19,8 @@ class AppHeaderBar extends StatefulWidget {
   final void Function(String) onCurProxyInfoChange;
   /// Called after lux successfully connects — used to trigger SSL bump check.
   final VoidCallback? onConnected;
+  /// Called after a proxy is added/edited so the proxies page can refresh.
+  final VoidCallback? onProxyListChanged;
   /// Extra widgets appended to the AppBar actions (used for window controls).
   final List<Widget>? extraActions;
 
@@ -29,6 +31,7 @@ class AppHeaderBar extends StatefulWidget {
       required this.curProxyInfo,
       required this.onCurProxyInfoChange,
       this.onConnected,
+      this.onProxyListChanged,
       this.extraActions});
 
   final String urlStr;
@@ -183,7 +186,10 @@ class _State extends State<AppHeaderBar> with WindowListener {
       context: context,
       builder: (context) => ProxyEditDialog(
         coreManager: widget.coreManager,
-        onSaved: () => refreshData(),
+        onSaved: () {
+          refreshData();
+          widget.onProxyListChanged?.call();
+        },
       ),
     );
   }
