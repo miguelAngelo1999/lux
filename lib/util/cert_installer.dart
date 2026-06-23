@@ -38,12 +38,20 @@ class CertInstaller {
         'ERRORS=""',
         '',
         '# 1. Trust in System Keychain',
+        '# Try system-wide first, fall back to login keychain if that fails',
         'if security add-trusted-cert -d -r trustRoot '
             '-k /Library/Keychains/System.keychain "\$CERT" 2>/dev/null; then',
         '  echo "STEP_KEYCHAIN=ok"',
+        'elif security add-trusted-cert -r trustRoot "\$CERT" 2>/dev/null; then',
+        '  echo "STEP_KEYCHAIN=ok"',
         'else',
-        '  echo "STEP_KEYCHAIN=fail"',
-        '  ERRORS="\$ERRORS keychain"',
+        '  # May already be trusted — check before declaring failure',
+        r'  FP=$(openssl x509 -in "$CERT" -noout -fingerprint -sha256 2>/dev/null | sed "s/.*=//" | tr -d ":")',
+        r'  if security find-certificate -a -Z /Library/Keychains/System.keychain 2>/dev/null | grep -qi "$FP"; then',
+        '    echo "STEP_KEYCHAIN=ok"',
+        '  else',
+        '    echo "STEP_KEYCHAIN=fail"',
+        '  fi',
         'fi',
         '',
         '# 2. Append to system OpenSSL cert stores (curl, wget)',
@@ -139,7 +147,7 @@ class CertInstaller {
         steps.add(InstallStep(
             name: 'macOS System Keychain',
             success: keychainOk,
-            note: keychainOk ? 'Trusted system-wide' : 'security command failed'));
+            note: keychainOk ? 'Trusted system-wide' : 'security command failed — try opening Keychain Access and trusting manually'));
         steps.add(InstallStep(
             name: 'curl (system OpenSSL)',
             success: curlOk,
@@ -158,22 +166,33 @@ class CertInstaller {
                 : 'certutil not found or no Firefox/Thunderbird profiles'));
       }
 
-      // Homebrew openssl@3
-      steps.add(await _appendToPemStore(pemBytes, [
+      // Homebrew openssl@3 — only attempt if the file actually exists
+      final brewSslPaths = [
         '/opt/homebrew/etc/openssl@3/cert.pem',
         '/usr/local/etc/openssl@3/cert.pem',
-      ], 'Homebrew openssl@3'));
+      ];
+      final brewSslExists = brewSslPaths.any((p) => File(p).existsSync());
+      if (brewSslExists) {
+        steps.add(await _appendToPemStore(pemBytes, brewSslPaths, 'Homebrew openssl@3'));
+      }
 
-      // Git (Homebrew openssl bundle)
-      steps.add(await _appendToPemStore(pemBytes, [
+      // Git (Homebrew openssl bundle) — only attempt if file exists
+      final gitPaths = [
         '/opt/homebrew/etc/openssl@3/cert.pem',
         '/usr/local/etc/openssl@3/cert.pem',
         '/opt/homebrew/etc/openssl/cert.pem',
         '/usr/local/etc/openssl/cert.pem',
-      ], 'git (Homebrew bundle)'));
+      ];
+      final gitPathExists = gitPaths.any((p) => File(p).existsSync());
+      if (gitPathExists) {
+        steps.add(await _appendToPemStore(pemBytes, gitPaths, 'git (Homebrew bundle)'));
+      }
 
-      // Python certifi
-      steps.addAll(await _installPythonCertifi(pemBytes));
+      // Python certifi — only add step if python/certifi is actually found
+      final pythonSteps = await _installPythonCertifi(pemBytes);
+      if (pythonSteps.any((s) => s.success || !s.note.contains('Python not found'))) {
+        steps.addAll(pythonSteps);
+      }
 
       // App-bundled cert stores (only add if something was found)
       final appBundleStep = await _installAppBundledCerts(pemBytes);
