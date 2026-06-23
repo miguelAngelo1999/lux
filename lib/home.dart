@@ -107,66 +107,13 @@ class _HomeState extends State<Home>
     if (!mounted) return;
     try {
       if (Platform.isWindows) {
-        // Windows: read proxy from registry before lux_core overwrites it
-        final result = await Process.run('powershell.exe', [
-          '-noprofile', '-NonInteractive', '-command',
-          r'$k = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -EA SilentlyContinue;'
-          r'if ($k.ProxyEnable -eq 1 -and $k.ProxyServer) { Write-Output $k.ProxyServer } else { Write-Output "" }',
-        ]).timeout(const Duration(seconds: 5));
-        final proxyServer = result.stdout.toString().trim();
-        if (proxyServer.isNotEmpty && !proxyServer.contains('127.0.0.1')) {
-          // Parse host:port
-          final parts = proxyServer.split(':');
-          final host = parts[0];
-          final port = parts.length > 1 ? parts[1] : '8080';
-          if (_dismissedProxies.contains('$host:$port')) return;
-          final detected = DetectedProxy(
-            host: host,
-            port: port,
-            scheme: 'http',
-            needsAuth: false,
-            source: 'registry',
-          );
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _showProxyAndCertDialog(
-              detected,
-              SslBumpStatus(detected: false, hasCert: false, error: 'not_probed'),
-            );
-          });
-          return;
-        }
-        // Also check netsh winhttp (GPO/DHCP proxy)
-        final winhttp = await Process.run('netsh', ['winhttp', 'show', 'proxy'],
-            runInShell: false).timeout(const Duration(seconds: 3));
-        final whOut = winhttp.stdout.toString();
-        final match = RegExp(r'Proxy Server.*?:\s*(.+)', caseSensitive: false).firstMatch(whOut);
-        if (match != null) {
-          final server = match.group(1)!.trim();
-          if (server.isNotEmpty && !server.contains('127.0.0.1') && server != '(null)') {
-            final parts = server.split(':');
-            final host = parts[0];
-            final port = parts.length > 1 ? parts[1] : '8080';
-            if (_dismissedProxies.contains('$host:$port')) return;
-            final detected = DetectedProxy(
-              host: host,
-              port: port,
-              scheme: 'http',
-              needsAuth: false,
-              source: 'winhttp',
-            );
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _showProxyAndCertDialog(
-                detected,
-                SslBumpStatus(detected: false, hasCert: false, error: 'not_probed'),
-              );
-            });
-            return;
-          }
-        }
-      } else {
-        // macOS: use scutil
-        final result = await Process.run('scutil', ['--proxy'],
-            runInShell: false).timeout(const Duration(seconds: 3));
+        // On Windows, lux_core's /proxies/detect handles registry + winhttp detection.
+        // Nothing to do here before lux_core starts — defer to _checkForNetworkProxy().
+        return;
+      }
+      // macOS: use scutil
+      final result = await Process.run('scutil', ['--proxy'],
+          runInShell: false).timeout(const Duration(seconds: 3));
       final out = result.stdout as String;
       final lines = out.split('\n');
       final settings = <String, String>{};
@@ -232,10 +179,8 @@ class _HomeState extends State<Home>
       // Check ProxyAutoDiscoveryEnable (WPAD via DHCP)
       if (settings['ProxyAutoDiscoveryEnable'] == '1') {
         // WPAD is enabled — defer to lux_core's DHCP/DNS WPAD probe after startup
-        // Early detection can't resolve WPAD without network requests
         debugPrint('WPAD auto-discovery enabled — deferring to lux_core detection');
       }
-      } // end macOS else
     } catch (_) {}
     // Fall back to lux_core detection after it starts
   }
