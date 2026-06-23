@@ -32,55 +32,87 @@ class CertInstaller {
       final adminScript = File('/tmp/lux_cert_install.sh');
       final scriptLines = [
         '#!/bin/bash',
-        'set -e',
+        '# Do NOT use set -e — each step must run independently.',
+        '# A failure in one step should not abort the rest.',
         'CERT="$certPath"',
+        'ERRORS=""',
         '',
         '# 1. Trust in System Keychain',
-        'security add-trusted-cert -d -r trustRoot '
-            '-k /Library/Keychains/System.keychain "\$CERT"',
+        '# Try system-wide first, fall back to login keychain if that fails',
+        'if security add-trusted-cert -d -r trustRoot '
+            '-k /Library/Keychains/System.keychain "\$CERT" 2>/dev/null; then',
+        '  echo "STEP_KEYCHAIN=ok"',
+        'elif security add-trusted-cert -r trustRoot "\$CERT" 2>/dev/null; then',
+        '  echo "STEP_KEYCHAIN=ok"',
+        'else',
+        '  # May already be trusted — check before declaring failure',
+        r'  FP=$(openssl x509 -in "$CERT" -noout -fingerprint -sha256 2>/dev/null | sed "s/.*=//" | tr -d ":")',
+        r'  if security find-certificate -a -Z /Library/Keychains/System.keychain 2>/dev/null | grep -qi "$FP"; then',
+        '    echo "STEP_KEYCHAIN=ok"',
+        '  else',
+        '    echo "STEP_KEYCHAIN=fail"',
+        '  fi',
+        'fi',
         '',
         '# 2. Append to system OpenSSL cert stores (curl, wget)',
-        'for STORE in /etc/ssl/cert.pem /usr/local/etc/openssl/cert.pem /opt/homebrew/etc/openssl/cert.pem; do',
+        'CURL_OK=0',
+        'for STORE in /etc/ssl/cert.pem /usr/local/etc/openssl/cert.pem /opt/homebrew/etc/openssl/cert.pem /opt/homebrew/etc/openssl@3/cert.pem /usr/local/etc/openssl@3/cert.pem; do',
         '  if [ -f "\$STORE" ]; then',
-        '    if ! grep -q "Added by Lux SSL" "\$STORE" 2>/dev/null; then',
-        '      echo "" >> "\$STORE"',
-        '      echo "# Added by Lux SSL inspection CA" >> "\$STORE"',
-        '      cat "\$CERT" >> "\$STORE"',
+        '    if ! grep -qF "BEGIN CERTIFICATE" "\$STORE" 2>/dev/null || ! diff <(openssl x509 -in "\$CERT" -noout -fingerprint 2>/dev/null) <(openssl x509 -in "\$STORE" -noout -fingerprint 2>/dev/null) > /dev/null 2>&1; then',
+        '      if ! grep -q "Added by Lux SSL" "\$STORE" 2>/dev/null; then',
+        '        echo "" >> "\$STORE" && echo "# Added by Lux SSL inspection CA" >> "\$STORE" && cat "\$CERT" >> "\$STORE" && CURL_OK=1',
+        '      else',
+        '        CURL_OK=1',
+        '      fi',
+        '    else',
+        '      CURL_OK=1',
         '    fi',
         '  fi',
         'done',
+        'echo "STEP_CURL=\$CURL_OK"',
         '',
-        '# 3. Node.js NODE_EXTRA_CA_CERTS',
-        'mkdir -p /etc/ssl/certs',
-        'cp "\$CERT" /etc/ssl/certs/lux_intercept_ca.pem',
-        'chmod 644 /etc/ssl/certs/lux_intercept_ca.pem',
+        '# 3. Node.js NODE_EXTRA_CA_CERTS + curl CURL_CA_BUNDLE',
+        'NODE_OK=0',
+        'mkdir -p /etc/ssl/certs 2>/dev/null || true',
+        'if cp "\$CERT" /etc/ssl/certs/lux_intercept_ca.pem 2>/dev/null; then',
+        '  chmod 644 /etc/ssl/certs/lux_intercept_ca.pem 2>/dev/null || true',
+        '  NODE_OK=1',
+        'fi',
         '',
         'if [ ! -f /etc/launchd.conf ] || ! grep -q NODE_EXTRA_CA_CERTS /etc/launchd.conf 2>/dev/null; then',
-        '  echo "setenv NODE_EXTRA_CA_CERTS /etc/ssl/certs/lux_intercept_ca.pem" >> /etc/launchd.conf',
+        '  echo "setenv NODE_EXTRA_CA_CERTS /etc/ssl/certs/lux_intercept_ca.pem" >> /etc/launchd.conf 2>/dev/null || true',
         'fi',
         '',
         'EXPORT_LINE="export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/lux_intercept_ca.pem"',
+        'CURL_LINE="export CURL_CA_BUNDLE=/etc/ssl/cert.pem"',
         'if [ ! -f /etc/zshenv ] || ! grep -q NODE_EXTRA_CA_CERTS /etc/zshenv 2>/dev/null; then',
-        '  echo "\$EXPORT_LINE" >> /etc/zshenv',
+        '  echo "\$EXPORT_LINE" >> /etc/zshenv 2>/dev/null || true',
         'fi',
-        'mkdir -p /etc/profile.d',
+        'if [ ! -f /etc/zshenv ] || ! grep -q CURL_CA_BUNDLE /etc/zshenv 2>/dev/null; then',
+        '  echo "\$CURL_LINE" >> /etc/zshenv 2>/dev/null || true',
+        'fi',
+        'mkdir -p /etc/profile.d 2>/dev/null || true',
         'if [ ! -f /etc/profile.d/lux_ca.sh ] || ! grep -q NODE_EXTRA_CA_CERTS /etc/profile.d/lux_ca.sh 2>/dev/null; then',
-        '  echo "\$EXPORT_LINE" >> /etc/profile.d/lux_ca.sh',
+        '  echo "\$EXPORT_LINE" >> /etc/profile.d/lux_ca.sh 2>/dev/null || true',
+        '  echo "\$CURL_LINE" >> /etc/profile.d/lux_ca.sh 2>/dev/null || true',
         'fi',
+        'echo "STEP_NODE=\$NODE_OK"',
         '',
         '# 4. Firefox / Thunderbird — NSS cert databases',
-        r'CERTUTIL_BIN=$(command -v certutil 2>/dev/null || find /Applications /opt/homebrew /usr/local -name certutil -type f 2>/dev/null | head -1)',
+        r'CERTUTIL_BIN=$(command -v certutil 2>/dev/null || find /opt/homebrew/bin /usr/local/bin /Applications -name certutil -type f 2>/dev/null | head -1)',
+        'NSS_OK=0',
         r'if [ -x "$CERTUTIL_BIN" ]; then',
-        r'  for PROF_BASE in "$HOME/Library/Application Support/Firefox/Profiles" "$HOME/Library/Application Support/Thunderbird/Profiles" "$HOME/Library/Application Support/Mozilla/Firefox/Profiles"; do',
+        r'  for PROF_BASE in "$HOME/Library/Application Support/Firefox/Profiles" "$HOME/Library/Application Support/Thunderbird/Profiles"; do',
         r'    if [ -d "$PROF_BASE" ]; then',
         r'      for DB in "$PROF_BASE"/*/; do',
         r'        if [ -f "${DB}cert9.db" ] || [ -f "${DB}cert8.db" ]; then',
-        r'          "$CERTUTIL_BIN" -A -n "Lux SSL Inspection CA" -t "CT,C,C" -i "$CERT" -d "$DB" 2>/dev/null || true',
+        r'          "$CERTUTIL_BIN" -A -n "Lux SSL Inspection CA" -t "CT,C,C" -i "$CERT" -d "$DB" 2>/dev/null && NSS_OK=1 || true',
         r'        fi',
         r'      done',
         r'    fi',
         r'  done',
         r'fi',
+        'echo "STEP_NSS=\$NSS_OK"',
         '',
         'echo "LUX_CERT_INSTALL_OK"',
       ];
@@ -88,24 +120,19 @@ class CertInstaller {
       await adminScript.writeAsString(scriptLines.join('\n'));
       await Process.run('chmod', ['+x', adminScript.path]);
 
-      final adminExit = await _runMacOSAdminScript(adminScript.path);
+      final adminResult = await _runMacOSAdminScript(
+          adminScript.path,
+          'Lux needs admin access to install the CA certificate');
       await adminScript.delete().catchError((_) => adminScript);
 
-      if (adminExit == 0) {
-        steps.add(const InstallStep(
-            name: 'macOS System Keychain', success: true, note: 'Trusted system-wide'));
-        steps.add(const InstallStep(
-            name: 'curl (system OpenSSL)', success: true, note: 'Appended to system stores'));
-        steps.add(const InstallStep(
-            name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)', success: true,
-            note: 'Cert at /etc/ssl/certs/lux_intercept_ca.pem; set in launchd.conf + zshenv'));
-        steps.add(const InstallStep(
-            name: 'Firefox / Thunderbird (NSS)', success: true,
-            note: 'Injected into all profile cert9.db databases'));
-      } else {
+      final adminOut = adminResult.stdout;
+      debugPrint('macOS cert admin exit=${adminResult.exitCode} out=$adminOut');
+
+      if (adminResult.exitCode != 0) {
+        // User cancelled or osascript itself failed — mark all as failed
         steps.add(InstallStep(
             name: 'macOS System Keychain', success: false,
-            note: 'Admin script failed (exit $adminExit). User may have cancelled.'));
+            note: 'Admin script failed (exit ${adminResult.exitCode}). User may have cancelled.'));
         steps.add(const InstallStep(
             name: 'curl (system OpenSSL)', success: false, note: 'Admin script failed'));
         steps.add(const InstallStep(
@@ -114,24 +141,62 @@ class CertInstaller {
         steps.add(const InstallStep(
             name: 'Firefox / Thunderbird (NSS)', success: false,
             note: 'Admin script failed'));
+      } else {
+        // Parse per-step results from stdout
+        final keychainOk = adminOut.contains('STEP_KEYCHAIN=ok');
+        final curlOk = adminOut.contains('STEP_CURL=1');
+        final nodeOk = adminOut.contains('STEP_NODE=1');
+        final nssOk = adminOut.contains('STEP_NSS=1');
+
+        steps.add(InstallStep(
+            name: 'macOS System Keychain',
+            success: keychainOk,
+            note: keychainOk ? 'Trusted system-wide' : 'security command failed — try opening Keychain Access and trusting manually'));
+        steps.add(InstallStep(
+            name: 'curl (system OpenSSL)',
+            success: curlOk,
+            note: curlOk ? 'Appended to system cert stores' : 'No system OpenSSL store found'));
+        steps.add(InstallStep(
+            name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)',
+            success: nodeOk,
+            note: nodeOk
+                ? 'Cert at /etc/ssl/certs/lux_intercept_ca.pem; set in launchd.conf + zshenv'
+                : 'Could not write to /etc/ssl/certs'));
+        steps.add(InstallStep(
+            name: 'Firefox / Thunderbird (NSS)',
+            success: nssOk,
+            note: nssOk
+                ? 'Injected into profile cert databases'
+                : 'certutil not found or no Firefox/Thunderbird profiles'));
       }
 
-      // Homebrew openssl@3
-      steps.add(await _appendToPemStore(pemBytes, [
+      // Homebrew openssl@3 — only attempt if the file actually exists
+      final brewSslPaths = [
         '/opt/homebrew/etc/openssl@3/cert.pem',
         '/usr/local/etc/openssl@3/cert.pem',
-      ], 'Homebrew openssl@3'));
+      ];
+      final brewSslExists = brewSslPaths.any((p) => File(p).existsSync());
+      if (brewSslExists) {
+        steps.add(await _appendToPemStore(pemBytes, brewSslPaths, 'Homebrew openssl@3'));
+      }
 
-      // Git (Homebrew openssl bundle)
-      steps.add(await _appendToPemStore(pemBytes, [
+      // Git (Homebrew openssl bundle) — only attempt if file exists
+      final gitPaths = [
         '/opt/homebrew/etc/openssl@3/cert.pem',
         '/usr/local/etc/openssl@3/cert.pem',
         '/opt/homebrew/etc/openssl/cert.pem',
         '/usr/local/etc/openssl/cert.pem',
-      ], 'git (Homebrew bundle)'));
+      ];
+      final gitPathExists = gitPaths.any((p) => File(p).existsSync());
+      if (gitPathExists) {
+        steps.add(await _appendToPemStore(pemBytes, gitPaths, 'git (Homebrew bundle)'));
+      }
 
-      // Python certifi
-      steps.addAll(await _installPythonCertifi(pemBytes));
+      // Python certifi — only add step if python/certifi is actually found
+      final pythonSteps = await _installPythonCertifi(pemBytes);
+      if (pythonSteps.any((s) => s.success || !s.note.contains('Python not found'))) {
+        steps.addAll(pythonSteps);
+      }
 
       // App-bundled cert stores (only add if something was found)
       final appBundleStep = await _installAppBundledCerts(pemBytes);
@@ -148,18 +213,21 @@ class CertInstaller {
     );
   }
 
-  static Future<int> _runMacOSAdminScript(String scriptPath) async {
-    final appleScript =
-        "do shell script \"bash '$scriptPath'\" with prompt "
-        "\"Lux needs admin access to install the CA certificate\" "
-        "with administrator privileges";
-    final result = await Process.run('/usr/bin/osascript', ['-e', appleScript]);
-    debugPrint('macOS admin script exit=${result.exitCode} '
-        'stdout=${result.stdout} err=${result.stderr}');
-    return result.exitCode;
+  static Future<({int exitCode, String stdout})> _runMacOSAdminScript(
+      String scriptPath, String prompt) async {
+    // Try sudo -n first (NOPASSWD — instant, no prompt after first-launch setup)
+    final sudoResult = await Process.run('sudo', ['-n', 'bash', scriptPath]);
+    if (sudoResult.exitCode == 0) {
+      return (exitCode: 0, stdout: sudoResult.stdout.toString());
+    }
+    // Fall back to osascript — macOS shows Touch ID if available, else password
+    final result = await Process.run('/usr/bin/osascript', ['-e',
+      "do shell script \"bash '$scriptPath'\" with prompt "
+      "\"$prompt\" "
+      "with administrator privileges"]);
+    debugPrint('cert admin (osascript): exit=${result.exitCode}');
+    return (exitCode: result.exitCode, stdout: result.stdout.toString());
   }
-
-  // ── Windows ────────────────────────────────────────────────────────────────
 
   static Future<InstallResult> _installWindows(List<int> pemBytes) async {
     final steps = <InstallStep>[];

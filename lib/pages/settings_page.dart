@@ -1115,7 +1115,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               child: Text(
                 Platform.isWindows
                     ? 'Installs into Windows Trusted Root (all users), Git for Windows, Node.js, and Python certifi.'
-                    : 'Installs into macOS System Keychain (all users), curl, git, Homebrew openssl, Node.js, and Python certifi.',
+                    : 'Installs into macOS System Keychain (all users), curl/OpenSSL, and Node.js. Homebrew openssl, Firefox, and Python certifi installed if present.',
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
             ),

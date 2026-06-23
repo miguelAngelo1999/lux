@@ -23,12 +23,8 @@ Future<String?> getFileOwner(String path) async {
 
 /// Checks if the NOPASSWD sudoers entry already exists for lux_core.
 Future<bool> _isSudoersConfigured(String corePath) async {
-  final realPath = '${corePath}_real';
   final sudoersFile = File('/etc/sudoers.d/lux_core');
-  if (!await sudoersFile.exists()) return false;
-  // Can't read file content (root-owned 0440) but if it exists and
-  // the wrapper + real binary are in place, assume it's configured correctly
-  return true;
+  return await sudoersFile.exists();
 }
 
 /// Checks if the core binary is already wrapped with the sudo script.
@@ -68,7 +64,26 @@ chmod 755 "\$BIN"
 chown root:wheel "\$REAL"
 chmod 770 "\$REAL"
 echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *" > /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_proxy_apply.sh" >> /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_proxy_clear.sh" >> /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_cert_install.sh" >> /etc/sudoers.d/lux_core
 chmod 0440 /etc/sudoers.d/lux_core
+
+# Enable Touch ID for sudo — use sudo_local (persists across macOS updates)
+# /etc/pam.d/sudo is reset on OS updates; sudo_local is preserved
+SUDO_LOCAL=/etc/pam.d/sudo_local
+if [ ! -f "\$SUDO_LOCAL" ] || ! grep -qE '^auth[[:space:]]+sufficient[[:space:]]+pam_tid\\.so' "\$SUDO_LOCAL" 2>/dev/null; then
+  cat > "\$SUDO_LOCAL" << 'PAM'
+# sudo_local: local config file which survives system update and is included for sudo
+auth       sufficient     pam_tid.so
+PAM
+fi
+# Also patch /etc/pam.d/sudo to include sudo_local if not already there
+PAM_SUDO=/etc/pam.d/sudo
+if ! grep -q "sudo_local" "\$PAM_SUDO" 2>/dev/null; then
+  sed -i '' '1a\\
+auth       include        sudo_local' "\$PAM_SUDO" 2>/dev/null || true
+fi
 ''';
   await scriptFile.writeAsString(scriptContent);
   await Process.run('chmod', ['+x', scriptFile.path]);
