@@ -190,12 +190,8 @@ class _HomeState extends State<Home>
       if (detected == null || !mounted) return;
       _detectedProxyAddr = detected.address;
 
-      // Check if this proxy is already configured in Lux
-      final proxyList = await coreManager!.getProxyList();
-      final alreadyConfigured = proxyList.proxies.any((p) =>
-          p.server != null &&
-          '${p.server}:${p.port}' == detected.address);
-
+      // Always show the detection dialog — let user decide what to do.
+      // The dialog has a "Don't show again" option for repeat launches.
       // Run SSL bump probe only if proxy doesn't need auth (would hang otherwise)
       final sslStatus = detected.needsAuth
           ? SslBumpStatus(detected: false, hasCert: false)
@@ -205,23 +201,6 @@ class _HomeState extends State<Home>
             );
 
       if (!mounted) return;
-
-      // If proxy already configured, skip the "add proxy" dialog
-      // but still prompt for SSL cert installation if bump is detected
-      if (alreadyConfigured) {
-        if (sslStatus.detected && sslStatus.hasCert) {
-          final fp = sslStatus.certInfo?.sha256Fingerprint ?? '';
-          if (await InstalledCertsStore.isFullyInstalled(fp)) {
-            // Cert already trusted in all available stores
-            return;
-          }
-          _lastDetectedCertFingerprint = fp;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _showInlineCertTrustDialog(sslStatus);
-          });
-        }
-        return;
-      }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showProxyAndCertDialog(detected, sslStatus);
