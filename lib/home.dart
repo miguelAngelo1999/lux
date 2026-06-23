@@ -197,15 +197,33 @@ class _HomeState extends State<Home>
       if (detected == null || !mounted) return;
       _detectedProxyAddr = detected.address;
 
-      // Always show the detection dialog — let user decide what to do.
-      // The dialog has a "Don't show again" option for repeat launches.
-      // Run SSL bump probe only if proxy doesn't need auth (would hang otherwise)
-      final sslStatus = detected.needsAuth
-          ? SslBumpStatus(detected: false, hasCert: false)
-          : await coreManager!.getSslBumpStatus(
-              proxyAddr: detected.address,
-              fresh: true,
-            );
+      // Run SSL bump probe. If the proxy requires auth (407), probe through
+      // lux's own local proxy (127.0.0.1:1090) which already handles auth.
+      // Wait a bit for auto-connect to complete first.
+      SslBumpStatus sslStatus;
+      if (detected.needsAuth) {
+        // Give auto-connect time to complete (it starts immediately with backoff)
+        await Future.delayed(const Duration(seconds: 3));
+        // Check if lux is actually connected now
+        bool isConnected = false;
+        try { isConnected = await coreManager!.getIsStarted(); } catch (_) {}
+        if (isConnected) {
+          // Probe via lux local proxy — it authenticates with the upstream proxy
+          final setting = await coreManager!.getSetting().catchError((_) => const Setting());
+          final localPort = setting.localServerPort;
+          sslStatus = await coreManager!.getSslBumpStatus(
+            proxyAddr: '127.0.0.1:$localPort',
+            fresh: true,
+          );
+        } else {
+          sslStatus = SslBumpStatus(detected: false, hasCert: false);
+        }
+      } else {
+        sslStatus = await coreManager!.getSslBumpStatus(
+          proxyAddr: detected.address,
+          fresh: true,
+        );
+      }
 
       if (!mounted) return;
 
