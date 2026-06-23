@@ -498,11 +498,8 @@ class CoreManager {
           ));
       if (res.statusCode == 200 && res.data is Map) {
         final d = res.data as Map<String, dynamic>;
-        if (d['detected'] == true) {
-          final proxies = d['proxies'] as List?;
-          if (proxies != null && proxies.isNotEmpty) {
-            return DetectedProxy.fromJson(proxies.first as Map<String, dynamic>);
-          }
+        if (d['found'] == true) {
+          return DetectedProxy.fromJson(d);
         }
       }
       return null;
