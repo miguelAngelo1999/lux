@@ -44,8 +44,10 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   Future<void> refreshProxyList() async {
     final proxyList = await widget.coreManager.getProxyList();
+    // Fetch subscriptions in parallel with proxy list
     final subscriptionListValue =
         await widget.coreManager.getSubscriptionList();
+    if (!mounted) return;
     setState(() {
       subscriptionList = subscriptionListValue.value;
       proxyListGroup = ProxyListGroup(
@@ -58,11 +60,24 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       for (var group in proxyListGroup.groups) {
         var key = group.id;
         if (!isCollapsedMap.containsKey(key)) {
-          setState(() {
-            isCollapsedMap[key] = true;
-          });
+          isCollapsedMap[key] = true;
         }
       }
+    });
+  }
+
+  // Lightweight refresh — only fetches the proxy list (skips subscriptions).
+  // Use after add/edit/delete where subscription list didn't change.
+  Future<void> _refreshProxiesOnly() async {
+    final proxyList = await widget.coreManager.getProxyList();
+    if (!mounted) return;
+    setState(() {
+      proxyListGroup = ProxyListGroup(
+          allProxies: proxyList.proxies,
+          subscriptions: subscriptionList,
+          selectedId: proxyList.id);
+      Provider.of<AppStateModel>(context, listen: false)
+          .updateSelectedProxyId(proxyListGroup.selectedId);
     });
   }
 
@@ -130,11 +145,19 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   }
 
   void _handleDeleteItem(ProxyItem item) async {
-    await widget.coreManager.deleteProxies([item.id]);
-    await refreshData();
-    if (item.id == proxyListGroup.selectedId) {
-      widget.onCurProxyInfoChange("");
-    }
+    // Optimistic update — remove from UI immediately before the HTTP call
+    final wasSelected = item.id == proxyListGroup.selectedId;
+    setState(() {
+      proxyListGroup = ProxyListGroup(
+        allProxies: proxyListGroup.allProxies.where((p) => p.id != item.id).toList(),
+        subscriptions: subscriptionList,
+        selectedId: proxyListGroup.selectedId,
+      );
+    });
+    if (wasSelected) widget.onCurProxyInfoChange("");
+
+    // Backend call + lightweight background sync (no await on purpose)
+    widget.coreManager.deleteProxies([item.id]).then((_) => _refreshProxiesOnly());
   }
 
   void _handleEditItem(ProxyItem item) async {
@@ -147,7 +170,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       builder: (context) => ProxyEditDialog(
         coreManager: widget.coreManager,
         initialValue: detail,
-        onSaved: () => refreshData(),
+        onSaved: () => _refreshProxiesOnly(), // skip subscription fetch
       ),
     );
   }
@@ -212,7 +235,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         SnackBar(content: Text(tr().lockPasswordSuccess)),
       );
       // Refresh the proxy list to reflect the locked state
-      refreshProxyList();
+      _refreshProxiesOnly();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
