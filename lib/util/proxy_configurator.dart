@@ -101,13 +101,8 @@ cp /tmp/lux_zshenv_clean /etc/zshenv 2>/dev/null || true
 echo "LUX_PROXY_APPLY_OK"
 ''');
 
-    await Process.run('chmod', ['+x', adminScript.path]);
-    // Run with admin privileges via osascript
-    await Process.run('/usr/bin/osascript', ['-e',
-      "do shell script \"bash '${adminScript.path}'\" "
-      "with prompt \"Lux needs admin access to configure system proxy\" "
-      "with administrator privileges"]);
-    await adminScript.delete().catchError((_) => adminScript);
+    await _runAdminScript(adminScript,
+        'Lux needs admin access to configure system proxy');
 
     // User-level — no admin needed
     await _setGitProxy(httpProxy);
@@ -143,12 +138,8 @@ cp /tmp/lux_zshenv_clean /etc/zshenv 2>/dev/null || true
 echo "LUX_PROXY_CLEAR_OK"
 ''');
 
-    await Process.run('chmod', ['+x', adminScript.path]);
-    await Process.run('/usr/bin/osascript', ['-e',
-      "do shell script \"bash '${adminScript.path}'\" "
-      "with prompt \"Lux needs admin access to clear system proxy\" "
-      "with administrator privileges"]);
-    await adminScript.delete().catchError((_) => adminScript);
+    await _runAdminScript(adminScript,
+        'Lux needs admin access to clear system proxy');
 
     await _clearGitProxy();
     await _clearNpmProxy();
@@ -192,6 +183,33 @@ user_pref("network.proxy.no_proxies_on", "$_noProxy");
         } catch (_) {}
       }
     }
+  }
+
+  static Future<void> _runAdminScript(File script, String prompt) async {
+    await Process.run('chmod', ['+x', script.path]);
+
+    // Check if pam_tid is active (not commented out) in /etc/pam.d/sudo
+    bool pamTidEnabled = false;
+    try {
+      final lines = await File('/etc/pam.d/sudo').readAsLines();
+      pamTidEnabled = lines.any((l) {
+        final trimmed = l.trim();
+        return !trimmed.startsWith('#') && trimmed.contains('pam_tid.so');
+      });
+    } catch (_) {}
+
+    if (pamTidEnabled) {
+      // Use sudo — Touch ID prompt via PAM (no terminal window, fingerprint sensor)
+      final result = await Process.run('sudo', ['bash', script.path]);
+      debugPrint('admin script (sudo/TouchID): exit=${result.exitCode}');
+    } else {
+      // Fall back to osascript — shows standard macOS password dialog
+      await Process.run('/usr/bin/osascript', ['-e',
+        "do shell script \"bash '${script.path}'\" "
+        "with prompt \"$prompt\" "
+        "with administrator privileges"]);
+    }
+    await script.delete().catchError((_) => script);
   }
 
   static Future<void> _clearFirefoxProxy() async {
