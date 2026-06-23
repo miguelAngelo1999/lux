@@ -133,7 +133,7 @@ class _HomeState extends State<Home>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _showProxyAndCertDialog(
               detected,
-              SslBumpStatus(detected: false, hasCert: false),
+              SslBumpStatus(detected: false, hasCert: false, error: 'not_probed'),
             );
           });
           return;
@@ -160,7 +160,7 @@ class _HomeState extends State<Home>
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _showProxyAndCertDialog(
                 detected,
-                SslBumpStatus(detected: false, hasCert: false),
+                SslBumpStatus(detected: false, hasCert: false, error: 'not_probed'),
               );
             });
             return;
@@ -316,7 +316,7 @@ class _HomeState extends State<Home>
                         ],
                       ),
                     ),
-                  ] else if (ssl.error != null && ssl.error!.contains('407')) ...[
+                  ] else if (ssl.error != null && (ssl.error!.contains('407') || detected.needsAuth)) ...[
                     // Auth required — can't probe SSL without credentials
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -344,7 +344,8 @@ class _HomeState extends State<Home>
                         ],
                       ),
                     ),
-                  ] else ...[
+                  ] else if (ssl.error == null && !detected.needsAuth) ...[
+                    // Only show "no SSL interception" if we actually probed successfully
                     Row(children: const [
                       Icon(Icons.shield_outlined, size: 13, color: Colors.green),
                       SizedBox(width: 4),
