@@ -196,11 +196,13 @@ class _HomeState extends State<Home>
           p.server != null &&
           '${p.server}:${p.port}' == detected.address);
 
-      // Run SSL bump probe regardless — ensure certs are installed
-      final sslStatus = await coreManager!.getSslBumpStatus(
-        proxyAddr: detected.address,
-        fresh: true,
-      );
+      // Run SSL bump probe only if proxy doesn't need auth (would hang otherwise)
+      final sslStatus = detected.needsAuth
+          ? SslBumpStatus(detected: false, hasCert: false)
+          : await coreManager!.getSslBumpStatus(
+              proxyAddr: detected.address,
+              fresh: true,
+            );
 
       if (!mounted) return;
 
