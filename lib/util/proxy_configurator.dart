@@ -188,27 +188,20 @@ user_pref("network.proxy.no_proxies_on", "$_noProxy");
   static Future<void> _runAdminScript(File script, String prompt) async {
     await Process.run('chmod', ['+x', script.path]);
 
-    // Check if pam_tid is active (not commented out) in /etc/pam.d/sudo
-    bool pamTidEnabled = false;
-    try {
-      final lines = await File('/etc/pam.d/sudo').readAsLines();
-      pamTidEnabled = lines.any((l) {
-        final trimmed = l.trim();
-        return !trimmed.startsWith('#') && trimmed.contains('pam_tid.so');
-      });
-    } catch (_) {}
-
-    if (pamTidEnabled) {
-      // Use sudo — Touch ID prompt via PAM (no terminal window, fingerprint sensor)
-      final result = await Process.run('sudo', ['bash', script.path]);
-      debugPrint('admin script (sudo/TouchID): exit=${result.exitCode}');
-    } else {
-      // Fall back to osascript — shows standard macOS password dialog
-      await Process.run('/usr/bin/osascript', ['-e',
-        "do shell script \"bash '${script.path}'\" "
-        "with prompt \"$prompt\" "
-        "with administrator privileges"]);
+    // Try sudo -n first (non-interactive). Works if NOPASSWD sudoers is set up.
+    // This is the normal path after first-launch elevation — instant, no prompt.
+    final sudoResult = await Process.run('sudo', ['-n', 'bash', script.path]);
+    if (sudoResult.exitCode == 0) {
+      await script.delete().catchError((_) => script);
+      return;
     }
+
+    // NOPASSWD not set up yet — use osascript.
+    // macOS automatically shows Touch ID if available, password otherwise.
+    await Process.run('/usr/bin/osascript', ['-e',
+      "do shell script \"bash '${script.path}'\" "
+      "with prompt \"$prompt\" "
+      "with administrator privileges"]);
     await script.delete().catchError((_) => script);
   }
 

@@ -215,31 +215,18 @@ class CertInstaller {
 
   static Future<({int exitCode, String stdout})> _runMacOSAdminScript(
       String scriptPath, String prompt) async {
-    bool pamTidEnabled = false;
-    for (final p in ['/etc/pam.d/sudo_local', '/etc/pam.d/sudo']) {
-      try {
-        final lines = await File(p).readAsLines();
-        if (lines.any((l) =>
-            !l.trim().startsWith('#') && l.contains('pam_tid.so'))) {
-          pamTidEnabled = true;
-          break;
-        }
-      } catch (_) {}
+    // Try sudo -n first (NOPASSWD — instant, no prompt after first-launch setup)
+    final sudoResult = await Process.run('sudo', ['-n', 'bash', scriptPath]);
+    if (sudoResult.exitCode == 0) {
+      return (exitCode: 0, stdout: sudoResult.stdout.toString());
     }
-
-    if (pamTidEnabled) {
-      final result = await Process.run('sudo', ['bash', scriptPath]);
-      debugPrint('cert admin (sudo/TouchID): exit=${result.exitCode}');
-      return (exitCode: result.exitCode, stdout: result.stdout.toString());
-    } else {
-      final appleScript =
-          "do shell script \"bash '$scriptPath'\" with prompt "
-          "\"$prompt\" "
-          "with administrator privileges";
-      final result = await Process.run('/usr/bin/osascript', ['-e', appleScript]);
-      debugPrint('cert admin (osascript): exit=${result.exitCode}');
-      return (exitCode: result.exitCode, stdout: result.stdout.toString());
-    }
+    // Fall back to osascript — macOS shows Touch ID if available, else password
+    final result = await Process.run('/usr/bin/osascript', ['-e',
+      "do shell script \"bash '$scriptPath'\" with prompt "
+      "\"$prompt\" "
+      "with administrator privileges"]);
+    debugPrint('cert admin (osascript): exit=${result.exitCode}');
+    return (exitCode: result.exitCode, stdout: result.stdout.toString());
   }
 
   static Future<InstallResult> _installWindows(List<int> pemBytes) async {

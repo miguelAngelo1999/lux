@@ -21,22 +21,10 @@ Future<String?> getFileOwner(String path) async {
   }
 }
 
-/// Checks if the NOPASSWD sudoers entry already exists for lux_core
-/// AND Touch ID for sudo is configured (via sudo_local or directly in /etc/pam.d/sudo).
+/// Checks if the NOPASSWD sudoers entry already exists for lux_core.
 Future<bool> _isSudoersConfigured(String corePath) async {
   final sudoersFile = File('/etc/sudoers.d/lux_core');
-  if (!await sudoersFile.exists()) return false;
-  // Check if pam_tid is active in sudo_local OR directly in /etc/pam.d/sudo
-  for (final pamPath in ['/etc/pam.d/sudo_local', '/etc/pam.d/sudo']) {
-    try {
-      final lines = await File(pamPath).readAsLines();
-      if (lines.any((l) =>
-          !l.trim().startsWith('#') && l.contains('pam_tid.so'))) {
-        return true;
-      }
-    } catch (_) {}
-  }
-  return false;
+  return await sudoersFile.exists();
 }
 
 /// Checks if the core binary is already wrapped with the sudo script.
