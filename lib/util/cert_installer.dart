@@ -164,7 +164,10 @@ class CertInstaller {
   static Future<InstallResult> _installWindows(List<int> pemBytes) async {
     final steps = <InstallStep>[];
 
-    final tmpPem = File('${Directory.systemTemp.path}\\lux_intercept_ca.pem');
+    // Use C:\Windows\Temp (accessible by elevated processes) instead of user temp
+    // which may be deleted before the elevated bat file runs
+    const tmpPath = r'C:\Windows\Temp\lux_intercept_ca.pem';
+    final tmpPem = File(tmpPath);
     await tmpPem.writeAsBytes(pemBytes);
 
     try {
@@ -214,21 +217,6 @@ class CertInstaller {
   }
 
   static Future<int> _runWindowsAsAdmin(String cmd) async {
-    // First check if we're already running elevated — if so, run directly
-    try {
-      final elevCheck = await Process.run('powershell.exe', [
-        '-noprofile', '-NonInteractive', '-command',
-        '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
-      ]);
-      final isElevated = elevCheck.stdout.toString().trim().toLowerCase() == 'true';
-      if (isElevated) {
-        // Already elevated — run directly without UAC prompt
-        final result = await Process.run('cmd.exe', ['/c', cmd], runInShell: false);
-        return result.exitCode;
-      }
-    } catch (_) {}
-
-    // Not elevated — use Start-Process -Verb RunAs (UAC prompt)
     final scriptFile = File(
         '${Directory.systemTemp.path}\\lux_admin_${DateTime.now().millisecondsSinceEpoch}.bat');
     await scriptFile.writeAsString('@echo off\r\n$cmd\r\n');
@@ -242,6 +230,9 @@ class CertInstaller {
             '-ArgumentList "/c \\"${scriptFile.path}\\"" '
             '-WindowStyle Hidden',
       ]);
+      // Give the elevated process time to finish (Start-Process -Wait doesn't
+      // block when crossing elevation boundary on "never notify" UAC setting)
+      await Future.delayed(const Duration(seconds: 3));
       debugPrint('Windows admin exit=${result.exitCode} err=${result.stderr}');
       return result.exitCode;
     } finally {
