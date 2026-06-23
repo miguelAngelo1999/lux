@@ -29,6 +29,8 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> with WindowListener {
   String curProxyInfo = "";
   int _selectedTab = 0;
+  // Callback set by ProxiesPage so the header bar can trigger a refresh after adding a proxy.
+  VoidCallback? _refreshProxies;
 
   final _tabs = [
     (icon: Icons.swap_horiz, label: 'Proxies'),
@@ -78,6 +80,7 @@ class _DashboardState extends State<Dashboard> with WindowListener {
           curProxyInfo: curProxyInfo,
           onCurProxyInfoChange: onCurProxyInfoChange,
           dashboardUrl: widget.urlStr,
+          onRegisterRefresh: (cb) => _refreshProxies = cb,
         );
       case 1:
         return RulesPage(coreManager: widget.coreManager);
@@ -106,6 +109,7 @@ class _DashboardState extends State<Dashboard> with WindowListener {
       curProxyInfo: curProxyInfo,
       onCurProxyInfoChange: onCurProxyInfoChange,
       onConnected: widget.onConnected,
+      onProxyListChanged: () => _refreshProxies?.call(),
       extraActions: windowControls,
     );
 

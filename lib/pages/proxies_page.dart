@@ -19,12 +19,17 @@ class ProxiesPage extends StatefulWidget {
   final String curProxyInfo;
   final String dashboardUrl;
   final void Function(String) onCurProxyInfoChange;
+  /// Dashboard registers a refresh callback here so the header bar can
+  /// trigger a list refresh after adding a proxy from the + button.
+  final void Function(VoidCallback)? onRegisterRefresh;
+
   const ProxiesPage(
       {super.key,
       required this.coreManager,
       required this.curProxyInfo,
       required this.onCurProxyInfoChange,
-      required this.dashboardUrl});
+      required this.dashboardUrl,
+      this.onRegisterRefresh});
 
   @override
   State<ProxiesPage> createState() => _ProxiesPageState();
@@ -127,6 +132,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    // Register refresh callback so the header bar's + button can trigger us
+    widget.onRegisterRefresh?.call(() => _refreshProxiesOnly());
     refreshData();
   }
 
