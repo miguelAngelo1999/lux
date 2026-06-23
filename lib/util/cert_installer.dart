@@ -120,14 +120,13 @@ class CertInstaller {
       await adminScript.writeAsString(scriptLines.join('\n'));
       await Process.run('chmod', ['+x', adminScript.path]);
 
-      final adminResult = await Process.run('/usr/bin/osascript', ['-e',
-        "do shell script \"bash '${adminScript.path}'\" with prompt "
-        "\"Lux needs admin access to install the CA certificate\" "
-        "with administrator privileges"]);
+      final adminResult = await _runMacOSAdminScript(
+          adminScript.path,
+          'Lux needs admin access to install the CA certificate');
       await adminScript.delete().catchError((_) => adminScript);
 
-      final adminOut = adminResult.stdout.toString();
-      debugPrint('macOS admin script exit=${adminResult.exitCode} out=$adminOut err=${adminResult.stderr}');
+      final adminOut = adminResult.stdout;
+      debugPrint('macOS cert admin exit=${adminResult.exitCode} out=$adminOut');
 
       if (adminResult.exitCode != 0) {
         // User cancelled or osascript itself failed — mark all as failed
@@ -214,7 +213,34 @@ class CertInstaller {
     );
   }
 
-  // ── Windows ────────────────────────────────────────────────────────────────
+  static Future<({int exitCode, String stdout})> _runMacOSAdminScript(
+      String scriptPath, String prompt) async {
+    bool pamTidEnabled = false;
+    for (final p in ['/etc/pam.d/sudo_local', '/etc/pam.d/sudo']) {
+      try {
+        final lines = await File(p).readAsLines();
+        if (lines.any((l) =>
+            !l.trim().startsWith('#') && l.contains('pam_tid.so'))) {
+          pamTidEnabled = true;
+          break;
+        }
+      } catch (_) {}
+    }
+
+    if (pamTidEnabled) {
+      final result = await Process.run('sudo', ['bash', scriptPath]);
+      debugPrint('cert admin (sudo/TouchID): exit=${result.exitCode}');
+      return (exitCode: result.exitCode, stdout: result.stdout.toString());
+    } else {
+      final appleScript =
+          "do shell script \"bash '$scriptPath'\" with prompt "
+          "\"$prompt\" "
+          "with administrator privileges";
+      final result = await Process.run('/usr/bin/osascript', ['-e', appleScript]);
+      debugPrint('cert admin (osascript): exit=${result.exitCode}');
+      return (exitCode: result.exitCode, stdout: result.stdout.toString());
+    }
+  }
 
   static Future<InstallResult> _installWindows(List<int> pemBytes) async {
     final steps = <InstallStep>[];
