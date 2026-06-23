@@ -62,7 +62,8 @@ if [ ! -f "\$REAL" ]; then
   mv "\$BIN" "\$REAL"
 fi
 
-printf '#!/bin/bash\\nexec sudo "\$REAL" "\$@"\\n' > "\$BIN"
+# Write wrapper with hardcoded path to the real binary
+printf '#!/bin/bash\\nexec sudo "$realPath" "\$@"\\n' > "\$BIN"
 chmod 755 "\$BIN"
 chown root:wheel "\$REAL"
 chmod 770 "\$REAL"
