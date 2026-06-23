@@ -540,12 +540,26 @@ class _HomeState extends State<Home>
                       if (!mounted) return;
                       if (freshSsl.detected && freshSsl.hasCert) {
                         final fp = freshSsl.certInfo?.sha256Fingerprint ?? '';
+                        // If cert has org name and user left the default hostname, rename proxy
+                        final certOrg = freshSsl.certInfo?.organizationName ?? '';
+                        if (certOrg.isNotEmpty && name == server) {
+                          try {
+                            final proxyList = await coreManager!.getProxyList();
+                            final added = proxyList.proxies.lastWhere(
+                                (p) => p.server == server, orElse: () => proxyList.proxies.last);
+                            await coreManager!.updateProxy(added.id, {
+                              'name': certOrg,
+                              'server': server,
+                              'port': int.tryParse(port) ?? 8080,
+                              if (user.isNotEmpty) 'username': user,
+                              if (pass.isNotEmpty) 'password': pass,
+                            });
+                          } catch (_) {}
+                        }
                         if (await InstalledCertsStore.isFullyInstalled(fp)) {
-                          // Cert already trusted in all available stores
                           return;
                         }
                         _lastDetectedCertFingerprint = fp;
-                        // SSL interception confirmed — show cert install dialog
                         _showInlineCertTrustDialog(freshSsl);
                       } else if (freshSsl.error != null &&
                           freshSsl.error!.contains('407')) {

@@ -279,7 +279,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   }
 
   Future<void> _showScanResultDialog(DetectedProxy detected, SslBumpStatus ssl) async {
-    final nameCtrl   = TextEditingController(text: detected.host);
+    // Pre-fill name from SSL cert org name if available
+    final defaultName = ssl.certInfo?.organizationName.isNotEmpty == true
+        ? ssl.certInfo!.organizationName
+        : detected.host;
+    final nameCtrl   = TextEditingController(text: defaultName);
     final serverCtrl = TextEditingController(text: detected.host);
     final portCtrl   = TextEditingController(text: detected.port);
     final userCtrl   = TextEditingController();
