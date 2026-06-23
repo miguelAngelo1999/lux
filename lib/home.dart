@@ -223,7 +223,12 @@ class _HomeState extends State<Home>
       DetectedProxy detected, SslBumpStatus ssl) async {
     if (_dismissedProxies.contains(detected.address)) return;
 
-    final nameCtrl   = TextEditingController(text: detected.host);
+    // Use the SSL cert's organization name as default proxy name if available
+    final defaultName = ssl.certInfo?.organizationName.isNotEmpty == true
+        ? ssl.certInfo!.organizationName
+        : detected.host;
+
+    final nameCtrl   = TextEditingController(text: defaultName);
     final serverCtrl = TextEditingController(text: detected.host);
     final portCtrl   = TextEditingController(text: detected.port);
     final userCtrl   = TextEditingController();
