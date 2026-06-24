@@ -601,6 +601,7 @@ class Setting {
   final bool? sensitiveInfoMode;
   final bool loadBalanceEnabled;
   final List<String> loadBalanceInterfaces;
+  final String loadBalanceStrategy;
 
   const Setting({
     this.mode = ProxyMode.mixed,
@@ -620,6 +621,7 @@ class Setting {
     this.sensitiveInfoMode,
     this.loadBalanceEnabled = false,
     this.loadBalanceInterfaces = const [],
+    this.loadBalanceStrategy = 'least-conn',
   });
 
   Setting.fromJson(Map<String, dynamic> json)
@@ -642,7 +644,8 @@ class Setting {
         loadBalanceInterfaces = ((json['loadBalance'] as Map?)?['interfaces'] as List?)
                 ?.map((e) => e as String)
                 .toList() ??
-            const [];
+            const [],
+        loadBalanceStrategy = (json['loadBalance'] as Map?)?['strategy'] as String? ?? 'least-conn';
 
   Map<String, dynamic> toJson() => {
         'mode': mode == ProxyMode.tun ? 'tun' : mode == ProxyMode.system ? 'system' : 'mixed',
@@ -667,6 +670,7 @@ class Setting {
         'loadBalance': {
           'enabled': loadBalanceEnabled,
           'interfaces': loadBalanceInterfaces,
+          'strategy': loadBalanceStrategy,
         },
       };
 
@@ -688,6 +692,7 @@ class Setting {
     bool? sensitiveInfoMode,
     bool? loadBalanceEnabled,
     List<String>? loadBalanceInterfaces,
+    String? loadBalanceStrategy,
   }) =>
       Setting(
         mode: mode ?? this.mode,
@@ -707,6 +712,7 @@ class Setting {
         sensitiveInfoMode: sensitiveInfoMode ?? this.sensitiveInfoMode,
         loadBalanceEnabled: loadBalanceEnabled ?? this.loadBalanceEnabled,
         loadBalanceInterfaces: loadBalanceInterfaces ?? this.loadBalanceInterfaces,
+        loadBalanceStrategy: loadBalanceStrategy ?? this.loadBalanceStrategy,
       );
 
   static ProxyMode _parseMode(String s) {

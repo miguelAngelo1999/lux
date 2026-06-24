@@ -281,6 +281,19 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               (v) => _save(s.copyWith(loadBalanceEnabled: v)),
             ),
             if (s.loadBalanceEnabled) ...[
+              _dropdownTile<String>(
+                'Strategy',
+                s.loadBalanceStrategy.isEmpty ? 'least-conn' : s.loadBalanceStrategy,
+                ['least-conn', 'round-robin', 'failover'],
+                (v) {
+                  switch (v) {
+                    case 'round-robin': return 'Round Robin — rotate evenly';
+                    case 'failover':    return 'Failover — primary + standby';
+                    default:            return 'Least Connections (recommended)';
+                  }
+                },
+                (v) => _save(s.copyWith(loadBalanceStrategy: v)),
+              ),
               _interfaceMultiSelectTile(
                 'Balance Interfaces',
                 'Select 2 or more interfaces to balance across',
@@ -1338,35 +1351,116 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         final data = snap.data!;
         final healthy = List<String>.from(data['healthy'] as List? ?? []);
         final all = List<String>.from(data['interfaces'] as List? ?? []);
+        final next = data['next'] as String? ?? '';
+        final strategy = data['strategy'] as String? ?? '';
         if (all.isEmpty) return const SizedBox.shrink();
-        return ListTile(
-          dense: true,
-          title: const Text('Interface Health', style: TextStyle(fontSize: 14)),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: all.map((iface) {
-              final isHealthy = healthy.contains(iface);
-              return Row(children: [
-                Icon(Icons.circle,
-                    size: 8,
-                    color: isHealthy ? Colors.green : Colors.red),
-                const SizedBox(width: 6),
-                Text(iface,
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: isHealthy ? null : Colors.red)),
-                if (!isHealthy) ...[
-                  const SizedBox(width: 4),
-                  const Text('(unreachable)',
-                      style: TextStyle(fontSize: 11, color: Colors.red)),
-                ],
-              ]);
-            }).toList(),
+
+        String displayName(String iface) {
+          if (iface.contains('(')) {
+            return iface.substring(0, iface.lastIndexOf('(')).trim();
+          }
+          return iface;
+        }
+
+        String strategyLabel(String s) {
+          switch (s) {
+            case 'round-robin': return 'Round Robin';
+            case 'failover':    return 'Failover';
+            default:            return 'Least Connections';
+          }
+        }
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
           ),
-          trailing: IconButton(
-            icon: const Icon(Icons.refresh, size: 18),
-            tooltip: 'Refresh health status',
-            onPressed: () => setState(() {}),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Text('Interface Health',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                const Spacer(),
+                if (strategy.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(strategyLabel(strategy),
+                        style: const TextStyle(fontSize: 10, color: Colors.blue)),
+                  ),
+                if (next.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text('next: ${displayName(next)}',
+                        style: const TextStyle(fontSize: 10, color: Colors.green)),
+                  ),
+                ],
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => setState(() {}),
+                  child: const Icon(Icons.refresh, size: 14, color: Colors.grey),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              ...all.map((iface) {
+                final isHealthy = healthy.contains(iface);
+                final isNext = iface == next;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Row(children: [
+                    Icon(Icons.circle,
+                        size: 7,
+                        color: isHealthy ? Colors.green : Colors.red),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        displayName(iface),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isNext ? FontWeight.w600 : FontWeight.normal,
+                            color: isHealthy ? null : Colors.red),
+                      ),
+                    ),
+                    if (isNext)
+                      const Text('← next',
+                          style: TextStyle(fontSize: 10, color: Colors.blue)),
+                    if (!isHealthy)
+                      const Text('unreachable',
+                          style: TextStyle(fontSize: 10, color: Colors.red)),
+                  ]),
+                );
+              }),
+              if (healthy.length >= 2) ...[
+                const SizedBox(height: 6),
+                const Text(
+                  '✓ Active — balancing across interfaces',
+                  style: TextStyle(fontSize: 11, color: Colors.green),
+                ),
+              ] else if (healthy.length == 1) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '⚠ Only 1 interface healthy — using ${displayName(healthy.first)} only',
+                  style: const TextStyle(fontSize: 11, color: Colors.orange),
+                ),
+              ] else ...[
+                const SizedBox(height: 6),
+                const Text(
+                  '✗ No healthy interfaces — falling back to default',
+                  style: TextStyle(fontSize: 11, color: Colors.red),
+                ),
+              ],
+            ],
           ),
         );
       },

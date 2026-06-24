@@ -428,6 +428,7 @@ class CoreManager {
     final lb = Map<String, dynamic>.from(raw['loadBalance'] as Map? ?? {});
     lb['enabled'] = setting.loadBalanceEnabled;
     lb['interfaces'] = setting.loadBalanceInterfaces;
+    lb['strategy'] = setting.loadBalanceStrategy;
     raw['loadBalance'] = lb;
 
     await dio.put('$baseHttpUrl/setting', data: raw);
