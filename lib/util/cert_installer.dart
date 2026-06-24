@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 /// Installs a PEM-encoded CA certificate into the platform's trusted root
@@ -16,6 +18,24 @@ class CertInstaller {
       steps: [],
       error: 'Unsupported platform: ${Platform.operatingSystem}',
     );
+  }
+
+  /// Returns the SHA1 thumbprint (hex, uppercase, no colons) for Windows cert store lookup.
+  static String _getCertThumbprint(List<int> pemBytes) {
+    try {
+      final pem = String.fromCharCodes(pemBytes);
+      final b64 = pem
+          .replaceAll('-----BEGIN CERTIFICATE-----', '')
+          .replaceAll('-----END CERTIFICATE-----', '')
+          .replaceAll('\n', '')
+          .replaceAll('\r', '')
+          .trim();
+      final der = base64Decode(b64);
+      final digest = sha1.convert(der);
+      return digest.toString().toUpperCase().replaceAll(':', '');
+    } catch (_) {
+      return '';
+    }
   }
 
   // ── macOS ──────────────────────────────────────────────────────────────────
@@ -239,10 +259,32 @@ class CertInstaller {
     await tmpPem.writeAsBytes(pemBytes);
 
     try {
-      // Windows Trusted Root store (all users)
-      final certutilResult = await _runWindowsAsAdmin(
-        'certutil -addstore -f Root "${tmpPem.path}"',
-      );
+      // Windows Trusted Root store — try CurrentUser first (no admin), then LocalMachine (admin)
+      final thumbprint = _getCertThumbprint(pemBytes);
+      int certutilResult = 1;
+
+      // Check if already installed
+      final checkResult = await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        'if (Get-ChildItem Cert:\\LocalMachine\\Root | Where-Object { \$_.Thumbprint -eq "$thumbprint" }) { "found" } else { "" }',
+      ]);
+      if (checkResult.stdout.toString().trim() == 'found') {
+        certutilResult = 0; // Already installed
+      } else {
+        // Try Import-Certificate to CurrentUser (no admin needed)
+        final importResult = await Process.run('powershell.exe', [
+          '-noprofile', '-NonInteractive', '-command',
+          'Import-Certificate -FilePath "$tmpPath" -CertStoreLocation Cert:\\CurrentUser\\Root | Out-Null',
+        ]);
+        if (importResult.exitCode == 0) {
+          certutilResult = 0;
+        } else {
+          // Fall back to elevated certutil for LocalMachine\Root
+          certutilResult = await _runWindowsAsAdmin(
+            'certutil -addstore -f Root "$tmpPath"',
+          );
+        }
+      }
       steps.add(InstallStep(
         name: 'Windows Trusted Root (certutil)',
         success: certutilResult == 0,
@@ -273,7 +315,9 @@ class CertInstaller {
       // Python certifi
       steps.addAll(await _installPythonCertifi(pemBytes));
     } finally {
-      await tmpPem.delete().catchError((_) => tmpPem);
+      // Delay deletion to ensure all elevated processes have finished reading it
+      Future.delayed(const Duration(seconds: 5), () =>
+          tmpPem.delete().catchError((_) => tmpPem));
     }
 
     final anySuccess = steps.any((s) => s.success);
@@ -285,24 +329,34 @@ class CertInstaller {
   }
 
   static Future<int> _runWindowsAsAdmin(String cmd) async {
-    final scriptFile = File(
-        '${Directory.systemTemp.path}\\lux_admin_${DateTime.now().millisecondsSinceEpoch}.bat');
-    await scriptFile.writeAsString('@echo off\r\n$cmd\r\n');
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final scriptFile = File('C:\\Windows\\Temp\\lux_admin_$ts.bat');
+    final sentinelFile = 'C:\\Windows\\Temp\\lux_done_$ts.txt';
+
+    // Write bat that runs the command and writes a sentinel file when done
+    await scriptFile.writeAsString(
+      '@echo off\r\n$cmd\r\necho done > "$sentinelFile"\r\n',
+    );
 
     try {
-      final result = await Process.run('powershell.exe', [
-        '-noprofile',
-        '-NonInteractive',
-        '-command',
+      await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
         'Start-Process cmd.exe -Verb RunAs -Wait '
             '-ArgumentList "/c \\"${scriptFile.path}\\"" '
             '-WindowStyle Hidden',
       ]);
-      // Give the elevated process time to finish (Start-Process -Wait doesn't
-      // block when crossing elevation boundary on "never notify" UAC setting)
-      await Future.delayed(const Duration(seconds: 3));
-      debugPrint('Windows admin exit=${result.exitCode} err=${result.stderr}');
-      return result.exitCode;
+
+      // Wait for sentinel file (up to 15 seconds)
+      for (var i = 0; i < 30; i++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (await File(sentinelFile).exists()) {
+          await File(sentinelFile).delete().catchError((_) => File(sentinelFile));
+          return 0;
+        }
+      }
+      // Timeout — sentinel never appeared, assume failure
+      debugPrint('Windows admin: sentinel file timeout after 15s');
+      return 1;
     } finally {
       await scriptFile.delete().catchError((_) => scriptFile);
     }

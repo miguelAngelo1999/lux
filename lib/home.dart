@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
@@ -255,6 +256,38 @@ class _HomeState extends State<Home>
     final passFocus  = FocusNode();
     bool obscure = true;
     bool dontShowAgain = false;
+    SslBumpStatus sslState = ssl; // mutable — updated when credentials are typed
+    Timer? _sslProbeTimer;
+
+    // Re-probe SSL with credentials so we can get the cert name
+    Future<void> reprobeSSL(StateSetter setSt, String user, String pass) async {
+      _sslProbeTimer?.cancel();
+      if (user.isEmpty && pass.isEmpty) return;
+      _sslProbeTimer = Timer(const Duration(milliseconds: 800), () async {
+        try {
+          final server = serverCtrl.text.trim();
+          final port = portCtrl.text.trim();
+          if (server.isEmpty) return;
+          final encodedUser = Uri.encodeComponent(user);
+          final encodedPass = Uri.encodeComponent(pass);
+          final proxyAddr = '$encodedUser:$encodedPass@$server:$port';
+          final result = await coreManager!.getSslBumpStatus(
+            proxyAddr: proxyAddr,
+            fresh: true,
+          );
+          if (result.detected && result.certInfo != null && mounted) {
+            final orgName = result.certInfo!.organizationName;
+            setSt(() {
+              sslState = result;
+              // Update name only if user hasn't manually changed it
+              if (nameCtrl.text == detected.host || nameCtrl.text == defaultName) {
+                if (orgName.isNotEmpty) nameCtrl.text = orgName;
+              }
+            });
+          }
+        } catch (_) {}
+      });
+    }
 
     final sourceLabel = const {
       'dhcp_wpad':      'DHCP/WPAD',
@@ -433,6 +466,7 @@ class _HomeState extends State<Home>
                         labelText: 'Username (optional)', isDense: true,
                         border: OutlineInputBorder()),
                     style: const TextStyle(fontSize: 13),
+                    onChanged: (v) => reprobeSSL(setSt, v, passCtrl.text),
                     textInputAction: TextInputAction.next,
                     onSubmitted: (_) =>
                         FocusScope.of(ctx).requestFocus(passFocus),
@@ -455,6 +489,7 @@ class _HomeState extends State<Home>
                     ),
                     style: const TextStyle(fontSize: 13),
                     textInputAction: TextInputAction.done,
+                    onChanged: (v) => reprobeSSL(setSt, userCtrl.text, v),
                   ),
                   if (detected.needsAuth) ...[
                     const SizedBox(height: 4),
@@ -581,6 +616,7 @@ class _HomeState extends State<Home>
     );
 
     nameCtrl.dispose(); serverCtrl.dispose(); portCtrl.dispose();
+    _sslProbeTimer?.cancel();
     userCtrl.dispose(); passCtrl.dispose();
     userFocus.dispose(); passFocus.dispose();
   }
