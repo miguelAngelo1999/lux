@@ -284,10 +284,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               _dropdownTile<String>(
                 'Strategy',
                 s.loadBalanceStrategy.isEmpty ? 'least-conn' : s.loadBalanceStrategy,
-                ['least-conn', 'round-robin', 'failover'],
+                ['least-conn', 'round-robin', 'weighted', 'failover'],
                 (v) {
                   switch (v) {
                     case 'round-robin': return 'Round Robin — rotate evenly';
+                    case 'weighted':    return 'Weighted — faster interface gets more';
                     case 'failover':    return 'Failover — primary + standby';
                     default:            return 'Least Connections (recommended)';
                   }
@@ -1353,6 +1354,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         final all = List<String>.from(data['interfaces'] as List? ?? []);
         final next = data['next'] as String? ?? '';
         final strategy = data['strategy'] as String? ?? '';
+        final latencies = (data['latencies'] as Map?)?.map(
+            (k, v) => MapEntry(k as String, (v as num).toInt())) ?? <String, int>{};
         if (all.isEmpty) return const SizedBox.shrink();
 
         String displayName(String iface) {
@@ -1366,6 +1369,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           switch (s) {
             case 'round-robin': return 'Round Robin';
             case 'failover':    return 'Failover';
+            case 'weighted':    return 'Weighted';
             default:            return 'Least Connections';
           }
         }
@@ -1432,9 +1436,22 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                             color: isHealthy ? null : Colors.red),
                       ),
                     ),
+                    // Show latency if available (weighted strategy or background measurement)
+                    Builder(builder: (_) {
+                      final rawName = iface.contains('(')
+                          ? iface.split('(').last.replaceAll(')', '').trim()
+                          : iface;
+                      final ms = latencies[rawName];
+                      if (ms == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Text('${ms}ms',
+                            style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                      );
+                    }),
                     if (isNext)
                       const Text('← next',
-                          style: TextStyle(fontSize: 10, color: Colors.blue)),
+                          style: TextStyle(fontSize: 10, color: Colors.green)),
                     if (!isHealthy)
                       const Text('unreachable',
                           style: TextStyle(fontSize: 10, color: Colors.red)),
