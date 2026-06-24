@@ -424,6 +424,13 @@ class CoreManager {
     am['url'] = setting.autoModeUrl;
     raw['autoMode'] = am;
 
+    // LoadBalance
+    final lb = Map<String, dynamic>.from(raw['loadBalance'] as Map? ?? {});
+    lb['enabled'] = setting.loadBalanceEnabled;
+    lb['interfaces'] = setting.loadBalanceInterfaces;
+    lb['strategy'] = setting.loadBalanceStrategy;
+    raw['loadBalance'] = lb;
+
     await dio.put('$baseHttpUrl/setting', data: raw);
   }
 
@@ -439,6 +446,16 @@ class CoreManager {
       }).where((s) => s.isNotEmpty).toList().cast<String>();
     } catch (_) {
       return [];
+    }
+  }
+
+  /// Get load balancer status — which interfaces are configured and healthy.
+  Future<Map<String, dynamic>> getLoadBalanceStatus() async {
+    try {
+      final res = await dioFast.get('$baseHttpUrl/setting/load-balance');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return {'enabled': false, 'interfaces': [], 'healthy': []};
     }
   }
 

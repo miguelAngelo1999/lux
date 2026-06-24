@@ -271,7 +271,40 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               (v) => _save(s.copyWith(allowLan: v)),
             ),
 
-            // ΓöÇΓöÇ TUN/Mixed only ΓöÇΓöÇ
+            // ── Load Balancing ──
+            const SizedBox(height: 16),
+            _sectionHeader('Load Balancing'),
+            _switchTile(
+              'Enable Load Balancing',
+              'Distribute DIRECT connections across multiple interfaces in round-robin. Needs 2+ interfaces.',
+              s.loadBalanceEnabled,
+              (v) => _save(s.copyWith(loadBalanceEnabled: v)),
+            ),
+            if (s.loadBalanceEnabled) ...[
+              _dropdownTile<String>(
+                'Strategy',
+                s.loadBalanceStrategy.isEmpty ? 'least-conn' : s.loadBalanceStrategy,
+                ['least-conn', 'round-robin', 'weighted', 'failover'],
+                (v) {
+                  switch (v) {
+                    case 'round-robin': return 'Round Robin — rotate evenly';
+                    case 'weighted':    return 'Weighted — faster interface gets more';
+                    case 'failover':    return 'Failover — primary + standby';
+                    default:            return 'Least Connections (recommended)';
+                  }
+                },
+                (v) => _save(s.copyWith(loadBalanceStrategy: v)),
+              ),
+              _interfaceMultiSelectTile(
+                'Balance Interfaces',
+                'Select 2 or more interfaces to balance across',
+                s.loadBalanceInterfaces,
+                (selected) => _save(s.copyWith(loadBalanceInterfaces: selected)),
+              ),
+              _loadBalanceStatusTile(),
+            ],
+
+            // ── TUN/Mixed only ──
             if (isTun) ...[
               const SizedBox(height: 16),
               _sectionHeader('TUN / Mixed Mode'),
@@ -1070,19 +1103,34 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ListTile(
-          dense: true,
-          title: const Text('Detect SSL Bumping', style: TextStyle(fontSize: 14)),
-          subtitle: const Text(
-            'Check if your proxy intercepts HTTPS traffic and install its CA certificate so curl, git, npm, and Python trust it.',
-            style: TextStyle(fontSize: 12),
-          ),
-          trailing: TextButton.icon(
-            icon: const Icon(Icons.search, size: 16),
-            label: const Text('Check', style: TextStyle(fontSize: 12)),
-            onPressed: _sslChecking ? null : _checkSslBump,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Detect SSL Bumping', style: TextStyle(fontSize: 14)),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Check if your proxy intercepts HTTPS traffic and install its CA certificate so curl, git, npm, and Python trust it.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                icon: const Icon(Icons.search, size: 16),
+                label: const Text('Check', style: TextStyle(fontSize: 12)),
+                onPressed: _sslChecking ? null : _checkSslBump,
+              ),
+            ],
           ),
         ),
+        const SizedBox(height: 4),
         if (status != null) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1282,6 +1330,172 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           },
         ),
       ),
+    );
+  }
+
+  Widget _interfaceMultiSelectTile(String title, String subtitle,
+      List<String> selected, void Function(List<String>) onChanged) {
+    return ListTile(
+      dense: true,
+      title: Text(title, style: const TextStyle(fontSize: 14)),
+      subtitle: Text(
+        selected.isEmpty ? 'None selected' : selected.join(', '),
+        style: const TextStyle(fontSize: 12),
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: const Icon(Icons.chevron_right, size: 18),
+      onTap: _isSaving
+          ? null
+          : () async {
+              final result = await showDialog<List<String>>(
+                context: context,
+                builder: (ctx) => _InterfacePickerDialog(
+                  allInterfaces: _interfaces,
+                  initialSelected: selected,
+                ),
+              );
+              if (result != null) onChanged(result);
+            },
+    );
+  }
+
+  Widget _loadBalanceStatusTile() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: widget.coreManager.getLoadBalanceStatus(),
+      builder: (ctx, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!;
+        final healthy = List<String>.from(data['healthy'] as List? ?? []);
+        final all = List<String>.from(data['interfaces'] as List? ?? []);
+        final next = data['next'] as String? ?? '';
+        final strategy = data['strategy'] as String? ?? '';
+        final latencies = (data['latencies'] as Map?)?.map(
+            (k, v) => MapEntry(k as String, (v as num).toInt())) ?? <String, int>{};
+        if (all.isEmpty) return const SizedBox.shrink();
+
+        String displayName(String iface) {
+          if (iface.contains('(')) {
+            return iface.substring(0, iface.lastIndexOf('(')).trim();
+          }
+          return iface;
+        }
+
+        String strategyLabel(String s) {
+          switch (s) {
+            case 'round-robin': return 'Round Robin';
+            case 'failover':    return 'Failover';
+            case 'weighted':    return 'Weighted';
+            default:            return 'Least Connections';
+          }
+        }
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Text('Interface Health',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                const Spacer(),
+                if (strategy.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(strategyLabel(strategy),
+                        style: const TextStyle(fontSize: 10, color: Colors.blue)),
+                  ),
+                if (next.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text('next: ${displayName(next)}',
+                        style: const TextStyle(fontSize: 10, color: Colors.green)),
+                  ),
+                ],
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => setState(() {}),
+                  child: const Icon(Icons.refresh, size: 14, color: Colors.grey),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              ...all.map((iface) {
+                final isHealthy = healthy.contains(iface);
+                final isNext = iface == next;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Row(children: [
+                    Icon(Icons.circle,
+                        size: 7,
+                        color: isHealthy ? Colors.green : Colors.red),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        displayName(iface),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isNext ? FontWeight.w600 : FontWeight.normal,
+                            color: isHealthy ? null : Colors.red),
+                      ),
+                    ),
+                    // Show latency if available (weighted strategy or background measurement)
+                    Builder(builder: (_) {
+                      final rawName = iface.contains('(')
+                          ? iface.split('(').last.replaceAll(')', '').trim()
+                          : iface;
+                      final ms = latencies[rawName];
+                      if (ms == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Text('${ms}ms',
+                            style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                      );
+                    }),
+                    if (isNext)
+                      const Text('← next',
+                          style: TextStyle(fontSize: 10, color: Colors.green)),
+                    if (!isHealthy)
+                      const Text('unreachable',
+                          style: TextStyle(fontSize: 10, color: Colors.red)),
+                  ]),
+                );
+              }),
+              if (healthy.length >= 2) ...[
+                const SizedBox(height: 6),
+                const Text(
+                  '✓ Active — balancing across interfaces',
+                  style: TextStyle(fontSize: 11, color: Colors.green),
+                ),
+              ] else if (healthy.length == 1) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '⚠ Only 1 interface healthy — using ${displayName(healthy.first)} only',
+                  style: const TextStyle(fontSize: 11, color: Colors.orange),
+                ),
+              ] else ...[
+                const SizedBox(height: 6),
+                const Text(
+                  '✗ No healthy interfaces — falling back to default',
+                  style: TextStyle(fontSize: 11, color: Colors.red),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1502,6 +1716,115 @@ class _DnsPickerDialogState extends State<_DnsPickerDialog> {
         ),
         FilledButton(
           onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(_selected.toList()),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Simple multi-select dialog for network interfaces (load balancing).
+class _InterfacePickerDialog extends StatefulWidget {
+  final List<String> allInterfaces;
+  final List<String> initialSelected;
+
+  const _InterfacePickerDialog({
+    required this.allInterfaces,
+    required this.initialSelected,
+  });
+
+  @override
+  State<_InterfacePickerDialog> createState() => _InterfacePickerDialogState();
+}
+
+class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
+  late Set<String> _selected;
+
+  /// Filter already done on Go side — only Up interfaces with IPv4 are returned.
+  List<String> get _usableInterfaces => widget.allInterfaces;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set<String>.from(widget.initialSelected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ifaces = _usableInterfaces;
+    return AlertDialog(
+      title: const Text('Balance Interfaces', style: TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 320,
+        child: ifaces.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('No physical interfaces found.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey)),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_selected.length} selected · pick 2 or more',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                  const SizedBox(height: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: ifaces.map((iface) {
+                          // Show friendly name prominently, raw name as subtitle
+                          final hasParen = iface.contains('(');
+                          final friendly = hasParen
+                              ? iface.substring(0, iface.lastIndexOf('(')).trim()
+                              : iface;
+                          final raw = hasParen
+                              ? iface.split('(').last.replaceAll(')', '').trim()
+                              : iface;
+                          return CheckboxListTile(
+                            dense: true,
+                            value: _selected.contains(iface),
+                            title: Text(
+                              friendly.isNotEmpty ? friendly : raw,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            subtitle: friendly.isNotEmpty && friendly != raw
+                                ? Text(raw,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade500))
+                                : null,
+                            onChanged: (v) => setState(() {
+                              if (v == true) {
+                                _selected.add(iface);
+                              } else {
+                                _selected.remove(iface);
+                              }
+                            }),
+                            controlAffinity: ListTileControlAffinity.leading,
+                            contentPadding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _selected.length < 2
               ? null
               : () => Navigator.of(context).pop(_selected.toList()),
           child: const Text('Save'),

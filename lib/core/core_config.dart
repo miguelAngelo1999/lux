@@ -599,6 +599,9 @@ class Setting {
   final String autoModeType;
   final String autoModeUrl;
   final bool? sensitiveInfoMode;
+  final bool loadBalanceEnabled;
+  final List<String> loadBalanceInterfaces;
+  final String loadBalanceStrategy;
 
   const Setting({
     this.mode = ProxyMode.mixed,
@@ -616,6 +619,9 @@ class Setting {
     this.autoModeType = 'fallback',
     this.autoModeUrl = 'https://google.com',
     this.sensitiveInfoMode,
+    this.loadBalanceEnabled = false,
+    this.loadBalanceInterfaces = const [],
+    this.loadBalanceStrategy = 'least-conn',
   });
 
   Setting.fromJson(Map<String, dynamic> json)
@@ -633,7 +639,13 @@ class Setting {
         autoModeEnabled = (json['autoMode'] as Map?)?['enabled'] as bool? ?? false,
         autoModeType = (json['autoMode'] as Map?)?['type'] as String? ?? 'fallback',
         autoModeUrl = (json['autoMode'] as Map?)?['url'] as String? ?? 'https://google.com',
-        sensitiveInfoMode = json['sensitiveInfoMode'] as bool?;
+        sensitiveInfoMode = json['sensitiveInfoMode'] as bool?,
+        loadBalanceEnabled = (json['loadBalance'] as Map?)?['enabled'] as bool? ?? false,
+        loadBalanceInterfaces = ((json['loadBalance'] as Map?)?['interfaces'] as List?)
+                ?.map((e) => e as String)
+                .toList() ??
+            const [],
+        loadBalanceStrategy = (json['loadBalance'] as Map?)?['strategy'] as String? ?? 'least-conn';
 
   Map<String, dynamic> toJson() => {
         'mode': mode == ProxyMode.tun ? 'tun' : mode == ProxyMode.system ? 'system' : 'mixed',
@@ -655,6 +667,11 @@ class Setting {
           'url': autoModeUrl,
         },
         if (sensitiveInfoMode != null) 'sensitiveInfoMode': sensitiveInfoMode,
+        'loadBalance': {
+          'enabled': loadBalanceEnabled,
+          'interfaces': loadBalanceInterfaces,
+          'strategy': loadBalanceStrategy,
+        },
       };
 
   Setting copyWith({
@@ -673,6 +690,9 @@ class Setting {
     String? autoModeType,
     String? autoModeUrl,
     bool? sensitiveInfoMode,
+    bool? loadBalanceEnabled,
+    List<String>? loadBalanceInterfaces,
+    String? loadBalanceStrategy,
   }) =>
       Setting(
         mode: mode ?? this.mode,
@@ -690,6 +710,9 @@ class Setting {
         autoModeType: autoModeType ?? this.autoModeType,
         autoModeUrl: autoModeUrl ?? this.autoModeUrl,
         sensitiveInfoMode: sensitiveInfoMode ?? this.sensitiveInfoMode,
+        loadBalanceEnabled: loadBalanceEnabled ?? this.loadBalanceEnabled,
+        loadBalanceInterfaces: loadBalanceInterfaces ?? this.loadBalanceInterfaces,
+        loadBalanceStrategy: loadBalanceStrategy ?? this.loadBalanceStrategy,
       );
 
   static ProxyMode _parseMode(String s) {

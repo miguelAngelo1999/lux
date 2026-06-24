@@ -271,14 +271,24 @@ class CertInstaller {
       if (checkResult.stdout.toString().trim() == 'found') {
         certutilResult = 0; // Already installed
       } else {
-        // Try Import-Certificate to CurrentUser (no admin needed)
+        // Use X509Store API directly — works without admin and without UI
         final importResult = await Process.run('powershell.exe', [
           '-noprofile', '-NonInteractive', '-command',
-          'Import-Certificate -FilePath "$tmpPath" -CertStoreLocation Cert:\\CurrentUser\\Root | Out-Null',
+          r'''
+$pem = Get-Content "''' + tmpPath + r'''" -Raw
+$b64 = $pem -replace "-----BEGIN CERTIFICATE-----","" -replace "-----END CERTIFICATE-----","" -replace "\s",""
+$bytes = [System.Convert]::FromBase64String($b64)
+$cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 (,[byte[]]$bytes)
+$store = New-Object System.Security.Cryptography.X509Certificates.X509Store "Root","CurrentUser"
+$store.Open("ReadWrite")
+$store.Add($cert)
+$store.Close()
+''',
         ]);
         if (importResult.exitCode == 0) {
           certutilResult = 0;
         } else {
+          debugPrint('X509Store CurrentUser failed: ${importResult.stderr}');
           // Fall back to elevated certutil for LocalMachine\Root
           certutilResult = await _runWindowsAsAdmin(
             'certutil -addstore -f Root "$tmpPath"',
@@ -289,7 +299,7 @@ class CertInstaller {
         name: 'Windows Trusted Root (certutil)',
         success: certutilResult == 0,
         note: certutilResult == 0
-            ? 'Installed to LocalMachine\\Root'
+            ? 'Installed to CurrentUser\\Root'
             : 'certutil exit code: $certutilResult',
       ));
 
@@ -392,17 +402,18 @@ class CertInstaller {
       if (!await dir.exists()) await dir.create(recursive: true);
       await File(destPath).writeAsBytes(pemBytes);
 
-      final regResult = await _runWindowsAsAdmin(
-        'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" '
-        '/v NODE_EXTRA_CA_CERTS /t REG_SZ /d "$destPath" /f',
-      );
+      // Use HKCU (user scope) — no admin needed
+      final regResult = await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        '[Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS", "$destPath", "User")',
+      ]);
 
       return InstallStep(
         name: 'Node.js / npm (NODE_EXTRA_CA_CERTS)',
-        success: regResult == 0,
-        note: regResult == 0
-            ? 'Set NODE_EXTRA_CA_CERTS=$destPath'
-            : 'Registry write failed (exit $regResult)',
+        success: regResult.exitCode == 0,
+        note: regResult.exitCode == 0
+            ? 'Set NODE_EXTRA_CA_CERTS=$destPath (user environment)'
+            : 'Registry write failed (exit ${regResult.exitCode}): ${regResult.stderr}',
       );
     } catch (e) {
       return InstallStep(
