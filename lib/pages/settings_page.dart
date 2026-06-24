@@ -271,7 +271,26 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               (v) => _save(s.copyWith(allowLan: v)),
             ),
 
-            // ΓöÇΓöÇ TUN/Mixed only ΓöÇΓöÇ
+            // ── Load Balancing ──
+            const SizedBox(height: 16),
+            _sectionHeader('Load Balancing'),
+            _switchTile(
+              'Enable Load Balancing',
+              'Distribute DIRECT connections across multiple interfaces in round-robin. Needs 2+ interfaces.',
+              s.loadBalanceEnabled,
+              (v) => _save(s.copyWith(loadBalanceEnabled: v)),
+            ),
+            if (s.loadBalanceEnabled) ...[
+              _interfaceMultiSelectTile(
+                'Balance Interfaces',
+                'Select 2 or more interfaces to balance across',
+                s.loadBalanceInterfaces,
+                (selected) => _save(s.copyWith(loadBalanceInterfaces: selected)),
+              ),
+              _loadBalanceStatusTile(),
+            ],
+
+            // ── TUN/Mixed only ──
             if (isTun) ...[
               const SizedBox(height: 16),
               _sectionHeader('TUN / Mixed Mode'),
@@ -1285,6 +1304,75 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
   }
 
+  Widget _interfaceMultiSelectTile(String title, String subtitle,
+      List<String> selected, void Function(List<String>) onChanged) {
+    return ListTile(
+      dense: true,
+      title: Text(title, style: const TextStyle(fontSize: 14)),
+      subtitle: Text(
+        selected.isEmpty ? 'None selected' : selected.join(', '),
+        style: const TextStyle(fontSize: 12),
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: const Icon(Icons.chevron_right, size: 18),
+      onTap: _isSaving
+          ? null
+          : () async {
+              final result = await showDialog<List<String>>(
+                context: context,
+                builder: (ctx) => _InterfacePickerDialog(
+                  allInterfaces: _interfaces,
+                  initialSelected: selected,
+                ),
+              );
+              if (result != null) onChanged(result);
+            },
+    );
+  }
+
+  Widget _loadBalanceStatusTile() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: widget.coreManager.getLoadBalanceStatus(),
+      builder: (ctx, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!;
+        final healthy = List<String>.from(data['healthy'] as List? ?? []);
+        final all = List<String>.from(data['interfaces'] as List? ?? []);
+        if (all.isEmpty) return const SizedBox.shrink();
+        return ListTile(
+          dense: true,
+          title: const Text('Interface Health', style: TextStyle(fontSize: 14)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: all.map((iface) {
+              final isHealthy = healthy.contains(iface);
+              return Row(children: [
+                Icon(Icons.circle,
+                    size: 8,
+                    color: isHealthy ? Colors.green : Colors.red),
+                const SizedBox(width: 6),
+                Text(iface,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isHealthy ? null : Colors.red)),
+                if (!isHealthy) ...[
+                  const SizedBox(width: 4),
+                  const Text('(unreachable)',
+                      style: TextStyle(fontSize: 11, color: Colors.red)),
+                ],
+              ]);
+            }).toList(),
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.refresh, size: 18),
+            tooltip: 'Refresh health status',
+            onPressed: () => setState(() {}),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _textFieldTile(String title, String value, String hint,
       void Function(String) onChanged) {
     return ListTile(
@@ -1502,6 +1590,85 @@ class _DnsPickerDialogState extends State<_DnsPickerDialog> {
         ),
         FilledButton(
           onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(_selected.toList()),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Simple multi-select dialog for network interfaces (load balancing).
+class _InterfacePickerDialog extends StatefulWidget {
+  final List<String> allInterfaces;
+  final List<String> initialSelected;
+
+  const _InterfacePickerDialog({
+    required this.allInterfaces,
+    required this.initialSelected,
+  });
+
+  @override
+  State<_InterfacePickerDialog> createState() => _InterfacePickerDialogState();
+}
+
+class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
+  late Set<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set<String>.from(widget.initialSelected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ifaces = widget.allInterfaces;
+    return AlertDialog(
+      title: const Text('Select Interfaces', style: TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 360,
+        child: ifaces.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('No interfaces found. Make sure Lux is running.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey)),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_selected.length} selected · select 2 or more',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 8),
+                  ...ifaces.map((iface) => CheckboxListTile(
+                        dense: true,
+                        value: _selected.contains(iface),
+                        title: Text(iface, style: const TextStyle(fontSize: 13)),
+                        onChanged: (v) => setState(() {
+                          if (v == true) {
+                            _selected.add(iface);
+                          } else {
+                            _selected.remove(iface);
+                          }
+                        }),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      )),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _selected.length < 2
               ? null
               : () => Navigator.of(context).pop(_selected.toList()),
           child: const Text('Save'),
