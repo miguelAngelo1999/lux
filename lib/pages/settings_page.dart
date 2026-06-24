@@ -1616,24 +1616,8 @@ class _InterfacePickerDialog extends StatefulWidget {
 class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
   late Set<String> _selected;
 
-  /// Filter to only real, usable interfaces — skip loopback, virtual, and
-  /// internal Apple interfaces (lo0, gif0, stf0, XHC*, anpi*, utun*, llw*, ap*).
-  List<String> get _usableInterfaces => widget.allInterfaces.where((name) {
-        // Raw name (strip friendly suffix like " (en0)")
-        final raw = name.contains('(') ? name.split('(').last.replaceAll(')', '').trim() : name;
-        if (raw.startsWith('lo')) return false;
-        if (raw.startsWith('gif')) return false;
-        if (raw.startsWith('stf')) return false;
-        if (raw.startsWith('XHC')) return false;
-        if (raw.startsWith('anpi')) return false;
-        if (raw.startsWith('utun')) return false;
-        if (raw.startsWith('llw')) return false;
-        if (raw.startsWith('ap')) return false;
-        if (raw.startsWith('bridge')) return false;
-        if (raw.startsWith('p2p')) return false;
-        if (raw.startsWith('awdl')) return false;
-        return true;
-      }).toList();
+  /// Filter already done on Go side — only Up interfaces with IPv4 are returned.
+  List<String> get _usableInterfaces => widget.allInterfaces;
 
   @override
   void initState() {
