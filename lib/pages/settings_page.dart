@@ -1616,6 +1616,25 @@ class _InterfacePickerDialog extends StatefulWidget {
 class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
   late Set<String> _selected;
 
+  /// Filter to only real, usable interfaces — skip loopback, virtual, and
+  /// internal Apple interfaces (lo0, gif0, stf0, XHC*, anpi*, utun*, llw*, ap*).
+  List<String> get _usableInterfaces => widget.allInterfaces.where((name) {
+        // Raw name (strip friendly suffix like " (en0)")
+        final raw = name.contains('(') ? name.split('(').last.replaceAll(')', '').trim() : name;
+        if (raw.startsWith('lo')) return false;
+        if (raw.startsWith('gif')) return false;
+        if (raw.startsWith('stf')) return false;
+        if (raw.startsWith('XHC')) return false;
+        if (raw.startsWith('anpi')) return false;
+        if (raw.startsWith('utun')) return false;
+        if (raw.startsWith('llw')) return false;
+        if (raw.startsWith('ap')) return false;
+        if (raw.startsWith('bridge')) return false;
+        if (raw.startsWith('p2p')) return false;
+        if (raw.startsWith('awdl')) return false;
+        return true;
+      }).toList();
+
   @override
   void initState() {
     super.initState();
@@ -1624,15 +1643,15 @@ class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final ifaces = widget.allInterfaces;
+    final ifaces = _usableInterfaces;
     return AlertDialog(
-      title: const Text('Select Interfaces', style: TextStyle(fontSize: 16)),
+      title: const Text('Balance Interfaces', style: TextStyle(fontSize: 16)),
       content: SizedBox(
-        width: 360,
+        width: 320,
         child: ifaces.isEmpty
             ? const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('No interfaces found. Make sure Lux is running.',
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('No physical interfaces found.',
                     style: TextStyle(fontSize: 13, color: Colors.grey)),
               )
             : Column(
@@ -1640,25 +1659,52 @@ class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${_selected.length} selected · select 2 or more',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    '${_selected.length} selected · pick 2 or more',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                   ),
-                  const SizedBox(height: 8),
-                  ...ifaces.map((iface) => CheckboxListTile(
-                        dense: true,
-                        value: _selected.contains(iface),
-                        title: Text(iface, style: const TextStyle(fontSize: 13)),
-                        onChanged: (v) => setState(() {
-                          if (v == true) {
-                            _selected.add(iface);
-                          } else {
-                            _selected.remove(iface);
-                          }
-                        }),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                      )),
+                  const SizedBox(height: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: ifaces.map((iface) {
+                          // Show friendly name prominently, raw name as subtitle
+                          final hasParen = iface.contains('(');
+                          final friendly = hasParen
+                              ? iface.substring(0, iface.lastIndexOf('(')).trim()
+                              : iface;
+                          final raw = hasParen
+                              ? iface.split('(').last.replaceAll(')', '').trim()
+                              : iface;
+                          return CheckboxListTile(
+                            dense: true,
+                            value: _selected.contains(iface),
+                            title: Text(
+                              friendly.isNotEmpty ? friendly : raw,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            subtitle: friendly.isNotEmpty && friendly != raw
+                                ? Text(raw,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade500))
+                                : null,
+                            onChanged: (v) => setState(() {
+                              if (v == true) {
+                                _selected.add(iface);
+                              } else {
+                                _selected.remove(iface);
+                              }
+                            }),
+                            controlAffinity: ListTileControlAffinity.leading,
+                            contentPadding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
                 ],
               ),
       ),
