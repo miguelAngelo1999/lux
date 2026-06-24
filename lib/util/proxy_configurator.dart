@@ -2,26 +2,22 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-/// Configures system-wide proxy settings for CLI tools and desktop apps
+/// Configures proxy environment variables for CLI tools and desktop apps
 /// when Lux connects, and clears them on disconnect.
 ///
-/// macOS sets:
-/// - System proxy via networksetup (HTTP + HTTPS)
-/// - launchctl setenv HTTP_PROXY / HTTPS_PROXY / NO_PROXY (GUI apps)
-/// - /etc/launchd.conf (persistent across reboots)
-/// - git http.proxy / https.proxy (global)
-/// - npm proxy / https-proxy
-/// - Firefox user.js proxy prefs
+/// NOTE: System proxy (networksetup on macOS, registry on Windows) is already
+/// managed by lux_core's sysproxy package. This class handles the things
+/// lux_core does NOT do:
+///   macOS: launchctl env vars, /etc/zshenv, git config, npm config, Firefox
+///   Windows: Machine/User env vars, git config, npm config
 ///
-/// Windows sets:
-/// - HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars (Machine + User scope)
-/// - git http.proxy / https.proxy (global)
-/// - npm proxy / https-proxy
+/// We intentionally do NOT call networksetup here — if lux crashes without
+/// calling stop(), the system proxy would stay pointed at 127.0.0.1:1090
+/// forever, breaking all internet access.
 class ProxyConfigurator {
   static const _noProxy =
       'localhost,127.0.0.1,10.255.0.1,*.local,169.254/16';
 
-  /// Apply proxy settings for all CLI tools and apps.
   static Future<void> apply(String proxyAddr) async {
     if (Platform.isMacOS) {
       await _applyMacOS(proxyAddr);
@@ -31,7 +27,6 @@ class ProxyConfigurator {
     debugPrint('[ProxyConfigurator] Applied proxy: http://$proxyAddr');
   }
 
-  /// Clear all proxy settings.
   static Future<void> clear() async {
     if (Platform.isMacOS) {
       await _clearMacOS();
@@ -49,101 +44,87 @@ class ProxyConfigurator {
     final port = parts.length > 1 ? parts[1] : '1090';
     final httpProxy = 'http://$proxyAddr';
 
-    // Admin script for system-level changes (networksetup, launchctl, /etc files)
-    final adminScript = File('/tmp/lux_proxy_apply.sh');
-    await adminScript.writeAsString('''
-#!/bin/bash
-HOST="$host"
-PORT="$port"
-PROXY="$httpProxy"
-NO_PROXY_VAL="$_noProxy"
+    // Write admin script to set launchctl env vars and /etc/zshenv.
+    // networksetup is intentionally omitted — lux_core handles system proxy.
+    final script = File('/tmp/lux_proxy_apply.sh');
+    await script.writeAsString(
+      '#!/bin/bash\n'
+      'PROXY="$httpProxy"\n'
+      'NO_PROXY_VAL="$_noProxy"\n'
+      '\n'
+      'launchctl setenv HTTP_PROXY "\$PROXY" 2>/dev/null || true\n'
+      'launchctl setenv HTTPS_PROXY "\$PROXY" 2>/dev/null || true\n'
+      'launchctl setenv http_proxy "\$PROXY" 2>/dev/null || true\n'
+      'launchctl setenv https_proxy "\$PROXY" 2>/dev/null || true\n'
+      'launchctl setenv NO_PROXY "\$NO_PROXY_VAL" 2>/dev/null || true\n'
+      'launchctl setenv no_proxy "\$NO_PROXY_VAL" 2>/dev/null || true\n'
+      '\n'
+      'LAUNCHD=/etc/launchd.conf\n'
+      'touch "\$LAUNCHD" 2>/dev/null || true\n'
+      'grep -v "LUX_PROXY" "\$LAUNCHD" > /tmp/lux_launchd_clean.conf 2>/dev/null || true\n'
+      'printf "setenv HTTP_PROXY %s # LUX_PROXY\\n" "\$PROXY" >> /tmp/lux_launchd_clean.conf\n'
+      'printf "setenv HTTPS_PROXY %s # LUX_PROXY\\n" "\$PROXY" >> /tmp/lux_launchd_clean.conf\n'
+      'printf "setenv http_proxy %s # LUX_PROXY\\n" "\$PROXY" >> /tmp/lux_launchd_clean.conf\n'
+      'printf "setenv https_proxy %s # LUX_PROXY\\n" "\$PROXY" >> /tmp/lux_launchd_clean.conf\n'
+      'printf "setenv NO_PROXY %s # LUX_PROXY\\n" "\$NO_PROXY_VAL" >> /tmp/lux_launchd_clean.conf\n'
+      'printf "setenv no_proxy %s # LUX_PROXY\\n" "\$NO_PROXY_VAL" >> /tmp/lux_launchd_clean.conf\n'
+      'cp /tmp/lux_launchd_clean.conf "\$LAUNCHD" 2>/dev/null || true\n'
+      '\n'
+      'touch /etc/zshenv 2>/dev/null || true\n'
+      'grep -v "LUX_PROXY" /etc/zshenv > /tmp/lux_zshenv_clean 2>/dev/null || true\n'
+      'printf "export HTTP_PROXY=\\"%s\\" # LUX_PROXY\\n" "\$PROXY" >> /tmp/lux_zshenv_clean\n'
+      'printf "export HTTPS_PROXY=\\"%s\\" # LUX_PROXY\\n" "\$PROXY" >> /tmp/lux_zshenv_clean\n'
+      'printf "export http_proxy=\\"%s\\" # LUX_PROXY\\n" "\$PROXY" >> /tmp/lux_zshenv_clean\n'
+      'printf "export https_proxy=\\"%s\\" # LUX_PROXY\\n" "\$PROXY" >> /tmp/lux_zshenv_clean\n'
+      'printf "export NO_PROXY=\\"%s\\" # LUX_PROXY\\n" "\$NO_PROXY_VAL" >> /tmp/lux_zshenv_clean\n'
+      'printf "export no_proxy=\\"%s\\" # LUX_PROXY\\n" "\$NO_PROXY_VAL" >> /tmp/lux_zshenv_clean\n'
+      'printf "export CURL_CA_BUNDLE=/etc/ssl/cert.pem # LUX_PROXY\\n" >> /tmp/lux_zshenv_clean\n'
+      'cp /tmp/lux_zshenv_clean /etc/zshenv 2>/dev/null || true\n'
+      'echo "LUX_PROXY_APPLY_OK"\n',
+    );
+    await _runAdminScript(script, 'Lux needs admin access to configure proxy environment');
 
-# 1. System proxy via networksetup for all network services
-while IFS= read -r SVC; do
-  [[ -z "\$SVC" || "\$SVC" == *"An asterisk"* ]] && continue
-  networksetup -setwebproxy "\$SVC" "\$HOST" "\$PORT" off 2>/dev/null || true
-  networksetup -setsecurewebproxy "\$SVC" "\$HOST" "\$PORT" off 2>/dev/null || true
-  networksetup -setproxybypassdomains "\$SVC" localhost 127.0.0.1 10.255.0.1 "*.local" 2>/dev/null || true
-done < <(networksetup -listallnetworkservices 2>/dev/null | tail -n +2)
-
-# 2. launchctl setenv for running GUI apps (immediate effect)
-launchctl setenv HTTP_PROXY "\$PROXY" 2>/dev/null || true
-launchctl setenv HTTPS_PROXY "\$PROXY" 2>/dev/null || true
-launchctl setenv http_proxy "\$PROXY" 2>/dev/null || true
-launchctl setenv https_proxy "\$PROXY" 2>/dev/null || true
-launchctl setenv NO_PROXY "\$NO_PROXY_VAL" 2>/dev/null || true
-launchctl setenv no_proxy "\$NO_PROXY_VAL" 2>/dev/null || true
-
-# 3. /etc/launchd.conf persistence
-LAUNCHD=/etc/launchd.conf
-touch "\$LAUNCHD" 2>/dev/null || true
-grep -v "LUX_PROXY" "\$LAUNCHD" > /tmp/lux_launchd_clean.conf 2>/dev/null || true
-printf 'setenv HTTP_PROXY %s # LUX_PROXY\\n' "\$PROXY" >> /tmp/lux_launchd_clean.conf
-printf 'setenv HTTPS_PROXY %s # LUX_PROXY\\n' "\$PROXY" >> /tmp/lux_launchd_clean.conf
-printf 'setenv http_proxy %s # LUX_PROXY\\n' "\$PROXY" >> /tmp/lux_launchd_clean.conf
-printf 'setenv https_proxy %s # LUX_PROXY\\n' "\$PROXY" >> /tmp/lux_launchd_clean.conf
-printf 'setenv NO_PROXY %s # LUX_PROXY\\n' "\$NO_PROXY_VAL" >> /tmp/lux_launchd_clean.conf
-printf 'setenv no_proxy %s # LUX_PROXY\\n' "\$NO_PROXY_VAL" >> /tmp/lux_launchd_clean.conf
-cp /tmp/lux_launchd_clean.conf "\$LAUNCHD" 2>/dev/null || true
-
-# 4. /etc/zshenv for new terminals
-touch /etc/zshenv 2>/dev/null || true
-grep -v "LUX_PROXY" /etc/zshenv > /tmp/lux_zshenv_clean 2>/dev/null || true
-printf 'export HTTP_PROXY="%s"   # LUX_PROXY\\n' "\$PROXY" >> /tmp/lux_zshenv_clean
-printf 'export HTTPS_PROXY="%s"  # LUX_PROXY\\n' "\$PROXY" >> /tmp/lux_zshenv_clean
-printf 'export http_proxy="%s"   # LUX_PROXY\\n' "\$PROXY" >> /tmp/lux_zshenv_clean
-printf 'export https_proxy="%s"  # LUX_PROXY\\n' "\$PROXY" >> /tmp/lux_zshenv_clean
-printf 'export NO_PROXY="%s"     # LUX_PROXY\\n' "\$NO_PROXY_VAL" >> /tmp/lux_zshenv_clean
-printf 'export no_proxy="%s"     # LUX_PROXY\\n' "\$NO_PROXY_VAL" >> /tmp/lux_zshenv_clean
-printf 'export CURL_CA_BUNDLE=/etc/ssl/cert.pem  # LUX_PROXY\\n' >> /tmp/lux_zshenv_clean
-cp /tmp/lux_zshenv_clean /etc/zshenv 2>/dev/null || true
-
-echo "LUX_PROXY_APPLY_OK"
-''');
-
-    await _runAdminScript(adminScript,
-        'Lux needs admin access to configure system proxy');
-
-    // User-level — no admin needed
     await _setGitProxy(httpProxy);
     await _setNpmProxy(httpProxy);
     await _setFirefoxProxy(host, int.tryParse(port) ?? 1090);
   }
 
   static Future<void> _clearMacOS() async {
-    final adminScript = File('/tmp/lux_proxy_clear.sh');
-    await adminScript.writeAsString('''
-#!/bin/bash
-
-# 1. Clear system proxy via networksetup
-while IFS= read -r SVC; do
-  [[ -z "\$SVC" || "\$SVC" == *"An asterisk"* ]] && continue
-  networksetup -setwebproxystate "\$SVC" off 2>/dev/null || true
-  networksetup -setsecurewebproxystate "\$SVC" off 2>/dev/null || true
-done < <(networksetup -listallnetworkservices 2>/dev/null | tail -n +2)
-
-# 2. Clear launchctl env vars
-for VAR in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy; do
-  launchctl unsetenv "\$VAR" 2>/dev/null || true
-done
-
-# 3. Remove from /etc/launchd.conf
-grep -v "LUX_PROXY" /etc/launchd.conf > /tmp/lux_launchd_clean.conf 2>/dev/null || true
-cp /tmp/lux_launchd_clean.conf /etc/launchd.conf 2>/dev/null || true
-
-# 4. Remove from /etc/zshenv
-grep -v "LUX_PROXY" /etc/zshenv > /tmp/lux_zshenv_clean 2>/dev/null || true
-cp /tmp/lux_zshenv_clean /etc/zshenv 2>/dev/null || true
-
-echo "LUX_PROXY_CLEAR_OK"
-''');
-
-    await _runAdminScript(adminScript,
-        'Lux needs admin access to clear system proxy');
+    final script = File('/tmp/lux_proxy_clear.sh');
+    await script.writeAsString(
+      '#!/bin/bash\n'
+      'for VAR in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy; do\n'
+      '  launchctl unsetenv "\$VAR" 2>/dev/null || true\n'
+      'done\n'
+      'grep -v "LUX_PROXY" /etc/launchd.conf > /tmp/lux_launchd_clean.conf 2>/dev/null || true\n'
+      'cp /tmp/lux_launchd_clean.conf /etc/launchd.conf 2>/dev/null || true\n'
+      'grep -v "LUX_PROXY" /etc/zshenv > /tmp/lux_zshenv_clean 2>/dev/null || true\n'
+      'cp /tmp/lux_zshenv_clean /etc/zshenv 2>/dev/null || true\n'
+      'echo "LUX_PROXY_CLEAR_OK"\n',
+    );
+    await _runAdminScript(script, 'Lux needs admin access to clear proxy environment');
 
     await _clearGitProxy();
     await _clearNpmProxy();
     await _clearFirefoxProxy();
+  }
+
+  // ── Admin script runner ───────────────────────────────────────────────────
+
+  static Future<void> _runAdminScript(File script, String prompt) async {
+    await Process.run('chmod', ['+x', script.path]);
+    // Try sudo -n first (NOPASSWD — instant after first-launch setup)
+    final sudoResult = await Process.run('sudo', ['-n', 'bash', script.path]);
+    if (sudoResult.exitCode == 0) {
+      await script.delete().catchError((_) => script);
+      return;
+    }
+    // Fall back to osascript — macOS shows Touch ID if available, else password
+    await Process.run('/usr/bin/osascript', ['-e',
+      "do shell script \"bash '${script.path}'\" "
+      "with prompt \"$prompt\" "
+      "with administrator privileges"]);
+    await script.delete().catchError((_) => script);
   }
 
   // ── Firefox ───────────────────────────────────────────────────────────────
@@ -154,15 +135,14 @@ echo "LUX_PROXY_CLEAR_OK"
       '$home/Library/Application Support/Firefox/Profiles',
       '$home/Library/Application Support/Thunderbird/Profiles',
     ];
-    final userJs = '''
-// Added by Lux proxy configurator — LUX_PROXY
-user_pref("network.proxy.type", 1);
-user_pref("network.proxy.http", "$host");
-user_pref("network.proxy.http_port", $port);
-user_pref("network.proxy.ssl", "$host");
-user_pref("network.proxy.ssl_port", $port);
-user_pref("network.proxy.no_proxies_on", "$_noProxy");
-''';
+    final userJs =
+        '// Added by Lux proxy configurator — LUX_PROXY\n'
+        'user_pref("network.proxy.type", 1);\n'
+        'user_pref("network.proxy.http", "$host");\n'
+        'user_pref("network.proxy.http_port", $port);\n'
+        'user_pref("network.proxy.ssl", "$host");\n'
+        'user_pref("network.proxy.ssl_port", $port);\n'
+        'user_pref("network.proxy.no_proxies_on", "$_noProxy");\n';
     for (final base in profileBases) {
       final dir = Directory(base);
       if (!await dir.exists()) continue;
@@ -170,11 +150,9 @@ user_pref("network.proxy.no_proxies_on", "$_noProxy");
         if (entry is! Directory) continue;
         final f = File('${entry.path}/user.js');
         try {
-          // Remove old Lux lines, append new
           String existing = '';
           if (await f.exists()) {
-            existing = await f.readAsString();
-            existing = existing
+            existing = (await f.readAsString())
                 .split('\n')
                 .where((l) => !l.contains('LUX_PROXY'))
                 .join('\n');
@@ -183,26 +161,6 @@ user_pref("network.proxy.no_proxies_on", "$_noProxy");
         } catch (_) {}
       }
     }
-  }
-
-  static Future<void> _runAdminScript(File script, String prompt) async {
-    await Process.run('chmod', ['+x', script.path]);
-
-    // Try sudo -n first (non-interactive). Works if NOPASSWD sudoers is set up.
-    // This is the normal path after first-launch elevation — instant, no prompt.
-    final sudoResult = await Process.run('sudo', ['-n', 'bash', script.path]);
-    if (sudoResult.exitCode == 0) {
-      await script.delete().catchError((_) => script);
-      return;
-    }
-
-    // NOPASSWD not set up yet — use osascript.
-    // macOS automatically shows Touch ID if available, password otherwise.
-    await Process.run('/usr/bin/osascript', ['-e',
-      "do shell script \"bash '${script.path}'\" "
-      "with prompt \"$prompt\" "
-      "with administrator privileges"]);
-    await script.delete().catchError((_) => script);
   }
 
   static Future<void> _clearFirefoxProxy() async {
@@ -240,10 +198,8 @@ user_pref("network.proxy.no_proxies_on", "$_noProxy");
 
   static Future<void> _clearGitProxy() async {
     try {
-      await Process.run(
-          'git', ['config', '--global', '--unset', 'http.proxy']);
-      await Process.run(
-          'git', ['config', '--global', '--unset', 'https.proxy']);
+      await Process.run('git', ['config', '--global', '--unset', 'http.proxy']);
+      await Process.run('git', ['config', '--global', '--unset', 'https.proxy']);
     } catch (_) {}
   }
 
@@ -251,19 +207,15 @@ user_pref("network.proxy.no_proxies_on", "$_noProxy");
 
   static Future<void> _setNpmProxy(String httpProxy) async {
     try {
-      await Process.run('npm', ['config', 'set', 'proxy', httpProxy],
-          runInShell: true);
-      await Process.run('npm', ['config', 'set', 'https-proxy', httpProxy],
-          runInShell: true);
+      await Process.run('npm', ['config', 'set', 'proxy', httpProxy], runInShell: true);
+      await Process.run('npm', ['config', 'set', 'https-proxy', httpProxy], runInShell: true);
     } catch (_) {}
   }
 
   static Future<void> _clearNpmProxy() async {
     try {
-      await Process.run('npm', ['config', 'delete', 'proxy'],
-          runInShell: true);
-      await Process.run('npm', ['config', 'delete', 'https-proxy'],
-          runInShell: true);
+      await Process.run('npm', ['config', 'delete', 'proxy'], runInShell: true);
+      await Process.run('npm', ['config', 'delete', 'https-proxy'], runInShell: true);
     } catch (_) {}
   }
 
@@ -305,17 +257,17 @@ user_pref("network.proxy.no_proxies_on", "$_noProxy");
     try {
       await Process.run('powershell.exe', [
         '-noprofile', '-NonInteractive', '-command',
-        '[Environment]::SetEnvironmentVariable("HTTP_PROXY",\$null,"Machine");'
-            '[Environment]::SetEnvironmentVariable("HTTPS_PROXY",\$null,"Machine");'
-            '[Environment]::SetEnvironmentVariable("NO_PROXY",\$null,"Machine")',
+        r'[Environment]::SetEnvironmentVariable("HTTP_PROXY",$null,"Machine");'
+            r'[Environment]::SetEnvironmentVariable("HTTPS_PROXY",$null,"Machine");'
+            r'[Environment]::SetEnvironmentVariable("NO_PROXY",$null,"Machine")',
       ]);
     } catch (_) {}
     try {
       await Process.run('powershell.exe', [
         '-noprofile', '-NonInteractive', '-command',
-        '[Environment]::SetEnvironmentVariable("HTTP_PROXY",\$null,"User");'
-            '[Environment]::SetEnvironmentVariable("HTTPS_PROXY",\$null,"User");'
-            '[Environment]::SetEnvironmentVariable("NO_PROXY",\$null,"User")',
+        r'[Environment]::SetEnvironmentVariable("HTTP_PROXY",$null,"User");'
+            r'[Environment]::SetEnvironmentVariable("HTTPS_PROXY",$null,"User");'
+            r'[Environment]::SetEnvironmentVariable("NO_PROXY",$null,"User")',
       ]);
     } catch (_) {}
   }
