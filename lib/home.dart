@@ -289,7 +289,8 @@ class _HomeState extends State<Home>
         if (freshSsl.detected && freshSsl.hasCert) {
           final fp = freshSsl.certInfo?.sha256Fingerprint ?? '';
           final certOrg = freshSsl.certInfo?.organizationName ?? '';
-          if (certOrg.isNotEmpty && name == server) {
+          // Always rename to cert org name if we got one and it differs from current name
+          if (certOrg.isNotEmpty && name != certOrg) {
             try {
               final proxyList = await coreManager!.getProxyList();
               final added = proxyList.proxies.lastWhere(
