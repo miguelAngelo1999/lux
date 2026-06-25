@@ -11,6 +11,7 @@ import 'package:lux/core/core_config.dart';
 import 'package:lux/util/cert_installer.dart';
 import 'package:lux/util/installed_certs_store.dart';
 import 'package:lux/util/network_detector.dart';
+import 'package:lux/util/network_reset.dart';
 import 'package:lux/dashboard.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
@@ -797,6 +798,23 @@ class _HomeState extends State<Home>
       setState(() {
         coreError = e;
       });
+    });
+
+    // Watchdog: if lux_core dies unexpectedly, reset network settings
+    // so internet isn't permanently broken by stale system proxy / TUN.
+    _startCoreWatchdog();
+  }
+
+  void _startCoreWatchdog() {
+    final proc = coreManager?.coreProcess?.process;
+    if (proc == null || !Platform.isMacOS) return;
+    proc.exitCode.then((code) async {
+      debugPrint('[watchdog] lux_core exited with code $code');
+      if (mounted && code != 0) {
+        // Unexpected exit — reset network to prevent being stuck
+        await NetworkReset.reset();
+        debugPrint('[watchdog] network reset after unexpected core exit');
+      }
     });
   }
 

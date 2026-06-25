@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:lux/util/cert_installer.dart';
+import 'package:lux/util/network_reset.dart';
 
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
@@ -380,6 +381,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             const SizedBox(height: 16),
             _sectionHeader('Advanced'),
             _configFileTile(),
+            _resetNetworkTile(),
 
             // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇ
             const SizedBox(height: 16),
@@ -719,6 +721,51 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Import failed: $e'), backgroundColor: Colors.red));
     }
+  }
+
+  Widget _resetNetworkTile() {
+    return ListTile(
+      dense: true,
+      title: const Text('Reset Network', style: TextStyle(fontSize: 14)),
+      subtitle: const Text(
+          'Clear system proxy + env vars if internet is stuck after crash',
+          style: TextStyle(fontSize: 12)),
+      trailing: TextButton(
+        style: TextButton.styleFrom(foregroundColor: Colors.orange),
+        onPressed: _isSaving
+            ? null
+            : () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Reset Network Settings?'),
+                    content: const Text(
+                        'This clears the system proxy, HTTP_PROXY env vars, and git proxy. '
+                        'Use this if internet is broken after Lux crashed.\n\n'
+                        'You will need to reconnect Lux afterwards.'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel')),
+                      FilledButton(
+                          style: FilledButton.styleFrom(
+                              backgroundColor: Colors.orange),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Reset')),
+                    ],
+                  ),
+                );
+                if (confirmed != true || !mounted) return;
+                await NetworkReset.reset();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Network settings reset. Reconnect Lux to use proxy.')),
+                  );
+                }
+              },
+        child: const Text('Reset', style: TextStyle(fontSize: 12)),
+      ),
+    );
   }
 
   Widget _configFileTile() {
