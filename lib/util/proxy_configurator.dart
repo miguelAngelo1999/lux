@@ -223,15 +223,32 @@ class ProxyConfigurator {
 
   static Future<void> _applyWindows(String proxyAddr) async {
     final httpProxy = 'http://$proxyAddr';
+    // Disable Windows "Automatically detect settings" (WPAD) so traffic
+    // goes through lux's 127.0.0.1:1090 instead of the corporate PAC/WPAD.
+    await _setWindowsAutoDetect(false);
     await _setEnvVarsWindows(httpProxy);
     await _setGitProxy(httpProxy);
     await _setNpmProxy(httpProxy);
   }
 
   static Future<void> _clearWindows() async {
+    // Restore AutoDetect when lux disconnects
+    await _setWindowsAutoDetect(true);
     await _clearEnvVarsWindows();
     await _clearGitProxy();
     await _clearNpmProxy();
+  }
+
+  /// Enables or disables Windows "Automatically detect settings" (WPAD/PAC).
+  static Future<void> _setWindowsAutoDetect(bool enabled) async {
+    try {
+      final value = enabled ? 1 : 0;
+      await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        'Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings" '
+            '-Name "AutoDetect" -Value $value -Force',
+      ]);
+    } catch (_) {}
   }
 
   static Future<void> _setEnvVarsWindows(String httpProxy) async {
