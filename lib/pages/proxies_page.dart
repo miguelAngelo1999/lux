@@ -261,11 +261,9 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         );
         return;
       }
-      // Probe SSL only if proxy doesn't need auth (avoids 20s hang)
-      final ssl = detected.needsAuth
-          ? SslBumpStatus(detected: false, hasCert: false, error: 'not_probed')
-          : await widget.coreManager.getSslBumpStatus(
-              proxyAddr: detected.address, fresh: true);
+      // Always probe SSL directly — transparent proxy intercepts port 443 at network
+      // level so cert is visible without auth. Only skip if no proxy was found.
+      final ssl = await widget.coreManager.getSslBumpStatus(fresh: true);
       if (!mounted) return;
       await _showScanResultDialog(detected, ssl);
     } catch (e) {
@@ -506,6 +504,21 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   if (!mounted) return;
                   if (freshSsl.detected && freshSsl.hasCert) {
                     final fp = freshSsl.certInfo?.sha256Fingerprint ?? '';
+                    final certOrg = freshSsl.certInfo?.organizationName ?? '';
+                    // Rename proxy to cert org name if different from what was entered
+                    if (certOrg.isNotEmpty && name != certOrg) {
+                      try {
+                        final proxyList = await widget.coreManager.getProxyList();
+                        final added = proxyList.proxies.lastWhere(
+                            (p) => p.server == server, orElse: () => proxyList.proxies.last);
+                        await widget.coreManager.updateProxy(added.id, {
+                          'name': certOrg, 'server': server,
+                          'port': int.tryParse(port) ?? 8080,
+                          if (user.isNotEmpty) 'username': user,
+                          if (pass.isNotEmpty) 'password': pass,
+                        });
+                      } catch (_) {}
+                    }
                     if (!await InstalledCertsStore.isFullyInstalled(fp)) {
                       _showCertTrustDialog(freshSsl, fp);
                     }
