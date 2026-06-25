@@ -1150,19 +1150,34 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ListTile(
-          dense: true,
-          title: const Text('Detect SSL Bumping', style: TextStyle(fontSize: 14)),
-          subtitle: const Text(
-            'Check if your proxy intercepts HTTPS traffic and install its CA certificate so curl, git, npm, and Python trust it.',
-            style: TextStyle(fontSize: 12),
-          ),
-          trailing: TextButton.icon(
-            icon: const Icon(Icons.search, size: 16),
-            label: const Text('Check', style: TextStyle(fontSize: 12)),
-            onPressed: _sslChecking ? null : _checkSslBump,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Detect SSL Bumping', style: TextStyle(fontSize: 14)),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Check if your proxy intercepts HTTPS traffic and install its CA certificate so curl, git, npm, and Python trust it.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                icon: const Icon(Icons.search, size: 16),
+                label: const Text('Check', style: TextStyle(fontSize: 12)),
+                onPressed: _sslChecking ? null : _checkSslBump,
+              ),
+            ],
           ),
         ),
+        const SizedBox(height: 4),
         if (status != null) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
