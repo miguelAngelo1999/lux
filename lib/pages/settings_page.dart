@@ -29,6 +29,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   bool _sslChecking = false;
   bool _sslInstalling = false;
   InstallResult? _installResult;
+  // Network tools state
+  String? _networkToolStatus;
 
   List<String> _interfaces = [];
 
@@ -389,7 +391,14 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             _sectionHeader('SSL Inspection'),
             _sslInspectionSection(),
 
-            // ΓöÇΓöÇ Config Backup ΓöÇΓöÇ
+            // ── Network Tools ──
+            if (Platform.isWindows) ...[
+              const SizedBox(height: 16),
+              _sectionHeader('Network Tools'),
+              _networkToolsSection(),
+            ],
+
+            // ── Config Backup ──
             const SizedBox(height: 16),
             _sectionHeader('Config Backup'),
             _importExportTile(),
@@ -1346,6 +1355,140 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
   }
 
+  // ── Network Tools (Windows) ────────────────────────────────────────────────
+
+  Widget _networkToolsSection() {
+    final tools = [
+      _NetworkTool(
+        icon: Icons.refresh,
+        label: 'Renew IP',
+        description: 'Release and renew DHCP lease — fixes "no internet" after waking from sleep',
+        color: Colors.blue,
+        onRun: () => _runNetworkTool('Renew IP', () async {
+          await Process.run('ipconfig', ['/release'], runInShell: true);
+          await Process.run('ipconfig', ['/renew'], runInShell: true);
+          return 'IP address renewed';
+        }),
+      ),
+      _NetworkTool(
+        icon: Icons.dns_outlined,
+        label: 'Flush DNS',
+        description: 'Clear DNS cache — fixes sites that stopped resolving',
+        color: Colors.teal,
+        onRun: () => _runNetworkTool('Flush DNS', () async {
+          final r = await Process.run('ipconfig', ['/flushdns'], runInShell: true);
+          return r.exitCode == 0 ? 'DNS cache flushed' : 'Failed: ${r.stderr}';
+        }),
+      ),
+      _NetworkTool(
+        icon: Icons.cleaning_services_outlined,
+        label: 'Clear ARP Cache',
+        description: 'Fix LAN connection issues with other devices',
+        color: Colors.orange,
+        onRun: () => _runNetworkTool('Clear ARP Cache', () async {
+          final r = await Process.run('arp', ['-d', '*'], runInShell: true);
+          return r.exitCode == 0 ? 'ARP cache cleared' : 'Cleared (some entries may persist)';
+        }),
+      ),
+      _NetworkTool(
+        icon: Icons.settings_backup_restore,
+        label: 'Reset Proxy Settings',
+        description: 'Restore system proxy if lux crashed and left proxy misconfigured',
+        color: Colors.purple,
+        onRun: () => _runNetworkTool('Reset Proxy', () async {
+          await NetworkReset.reset();
+          return 'Proxy settings restored';
+        }),
+      ),
+      _NetworkTool(
+        icon: Icons.warning_amber_outlined,
+        label: 'Reset Winsock',
+        description: 'Fix corrupted network stack — requires restart',
+        color: Colors.red,
+        requiresRestart: true,
+        onRun: () => _runNetworkTool('Reset Winsock', () async {
+          final r = await Process.run('netsh', ['winsock', 'reset'], runInShell: true);
+          return r.exitCode == 0 ? 'Winsock reset — please restart your PC' : 'Failed: ${r.stderr}';
+        }),
+      ),
+      _NetworkTool(
+        icon: Icons.dangerous_outlined,
+        label: 'Reset TCP/IP Stack',
+        description: 'Nuclear fix for persistent network issues — requires restart',
+        color: Colors.red.shade800,
+        requiresRestart: true,
+        onRun: () => _runNetworkTool('Reset TCP/IP', () async {
+          final r = await Process.run('netsh', ['int', 'ip', 'reset'], runInShell: true);
+          return r.exitCode == 0 ? 'TCP/IP reset — please restart your PC' : 'Failed: ${r.stderr}';
+        }),
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Status message
+        if (_networkToolStatus != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(children: [
+                const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_networkToolStatus!,
+                    style: const TextStyle(fontSize: 12))),
+                GestureDetector(
+                  onTap: () => setState(() => _networkToolStatus = null),
+                  child: const Icon(Icons.close, size: 14, color: Colors.grey),
+                ),
+              ]),
+            ),
+          ),
+        // Tool buttons grid
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: tools.map((tool) => _networkToolButton(tool)).toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _networkToolButton(_NetworkTool tool) {
+    return Tooltip(
+      message: tool.description,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: tool.color,
+          side: BorderSide(color: tool.color.withValues(alpha: 0.4)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          textStyle: const TextStyle(fontSize: 12),
+        ),
+        icon: Icon(tool.icon, size: 14),
+        label: Text(tool.label),
+        onPressed: tool.onRun,
+      ),
+    );
+  }
+
+  Future<void> _runNetworkTool(String name, Future<String> Function() action) async {
+    try {
+      final result = await action();
+      if (mounted) setState(() => _networkToolStatus = '$name: $result');
+    } catch (e) {
+      if (mounted) setState(() => _networkToolStatus = '$name failed: $e');
+    }
+  }
+
   Widget _resetDismissedProxiesTile() {
     return ListTile(
       dense: true,
@@ -1929,4 +2072,23 @@ class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
       ],
     );
   }
+}
+
+/// Data class for a network tool button.
+class _NetworkTool {
+  final IconData icon;
+  final String label;
+  final String description;
+  final Color color;
+  final bool requiresRestart;
+  final VoidCallback onRun;
+
+  const _NetworkTool({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.color,
+    required this.onRun,
+    this.requiresRestart = false,
+  });
 }
