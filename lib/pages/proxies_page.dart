@@ -484,7 +484,6 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     if (user.isNotEmpty) 'username': user,
                     if (pass.isNotEmpty) 'password': pass,
                   });
-                  _refreshProxiesOnly();
 
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -523,6 +522,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                       _showCertTrustDialog(freshSsl, fp);
                     }
                   }
+                  // Refresh after rename so the final name shows immediately
+                  await _refreshProxiesOnly();
                 } catch (e) {
                   if (mounted) ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Failed: $e')));
