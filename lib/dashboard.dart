@@ -18,9 +18,12 @@ class Dashboard extends StatefulWidget {
   final String homeDir;
   final CoreManager coreManager;
   final VoidCallback? onConnected;
+  /// Called by external code (e.g. startup wizard) after adding a proxy,
+  /// so the proxies page refreshes immediately.
+  final void Function(VoidCallback trigger)? onRegisterProxyRefresh;
 
   const Dashboard(this.homeDir, this.baseUrl, this.urlStr, this.coreManager,
-      {super.key, this.onConnected});
+      {super.key, this.onConnected, this.onRegisterProxyRefresh});
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -45,6 +48,9 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     super.initState();
     windowManager.addListener(this);
     checkForUpdate();
+    // Register refresh callback so external callers (e.g. startup wizard) can
+    // trigger a proxy list refresh after adding a proxy.
+    widget.onRegisterProxyRefresh?.call(() => _refreshProxies?.call());
   }
 
   @override

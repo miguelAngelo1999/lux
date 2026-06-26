@@ -63,6 +63,7 @@ class _HomeState extends State<Home>
   dynamic coreError;
   bool _quickEditMode = false;
   String? _lastDetectedCertFingerprint;
+  VoidCallback? _proxyListRefresh; // set by Dashboard, called after adding a proxy
   final _quickEditChannel = const MethodChannel('lux_quick_edit');
 
   Future<void> _handleNativeQuickEdit(MethodCall call) async {
@@ -306,8 +307,7 @@ class _HomeState extends State<Home>
           if (await InstalledCertsStore.isFullyInstalled(fp)) return;
           _lastDetectedCertFingerprint = fp;
           _showInlineCertTrustDialog(freshSsl);
-        } else if (freshSsl.error != null && freshSsl.error!.contains('407')) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        } else if (freshSsl.error != null && freshSsl.error!.contains('407')) {          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
             duration: Duration(seconds: 5)));
         } else if (freshSsl.detected && !freshSsl.hasCert) {
@@ -315,6 +315,8 @@ class _HomeState extends State<Home>
             content: Text('SSL interception detected — connect to proxy to capture certificate'),
             duration: Duration(seconds: 4)));
         }
+        // Refresh the proxies page so the new proxy appears immediately
+        _proxyListRefresh?.call();
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed: $e')));
@@ -1078,6 +1080,7 @@ class _HomeState extends State<Home>
       );
     }
     return Dashboard(homeDir, baseUrl, urlStr, coreManager!,
-        onConnected: () {});
+        onConnected: () {},
+        onRegisterProxyRefresh: (cb) => _proxyListRefresh = cb);
   }
 }
