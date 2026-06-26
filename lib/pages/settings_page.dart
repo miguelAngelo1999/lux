@@ -382,6 +382,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             _sectionHeader('Advanced'),
             _configFileTile(),
             _resetNetworkTile(),
+            _pacStatusTile(),
 
             // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇ
             const SizedBox(height: 16),
@@ -721,6 +722,55 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Import failed: $e'), backgroundColor: Colors.red));
     }
+  }
+
+  Widget _pacStatusTile() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: widget.coreManager.getPacStatus(),
+      builder: (ctx, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!;
+        final active = data['active'] as bool? ?? false;
+        final count = data['count'] as int? ?? 0;
+        final url = data['url'] as String? ?? '';
+        final domains = List<String>.from(data['domains'] as List? ?? []);
+        final cidrs = List<String>.from(data['cidrs'] as List? ?? []);
+
+        return ListTile(
+          dense: true,
+          title: Row(children: [
+            const Text('PAC Rules', style: TextStyle(fontSize: 14)),
+            const SizedBox(width: 8),
+            if (active)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('$count active',
+                    style: const TextStyle(fontSize: 10, color: Colors.green)),
+              ),
+          ]),
+          subtitle: active
+              ? Text(
+                  'From: $url\n'
+                  'DIRECT domains: ${domains.take(3).join(", ")}${domains.length > 3 ? "..." : ""}\n'
+                  'DIRECT CIDRs: ${cidrs.take(2).join(", ")}${cidrs.length > 2 ? "..." : ""}',
+                  style: const TextStyle(fontSize: 11),
+                )
+              : const Text('No PAC file detected on this network',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+          trailing: active
+              ? IconButton(
+                  icon: const Icon(Icons.refresh, size: 16),
+                  tooltip: 'Refresh',
+                  onPressed: () => setState(() {}),
+                )
+              : null,
+        );
+      },
+    );
   }
 
   Widget _resetNetworkTile() {

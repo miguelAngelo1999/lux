@@ -459,6 +459,16 @@ class CoreManager {
     }
   }
 
+  /// Get PAC status — active rules from auto-detected WPAD/PAC file.
+  Future<Map<String, dynamic>> getPacStatus() async {
+    try {
+      final res = await dioFast.get('$baseHttpUrl/pac/status');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return {'active': false, 'count': 0, 'rules': [], 'url': ''};
+    }
+  }
+
   /// Get log WebSocket channel (reconnectable).
   Future<WebSocketChannel> getLogChannel() async {
     return WebSocketChannel.connect(
