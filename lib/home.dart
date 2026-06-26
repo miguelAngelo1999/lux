@@ -257,6 +257,7 @@ class _HomeState extends State<Home>
     final passFocus  = FocusNode();
     bool obscure = true;
     bool dontShowAgain = false;
+    bool autoSelect = true; // auto-select new proxy as active after adding
     BuildContext? _dialogCtx; // set when dialog opens, used by Enter key
 
     // Extracted add logic — called by both the button and Enter on password field
@@ -317,6 +318,16 @@ class _HomeState extends State<Home>
         }
         // Refresh the proxies page so the new proxy appears immediately
         _proxyListRefresh?.call();
+        // Auto-select the new proxy as active if checkbox is checked
+        if (autoSelect) {
+          try {
+            final proxyList = await coreManager!.getProxyList();
+            final added = proxyList.proxies.lastWhere(
+                (p) => p.server == server, orElse: () => proxyList.proxies.last);
+            await coreManager!.selectProxy(added.id);
+            _proxyListRefresh?.call();
+          } catch (_) {}
+        }
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed: $e')));
@@ -337,7 +348,15 @@ class _HomeState extends State<Home>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) {
           _dialogCtx = ctx;
-          return AlertDialog(
+          return KeyboardListener(
+            focusNode: FocusNode()..requestFocus(),
+            onKeyEvent: (event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.enter) {
+                _doAdd();
+              }
+            },
+            child: AlertDialog(
           title: const Row(children: [
             Icon(Icons.wifi_find, size: 20),
             SizedBox(width: 8),
@@ -540,7 +559,7 @@ class _HomeState extends State<Home>
             ),
           ),
           actions: [
-            // "Don't show again" checkbox on the left, flush with buttons
+            // Checkboxes on left, buttons on right
             Row(
               children: [
                 Checkbox(
@@ -552,6 +571,18 @@ class _HomeState extends State<Home>
                 GestureDetector(
                   onTap: () => setSt(() => dontShowAgain = !dontShowAgain),
                   child: const Text('Don\'t show again',
+                      style: TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(width: 12),
+                Checkbox(
+                  value: autoSelect,
+                  onChanged: (v) => setSt(() => autoSelect = v ?? true),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                GestureDetector(
+                  onTap: () => setSt(() => autoSelect = !autoSelect),
+                  child: const Text('Auto-select',
                       style: TextStyle(fontSize: 12)),
                 ),
                 const Spacer(),
@@ -574,7 +605,8 @@ class _HomeState extends State<Home>
               ],
             ),
           ],
-          ); // closes AlertDialog
+          ), // closes AlertDialog
+          ); // closes KeyboardListener
         }, // closes StatefulBuilder builder
       ), // closes StatefulBuilder
     ); // closes showDialog
