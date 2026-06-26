@@ -192,7 +192,6 @@ class _HomeState extends State<Home>
 
   Future<void> _checkForNetworkProxy() async {
     if (coreManager == null || !mounted) return;
-    await Future.delayed(const Duration(seconds: 3));
     if (!mounted) return;
     try {
       final detected = await coreManager!.detectNetworkProxy();
@@ -785,7 +784,7 @@ class _HomeState extends State<Home>
 
     // Detect network proxy early — before lux_core starts, so system proxy
     // settings still reflect the real upstream proxy (not Lux's own 127.0.0.1)
-    Future.delayed(const Duration(milliseconds: 500), () => _detectProxyEarly());
+    _detectProxyEarly();
 
     var corePath = path.join(Paths.assetsBin.path, LuxCoreName.name);
     var curHomeDir = await getHomeDir();
@@ -843,12 +842,38 @@ class _HomeState extends State<Home>
   void _startCoreWatchdog() {
     final proc = coreManager?.coreProcess?.process;
     if (proc == null || !Platform.isMacOS) return;
+    // Watch for unexpected exit
     proc.exitCode.then((code) async {
       debugPrint('[watchdog] lux_core exited with code $code');
       if (mounted && code != 0) {
-        // Unexpected exit — reset network to prevent being stuck
         await NetworkReset.reset();
         debugPrint('[watchdog] network reset after unexpected core exit');
+      }
+    });
+    // Heartbeat: ping lux_core every 15s. If it stops responding, reset network.
+    _startHeartbeat();
+  }
+
+  void _startHeartbeat() {
+    if (coreManager == null) return;
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 15));
+      if (!mounted || coreManager == null) return false;
+      try {
+        final isStarted = await coreManager!.getIsStarted()
+            .timeout(const Duration(seconds: 10));
+        // Core responded — it's alive (regardless of isStarted value)
+        return mounted; // continue loop while mounted
+      } catch (e) {
+        // Core didn't respond in 10s — it's hung
+        debugPrint('[watchdog] lux_core unresponsive: $e — resetting network');
+        await NetworkReset.reset();
+        if (mounted) {
+          setState(() {
+            coreError = Exception('lux_core became unresponsive — network reset. Please restart Lux.');
+          });
+        }
+        return false; // stop loop
       }
     });
   }
@@ -859,7 +884,7 @@ class _HomeState extends State<Home>
     });
     // After core starts, probe for a network proxy in the background
     // and ensure SSL bump certs are installed if needed.
-    Future.delayed(const Duration(seconds: 2), () => _checkForNetworkProxy());
+    Future.delayed(const Duration(milliseconds: 500), () => _checkForNetworkProxy());
     // Detect corporate vs home network and switch rules accordingly
     Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
     if (eventChannel == null) {
