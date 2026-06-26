@@ -192,18 +192,21 @@ class _HomeState extends State<Home>
 
   Future<void> _checkForNetworkProxy() async {
     if (coreManager == null || !mounted) return;
-    await Future.delayed(const Duration(seconds: 3));
+    // Windows: registry read is instant, no need to wait for lux_core to settle
+    // macOS: wait a bit for scutil/network to be ready
+    await Future.delayed(Platform.isWindows
+        ? const Duration(milliseconds: 500)
+        : const Duration(seconds: 3));
     if (!mounted) return;
     try {
       final detected = await coreManager!.detectNetworkProxy();
       if (detected == null || !mounted) return;
       _detectedProxyAddr = detected.address;
 
-      // Run SSL bump probe. If the proxy requires auth (407), probe through
-      // lux's own local proxy (127.0.0.1:1090) which already handles auth.
-      // Wait a bit for auto-connect to complete first.
+      // SSL probe — on Windows transparent proxy gives cert without auth.
+      // On macOS with auth, wait briefly for autoconnect then probe via local port.
       SslBumpStatus sslStatus;
-      if (detected.needsAuth) {
+      if (detected.needsAuth && !Platform.isWindows) {
         // Give auto-connect time to complete (it starts immediately with backoff)
         await Future.delayed(const Duration(seconds: 3));
         // Check if lux is actually connected now
@@ -221,10 +224,8 @@ class _HomeState extends State<Home>
           sslStatus = SslBumpStatus(detected: false, hasCert: false);
         }
       } else {
-        sslStatus = await coreManager!.getSslBumpStatus(
-          proxyAddr: detected.address,
-          fresh: true,
-        );
+        // Direct probe — works immediately on transparent-proxy networks
+        sslStatus = await coreManager!.getSslBumpStatus(fresh: true);
       }
 
       if (!mounted) return;
@@ -857,9 +858,12 @@ class _HomeState extends State<Home>
     setState(() {
       isCoreReady.value = true;
     });
-    // After core starts, probe for a network proxy in the background
-    // and ensure SSL bump certs are installed if needed.
-    Future.delayed(const Duration(seconds: 2), () => _checkForNetworkProxy());
+    // After core starts, probe for a network proxy in the background.
+    // Windows: near-immediate (registry read), macOS: 2s for network to settle.
+    Future.delayed(
+      Platform.isWindows ? const Duration(milliseconds: 500) : const Duration(seconds: 2),
+      () => _checkForNetworkProxy(),
+    );
     // Detect corporate vs home network and switch rules accordingly
     Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
     if (eventChannel == null) {
