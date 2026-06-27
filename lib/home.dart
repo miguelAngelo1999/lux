@@ -192,22 +192,18 @@ class _HomeState extends State<Home>
 
   Future<void> _checkForNetworkProxy() async {
     if (coreManager == null || !mounted) return;
-    // Windows: registry read is instant, no need to wait for lux_core to settle
-    // macOS: wait a bit for scutil/network to be ready
-    await Future.delayed(Platform.isWindows
-        ? const Duration(milliseconds: 500)
-        : const Duration(seconds: 3));
     if (!mounted) return;
     try {
       final detected = await coreManager!.detectNetworkProxy();
       if (detected == null || !mounted) return;
       _detectedProxyAddr = detected.address;
 
-      // SSL probe — on Windows transparent proxy gives cert without auth.
-      // On macOS with auth, wait briefly for autoconnect then probe via local port.
+      // Run SSL bump probe. If the proxy requires auth (407), probe through
+      // lux's own local proxy (127.0.0.1:1090) which already handles auth.
+      // Wait a bit for auto-connect to complete first.
       SslBumpStatus sslStatus;
       if (detected.needsAuth && !Platform.isWindows) {
-        // Give auto-connect time to complete (it starts immediately with backoff)
+        // macOS: Give auto-connect time to complete (it starts immediately with backoff)
         await Future.delayed(const Duration(seconds: 3));
         // Check if lux is actually connected now
         bool isConnected = false;
@@ -224,8 +220,12 @@ class _HomeState extends State<Home>
           sslStatus = SslBumpStatus(detected: false, hasCert: false);
         }
       } else {
-        // Direct probe — works immediately on transparent-proxy networks
-        sslStatus = await coreManager!.getSslBumpStatus(fresh: true);
+        // Windows: transparent proxy intercepts all TLS — direct probe works without auth
+        // macOS non-auth: probe directly through the detected proxy
+        sslStatus = await coreManager!.getSslBumpStatus(
+          proxyAddr: Platform.isWindows ? null : detected.address,
+          fresh: true,
+        );
       }
 
       if (!mounted) return;
@@ -786,7 +786,7 @@ class _HomeState extends State<Home>
 
     // Detect network proxy early — before lux_core starts, so system proxy
     // settings still reflect the real upstream proxy (not Lux's own 127.0.0.1)
-    Future.delayed(const Duration(milliseconds: 500), () => _detectProxyEarly());
+    _detectProxyEarly();
 
     var corePath = path.join(Paths.assetsBin.path, LuxCoreName.name);
     var curHomeDir = await getHomeDir();
@@ -844,12 +844,38 @@ class _HomeState extends State<Home>
   void _startCoreWatchdog() {
     final proc = coreManager?.coreProcess?.process;
     if (proc == null || !Platform.isMacOS) return;
+    // Watch for unexpected exit
     proc.exitCode.then((code) async {
       debugPrint('[watchdog] lux_core exited with code $code');
       if (mounted && code != 0) {
-        // Unexpected exit — reset network to prevent being stuck
         await NetworkReset.reset();
         debugPrint('[watchdog] network reset after unexpected core exit');
+      }
+    });
+    // Heartbeat: ping lux_core every 15s. If it stops responding, reset network.
+    _startHeartbeat();
+  }
+
+  void _startHeartbeat() {
+    if (coreManager == null) return;
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 15));
+      if (!mounted || coreManager == null) return false;
+      try {
+        final isStarted = await coreManager!.getIsStarted()
+            .timeout(const Duration(seconds: 10));
+        // Core responded — it's alive (regardless of isStarted value)
+        return mounted; // continue loop while mounted
+      } catch (e) {
+        // Core didn't respond in 10s — it's hung
+        debugPrint('[watchdog] lux_core unresponsive: $e — resetting network');
+        await NetworkReset.reset();
+        if (mounted) {
+          setState(() {
+            coreError = Exception('lux_core became unresponsive — network reset. Please restart Lux.');
+          });
+        }
+        return false; // stop loop
       }
     });
   }
@@ -858,12 +884,9 @@ class _HomeState extends State<Home>
     setState(() {
       isCoreReady.value = true;
     });
-    // After core starts, probe for a network proxy in the background.
-    // Windows: near-immediate (registry read), macOS: 2s for network to settle.
-    Future.delayed(
-      Platform.isWindows ? const Duration(milliseconds: 500) : const Duration(seconds: 2),
-      () => _checkForNetworkProxy(),
-    );
+    // After core starts, probe for a network proxy in the background
+    // and ensure SSL bump certs are installed if needed.
+    Future.delayed(const Duration(milliseconds: 500), () => _checkForNetworkProxy());
     // Detect corporate vs home network and switch rules accordingly
     Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
     if (eventChannel == null) {
