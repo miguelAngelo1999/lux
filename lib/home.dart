@@ -202,8 +202,8 @@ class _HomeState extends State<Home>
       // lux's own local proxy (127.0.0.1:1090) which already handles auth.
       // Wait a bit for auto-connect to complete first.
       SslBumpStatus sslStatus;
-      if (detected.needsAuth) {
-        // Give auto-connect time to complete (it starts immediately with backoff)
+      if (detected.needsAuth && !Platform.isWindows) {
+        // macOS: Give auto-connect time to complete (it starts immediately with backoff)
         await Future.delayed(const Duration(seconds: 3));
         // Check if lux is actually connected now
         bool isConnected = false;
@@ -220,8 +220,10 @@ class _HomeState extends State<Home>
           sslStatus = SslBumpStatus(detected: false, hasCert: false);
         }
       } else {
+        // Windows: transparent proxy intercepts all TLS — direct probe works without auth
+        // macOS non-auth: probe directly through the detected proxy
         sslStatus = await coreManager!.getSslBumpStatus(
-          proxyAddr: detected.address,
+          proxyAddr: Platform.isWindows ? null : detected.address,
           fresh: true,
         );
       }
@@ -841,7 +843,7 @@ class _HomeState extends State<Home>
 
   void _startCoreWatchdog() {
     final proc = coreManager?.coreProcess?.process;
-    if (proc == null || !Platform.isMacOS) return;
+    if (proc == null) return;
     // Watch for unexpected exit
     proc.exitCode.then((code) async {
       debugPrint('[watchdog] lux_core exited with code $code');
@@ -856,24 +858,37 @@ class _HomeState extends State<Home>
 
   void _startHeartbeat() {
     if (coreManager == null) return;
+    int _failCount = 0;
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 15));
       if (!mounted || coreManager == null) return false;
       try {
-        final isStarted = await coreManager!.getIsStarted()
-            .timeout(const Duration(seconds: 10));
-        // Core responded — it's alive (regardless of isStarted value)
-        return mounted; // continue loop while mounted
+        await coreManager!.getIsStarted().timeout(const Duration(seconds: 10));
+        _failCount = 0; // reset on success
+        return mounted;
       } catch (e) {
-        // Core didn't respond in 10s — it's hung
-        debugPrint('[watchdog] lux_core unresponsive: $e — resetting network');
+        _failCount++;
+        debugPrint('[watchdog] lux_core unresponsive (attempt $_failCount): $e');
+        // Auto-recover: reset network + restart core silently
         await NetworkReset.reset();
-        if (mounted) {
-          setState(() {
-            coreError = Exception('lux_core became unresponsive — network reset. Please restart Lux.');
-          });
+        try {
+          await coreManager!.restart();
+          debugPrint('[watchdog] lux_core restarted successfully');
+          _failCount = 0;
+          return mounted; // continue watchdog
+        } catch (restartErr) {
+          debugPrint('[watchdog] restart failed: $restartErr');
+          if (_failCount >= 3) {
+            // Only show error after 3 consecutive failures
+            if (mounted) {
+              setState(() {
+                coreError = Exception('lux_core failed to restart — please restart Lux manually.');
+              });
+            }
+            return false;
+          }
+          return mounted; // keep trying
         }
-        return false; // stop loop
       }
     });
   }
