@@ -133,9 +133,11 @@ class CoreManager {
 
   Future<void> makeRequestUntilSuccess(String url) async {
     final stopwatch = Stopwatch();
-    stopwatch.start(); // Start the stopwatch
+    stopwatch.start();
+    // On Windows, lux_core may need to wait for UAC elevation — use a longer timeout
+    final timeoutMs = Platform.isWindows ? 120000 : 30000;
 
-    while (stopwatch.elapsedMilliseconds < 30000) {
+    while (stopwatch.elapsedMilliseconds < timeoutMs) {
       try {
         final response = await dio.get(url);
 

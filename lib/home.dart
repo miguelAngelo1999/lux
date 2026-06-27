@@ -1240,7 +1240,44 @@ class _HomeState extends State<Home>
   @override
   Widget build(BuildContext context) {
     if (coreError != null && !isCoreReady.value) {
-      throw coreError;
+      // Show retry UI instead of crashing — on Windows, UAC timeout can be recovered
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
+                const SizedBox(height: 16),
+                const Text('lux_core failed to start',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Text('$coreError', style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Retry'),
+                  onPressed: () async {
+                    setState(() { coreError = null; });
+                    try {
+                      await coreManager?.run();
+                    } catch (e) {
+                      if (mounted) setState(() { coreError = e; });
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => exit(0),
+                  child: const Text('Quit'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
     if (coreManager == null || !isCoreReady.value) {
       return Scaffold(body: AppProgressIndicator());
