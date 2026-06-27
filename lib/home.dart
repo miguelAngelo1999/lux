@@ -190,51 +190,87 @@ class _HomeState extends State<Home>
   // -- Proxy address detected at startup --
   String? _detectedProxyAddr;
 
+  /// On Windows with a corporate proxy, ensure DNS is set to dhcp://auto
+  /// so TUN/Mixed mode works without DNS failures (corporate proxies block 8.8.8.8).
+  Future<void> _ensureCorporateDns() async {
+    if (coreManager == null) return;
+    try {
+      final rawRes = await coreManager!.dio.get(
+          'http://${coreManager!.baseUrl}/setting');
+      final raw = Map<String, dynamic>.from(rawRes.data['setting'] as Map);
+      final dns = Map<String, dynamic>.from(raw['dns'] as Map? ?? {});
+      final server = Map<String, dynamic>.from(dns['server'] as Map? ?? {});
+      final remote = List<String>.from(server['remote'] as List? ?? []);
+      // If remote DNS has only external servers (8.8.8.8, 1.1.1.1 etc), add dhcp://auto
+      final hasLocal = remote.any((s) => s.contains('dhcp') || s.contains('system'));
+      if (!hasLocal) {
+        server['remote'] = ['dhcp://auto', ...remote];
+        dns['server'] = server;
+        raw['dns'] = dns;
+        await coreManager!.dio.put(
+            'http://${coreManager!.baseUrl}/setting', data: raw);
+        debugPrint('[DNS] Auto-added dhcp://auto for corporate network');
+      }
+    } catch (e) {
+      debugPrint('[DNS] Failed to update DNS: $e');
+    }
+  }
+
   Future<void> _checkForNetworkProxy() async {
     if (coreManager == null || !mounted) return;
     if (!mounted) return;
     try {
       final detected = await coreManager!.detectNetworkProxy();
-      if (detected == null || !mounted) return;
+
+      // Always do a direct SSL probe — transparent proxy gives cert without auth
+      final sslStatus = await coreManager!.getSslBumpStatus(fresh: true);
+
+      if (detected == null || !mounted) {
+        // Detection failed but SSL bump detected — show dialog with empty fields
+        if (sslStatus.detected && sslStatus.hasCert && mounted) {
+          // Create a synthetic DetectedProxy — host empty, user fills it in
+          // The cert org name will be pre-filled as proxy name by the dialog
+          final syntheticProxy = DetectedProxy(
+            host: '',
+            port: '8080',
+            scheme: 'http',
+            source: 'ssl-bump',
+            needsAuth: true,
+          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _showProxyAndCertDialog(syntheticProxy, sslStatus);
+          });
+        }
+        return;
+      }
+
       _detectedProxyAddr = detected.address;
 
-      // Run SSL bump probe. If the proxy requires auth (407), probe through
-      // lux's own local proxy (127.0.0.1:1090) which already handles auth.
-      // Wait a bit for auto-connect to complete first.
-      SslBumpStatus sslStatus;
+      SslBumpStatus finalSsl;
       if (detected.needsAuth && !Platform.isWindows) {
         // macOS: Give auto-connect time to complete (it starts immediately with backoff)
         await Future.delayed(const Duration(seconds: 3));
-        // Check if lux is actually connected now
         bool isConnected = false;
         try { isConnected = await coreManager!.getIsStarted(); } catch (_) {}
         if (isConnected) {
-          // Probe via lux local proxy — it authenticates with the upstream proxy
           final setting = await coreManager!.getSetting().catchError((_) => const Setting());
           final localPort = setting.localServerPort;
-          sslStatus = await coreManager!.getSslBumpStatus(
+          finalSsl = await coreManager!.getSslBumpStatus(
             proxyAddr: '127.0.0.1:$localPort',
             fresh: true,
           );
         } else {
-          sslStatus = SslBumpStatus(detected: false, hasCert: false);
+          finalSsl = sslStatus; // use the direct probe result
         }
       } else {
-        // Windows: transparent proxy intercepts all TLS — direct probe works without auth
-        // macOS non-auth: probe directly through the detected proxy
-        sslStatus = await coreManager!.getSslBumpStatus(
-          proxyAddr: Platform.isWindows ? null : detected.address,
-          fresh: true,
-        );
+        finalSsl = sslStatus; // use already-fetched direct probe
       }
 
       if (!mounted) return;
-
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _showProxyAndCertDialog(detected, sslStatus);
+        if (mounted) _showProxyAndCertDialog(detected, finalSsl);
       });
     } catch (e) {
-      debugPrint('Proxy detection error: $e');
       debugPrint('Proxy detection error: $e');
     }
   }
@@ -327,6 +363,13 @@ class _HomeState extends State<Home>
                 (p) => p.server == server, orElse: () => proxyList.proxies.last);
             await coreManager!.selectProxy(added.id);
             _proxyListRefresh?.call();
+          } catch (_) {}
+        }
+        // On Windows in TUN/Mixed mode, auto-configure DNS to use DHCP/system
+        // so corporate networks don't block DNS (they block 8.8.8.8 but not their own DNS)
+        if (Platform.isWindows) {
+          try {
+            await _ensureCorporateDns();
           } catch (_) {}
         }
       } catch (e) {
