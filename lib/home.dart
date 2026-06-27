@@ -190,8 +190,9 @@ class _HomeState extends State<Home>
   // -- Proxy address detected at startup --
   String? _detectedProxyAddr;
 
-  /// On Windows with a corporate proxy, ensure DNS is set to dhcp://auto
-  /// so TUN/Mixed mode works without DNS failures (corporate proxies block 8.8.8.8).
+  /// On Windows with a corporate proxy, ensure DNS is set to use the local
+  /// DHCP DNS server directly (UDP) so TUN/Mixed mode works without DNS failures.
+  /// Corporate proxies block tcp://8.8.8.8:53 but local DNS is always reachable.
   Future<void> _ensureCorporateDns() async {
     if (coreManager == null) return;
     try {
@@ -201,18 +202,47 @@ class _HomeState extends State<Home>
       final dns = Map<String, dynamic>.from(raw['dns'] as Map? ?? {});
       final server = Map<String, dynamic>.from(dns['server'] as Map? ?? {});
       final remote = List<String>.from(server['remote'] as List? ?? []);
-      // If remote DNS has only external servers (8.8.8.8, 1.1.1.1 etc), add dhcp://auto
-      final hasLocal = remote.any((s) => s.contains('dhcp') || s.contains('system'));
+
+      // Check if we already have a local DNS (bare IP = UDP, or dhcp/system)
+      final hasLocal = remote.any((s) =>
+          s.contains('dhcp') || s.contains('system') ||
+          RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(s));
+
       if (!hasLocal) {
-        server['remote'] = ['dhcp://auto', ...remote];
-        dns['server'] = server;
-        raw['dns'] = dns;
-        await coreManager!.dio.put(
-            'http://${coreManager!.baseUrl}/setting', data: raw);
-        debugPrint('[DNS] Auto-added dhcp://auto for corporate network');
+        // Get actual DHCP DNS IPs — bare IP = UDP, works through TUN
+        final dhcpDns = await _getDhcpDnsServers();
+        if (dhcpDns.isNotEmpty) {
+          server['remote'] = [...dhcpDns, ...remote];
+          dns['server'] = server;
+          raw['dns'] = dns;
+          await coreManager!.dio.put(
+              'http://${coreManager!.baseUrl}/setting', data: raw);
+          debugPrint('[DNS] Auto-added DHCP DNS $dhcpDns for corporate network');
+        }
       }
     } catch (e) {
       debugPrint('[DNS] Failed to update DNS: $e');
+    }
+  }
+
+  /// Get DHCP DNS server IPs on Windows via PowerShell (bare IPs = UDP).
+  Future<List<String>> _getDhcpDnsServers() async {
+    if (!Platform.isWindows) return [];
+    try {
+      final result = await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        r'(Get-DnsClientServerAddress -AddressFamily IPv4 | '
+        r'Where-Object { $_.ServerAddresses -and '
+        r'($_.ServerAddresses | Where-Object { $_ -notmatch "^(127\.|198\.18\.)" }) } | '
+        r'Select-Object -First 1).ServerAddresses | '
+        r'Where-Object { $_ -notmatch "^(127\.|198\.18\.)" } | '
+        r'Select-Object -First 2 | Join-String -Separator ","',
+      ]);
+      final out = result.stdout.toString().trim();
+      if (out.isEmpty) return [];
+      return out.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    } catch (_) {
+      return [];
     }
   }
 
