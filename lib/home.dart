@@ -334,7 +334,7 @@ class _HomeState extends State<Home>
   /// Single combined dialog: proxy info + SSL status + add fields.
   Future<void> _showProxyAndCertDialog(
       DetectedProxy detected, SslBumpStatus ssl) async {
-    if (_dismissedProxies.contains(detected.address)) return;
+    if (detected.host.isNotEmpty && _dismissedProxies.contains(detected.address)) return;
 
     // Use the SSL cert's organization name as default proxy name if available
     final defaultName = ssl.certInfo?.organizationName.isNotEmpty == true
@@ -480,9 +480,16 @@ class _HomeState extends State<Home>
                       const Icon(Icons.dns, size: 16),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(detected.address,
-                            style: const TextStyle(fontSize: 14,
-                                fontWeight: FontWeight.w500)),
+                        child: Text(
+                          detected.host.isEmpty
+                              ? 'Corporate proxy detected — enter address below'
+                              : detected.address,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: detected.host.isEmpty ? Colors.orange : null,
+                          ),
+                        ),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -688,9 +695,11 @@ class _HomeState extends State<Home>
                 const Spacer(),
                 TextButton(
                   onPressed: () {
-                    _dismissedProxies.add(detected.address);
-                    if (dontShowAgain) {
-                      addDismissedProxy(detected.address);
+                    if (detected.host.isNotEmpty) {
+                      _dismissedProxies.add(detected.address);
+                      if (dontShowAgain) {
+                        addDismissedProxy(detected.address);
+                      }
                     }
                     Navigator.of(ctx).pop();
                   },
