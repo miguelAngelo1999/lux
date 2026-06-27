@@ -858,24 +858,37 @@ class _HomeState extends State<Home>
 
   void _startHeartbeat() {
     if (coreManager == null) return;
+    int _failCount = 0;
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 15));
       if (!mounted || coreManager == null) return false;
       try {
-        final isStarted = await coreManager!.getIsStarted()
-            .timeout(const Duration(seconds: 10));
-        // Core responded — it's alive (regardless of isStarted value)
-        return mounted; // continue loop while mounted
+        await coreManager!.getIsStarted().timeout(const Duration(seconds: 10));
+        _failCount = 0; // reset on success
+        return mounted;
       } catch (e) {
-        // Core didn't respond in 10s — it's hung
-        debugPrint('[watchdog] lux_core unresponsive: $e — resetting network');
+        _failCount++;
+        debugPrint('[watchdog] lux_core unresponsive (attempt $_failCount): $e');
+        // Auto-recover: reset network + restart core silently
         await NetworkReset.reset();
-        if (mounted) {
-          setState(() {
-            coreError = Exception('lux_core became unresponsive — network reset. Please restart Lux.');
-          });
+        try {
+          await coreManager!.restart();
+          debugPrint('[watchdog] lux_core restarted successfully');
+          _failCount = 0;
+          return mounted; // continue watchdog
+        } catch (restartErr) {
+          debugPrint('[watchdog] restart failed: $restartErr');
+          if (_failCount >= 3) {
+            // Only show error after 3 consecutive failures
+            if (mounted) {
+              setState(() {
+                coreError = Exception('lux_core failed to restart — please restart Lux manually.');
+              });
+            }
+            return false;
+          }
+          return mounted; // keep trying
         }
-        return false; // stop loop
       }
     });
   }
