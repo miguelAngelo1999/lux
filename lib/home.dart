@@ -843,7 +843,7 @@ class _HomeState extends State<Home>
 
   void _startCoreWatchdog() {
     final proc = coreManager?.coreProcess?.process;
-    if (proc == null || !Platform.isMacOS) return;
+    if (proc == null) return;
     // Watch for unexpected exit
     proc.exitCode.then((code) async {
       debugPrint('[watchdog] lux_core exited with code $code');
