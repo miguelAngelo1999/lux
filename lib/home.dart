@@ -226,9 +226,11 @@ class _HomeState extends State<Home>
   }
 
   /// Get DHCP DNS server IPs on Windows via PowerShell (bare IPs = UDP).
+  /// Only returns servers that actually respond to DNS queries.
   Future<List<String>> _getDhcpDnsServers() async {
     if (!Platform.isWindows) return [];
     try {
+      // Get candidate DNS servers from DHCP
       final result = await Process.run('powershell.exe', [
         '-noprofile', '-NonInteractive', '-command',
         r'(Get-DnsClientServerAddress -AddressFamily IPv4 | '
@@ -240,7 +242,31 @@ class _HomeState extends State<Home>
       ]);
       final out = result.stdout.toString().trim();
       if (out.isEmpty) return [];
-      return out.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      final candidates = out.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+
+      // Verify each server actually responds to DNS before using it
+      final reachable = <String>[];
+      for (final ip in candidates) {
+        try {
+          final testResult = await Process.run('powershell.exe', [
+            '-noprofile', '-NonInteractive', '-command',
+            'try { '
+            '  \$r = Resolve-DnsName "dns.msftncsi.com" -Server "$ip" -Type A '
+            '    -ErrorAction Stop -NoHostsFile; '
+            '  Write-Output "ok" '
+            '} catch { Write-Output "fail" }',
+          ]).timeout(const Duration(seconds: 5));
+          if (testResult.stdout.toString().trim() == 'ok') {
+            reachable.add(ip);
+            debugPrint('[DNS] Verified DNS server: $ip');
+          } else {
+            debugPrint('[DNS] DNS server unreachable: $ip');
+          }
+        } catch (_) {
+          debugPrint('[DNS] DNS server test timed out: $ip');
+        }
+      }
+      return reachable;
     } catch (_) {
       return [];
     }
