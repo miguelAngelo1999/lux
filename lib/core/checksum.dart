@@ -6,7 +6,7 @@ import 'package:crypto/crypto.dart';
  const darwinAmd64Checksum = "6146982cd80750dff36ccba6b3e1aa117a2d2e2c539c758187acf226442a9a49";
  const darwinArm64Checksum = "c4d39d5f3dacc662773385e8dc4cc1a2206e5d5b44f26275d4a713d1639e140f";
  const darwinUniversalChecksum = "88a653cccca1ef67ded1f5475ed1236eefff718fffdda39ef5e8ad1b5e09ea94";
- const windowsAmd64Checksum = "dffaa7835cc04dea92bc283acc60f9394280588d200ba4af98618b45ca2a050a";
+ const windowsAmd64Checksum = "0430022927c26203adb0a3023a6e5f1ff1a420f12735cd5745fb39da09b95153";
 // checksum-end
 
 Future<void> verifyCoreBinary(String filePath) async {
