@@ -103,11 +103,37 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
 
     setState(() => _isSaving = true);
+
+    // Show a snack bar if switching proxy mode (can take a few seconds)
+    final oldMode = _setting?.mode;
+    final newMode = updated.mode;
+    final isModeSwitch = oldMode != null && oldMode != newMode;
+    if (isModeSwitch && mounted) {
+      final label = getModeLabel(newMode);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          const SizedBox(width: 16, height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+          const SizedBox(width: 12),
+          Text('Switching to $label mode…'),
+        ]),
+        duration: const Duration(seconds: 15),
+      ));
+    }
+
     try {
       await widget.coreManager.saveSetting(updated);
       if (mounted) setState(() => _setting = updated);
+      if (isModeSwitch && mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Switched to ${getModeLabel(newMode)} mode'),
+          duration: const Duration(seconds: 2),
+        ));
+      }
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to save: $e')),
         );
