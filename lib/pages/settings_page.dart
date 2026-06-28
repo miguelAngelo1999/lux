@@ -31,6 +31,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   InstallResult? _installResult;
   // Network tools state
   String? _networkToolStatus;
+  // MITM CA install state
+  bool _mitmCaInstalling = false;
 
   List<String> _interfaces = [];
 
@@ -1583,9 +1585,13 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                     ]),
                   ),
                   TextButton.icon(
-                    icon: const Icon(Icons.install_desktop, size: 15),
-                    label: const Text('Install CA', style: TextStyle(fontSize: 12)),
-                    onPressed: () => _installMitmCA(),
+                    icon: _mitmCaInstalling
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.install_desktop, size: 15),
+                    label: Text(_mitmCaInstalling ? 'Installing…' : 'Install CA',
+                        style: const TextStyle(fontSize: 12)),
+                    onPressed: _mitmCaInstalling ? null : () => _installMitmCA(),
                   ),
                 ]),
               ),
@@ -1600,24 +1606,75 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   Future<void> _installMitmCA() async {
+    setState(() => _mitmCaInstalling = true);
+    // Show "Installing…" snackbar immediately
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Row(children: [
+        SizedBox(width: 16, height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+        SizedBox(width: 12),
+        Text('Installing CA certificate…'),
+      ]),
+      duration: Duration(seconds: 30),
+    ));
     try {
       final pemBytes = await widget.coreManager.getMitmCAPem();
       if (pemBytes == null || pemBytes.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('CA not available — enable Corporate Proxy Fix first')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('CA not available — enable Corporate Proxy Fix first')));
+        }
         return;
       }
-      final result = await CertInstaller.install(pemBytes);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.success
-            ? 'CA certificate installed successfully'
-            : 'Installation partially failed'),
-        backgroundColor: result.success ? Colors.green : Colors.orange,
-      ));
+      // Install directly via X509Store — no C:\Windows\Temp needed, no admin required
+      final result = await _installCertViaX509Store(pemBytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(result ? 'CA certificate installed successfully' : 'Installation failed'),
+          backgroundColor: result ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 4),
+        ));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _mitmCaInstalling = false);
     }
+  }
+
+  /// Installs a PEM cert directly into CurrentUser\Root via PowerShell X509Store.
+  /// No C:\Windows\Temp write needed — no admin required.
+  Future<bool> _installCertViaX509Store(List<int> pemBytes) async {
+    if (!Platform.isWindows) {
+      // macOS: use CertInstaller
+      final result = await CertInstaller.install(pemBytes);
+      return result.success;
+    }
+    final pem = String.fromCharCodes(pemBytes);
+    final b64 = pem
+        .replaceAll('-----BEGIN CERTIFICATE-----', '')
+        .replaceAll('-----END CERTIFICATE-----', '')
+        .replaceAll('\n', '').replaceAll('\r', '').trim();
+    final result = await Process.run('powershell.exe', [
+      '-noprofile', '-NonInteractive', '-command',
+      r'''
+$b64 = "''' + b64 + r'''"
+$bytes = [System.Convert]::FromBase64String($b64)
+$cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 (,[byte[]]$bytes)
+$store = New-Object System.Security.Cryptography.X509Certificates.X509Store "Root","CurrentUser"
+$store.Open("ReadWrite")
+$store.Add($cert)
+$store.Close()
+Write-Output "ok"
+''',
+    ]);
+    return result.stdout.toString().trim() == 'ok';
   }
 
   Widget _mitmInspectionListTile() {
