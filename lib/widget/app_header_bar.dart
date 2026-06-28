@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lux/model/app.dart';
@@ -206,10 +207,20 @@ class _State extends State<AppHeaderBar> with WindowListener {
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
         actions: widget.extraActions,
-        leading: IconButton(
-            tooltip: 'Open web dashboard (advanced)',
-            onPressed: openWebDashboard,
-            icon: const Icon(Icons.open_in_browser, size: 18)),
+        // On macOS, add left padding so content doesn't overlap the traffic light buttons
+        leadingWidth: Platform.isMacOS ? 86 : null,
+        leading: Platform.isMacOS
+            ? Padding(
+                padding: const EdgeInsets.only(left: 76),
+                child: IconButton(
+                    tooltip: 'Open web dashboard (advanced)',
+                    onPressed: openWebDashboard,
+                    icon: const Icon(Icons.open_in_browser, size: 18)),
+              )
+            : IconButton(
+                tooltip: 'Open web dashboard (advanced)',
+                onPressed: openWebDashboard,
+                icon: const Icon(Icons.open_in_browser, size: 18)),
         title: Row(
           children: [
             SizedBox(

@@ -158,17 +158,42 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Profile selector
+                    // Profile selector — shows active proxy name with tick mark
                     DropdownButtonFormField<String>(
                       value: _selectedId.isEmpty ? null : _selectedId,
                       decoration: _inputDecoration('Profile', isDark),
                       isDense: true,
+                      hint: const Text('Select profile', style: TextStyle(fontSize: 13)),
+                      selectedItemBuilder: (ctx) => _proxies.map((p) {
+                        // Show name + active indicator when dropdown is closed
+                        final isActive = p.id == _selectedId;
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            isActive ? '${p.name}' : p.name,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
                       items: _proxies
-                          .map((p) => DropdownMenuItem(
-                                value: p.id,
-                                child: Text(p.name,
-                                    style: const TextStyle(fontSize: 13)),
-                              ))
+                          .map((p) {
+                            final isActive = p.id == _selectedId;
+                            return DropdownMenuItem(
+                              value: p.id,
+                              child: Row(children: [
+                                if (isActive)
+                                  const Icon(Icons.check, size: 14, color: Colors.blue)
+                                else
+                                  const SizedBox(width: 14),
+                                const SizedBox(width: 6),
+                                Text(p.name, style: const TextStyle(fontSize: 13)),
+                              ]),
+                            );
+                          })
                           .toList(),
                       onChanged: (id) {
                         if (id != null) {
