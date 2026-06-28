@@ -37,12 +37,15 @@ void main(List<String> args) async {
   try {
     await windowManager.ensureInitialized();
 
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(800, 650),
+    WindowOptions windowOptions = WindowOptions(
+      size: const Size(800, 650),
       center: true,
       skipTaskbar: false,
+      // hidden hides title bar text but keeps the Flutter surface full height.
+      // windowButtonVisibility: true shows the traffic lights on macOS.
+      // Windows uses custom controls in AppBar so buttons stay false.
       titleBarStyle: TitleBarStyle.hidden,
-      windowButtonVisibility: false,
+      windowButtonVisibility: Platform.isMacOS,
     );
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
