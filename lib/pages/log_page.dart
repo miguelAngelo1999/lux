@@ -246,7 +246,8 @@ class _LogPageState extends State<LogPage> {
                     style: const TextStyle(color: Colors.grey),
                   ),
                 )
-              : ListView.builder(
+              : SelectionArea(
+                  child: ListView.builder(
                   controller: _scrollCtrl,
                   itemCount: filtered.length,
                   itemBuilder: (ctx, i) {
@@ -295,7 +296,7 @@ class _LogPageState extends State<LogPage> {
                       ),
                     );
                   },
-                ),
+                )),
         ),
       ],
     );
