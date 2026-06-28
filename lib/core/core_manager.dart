@@ -532,6 +532,27 @@ class CoreManager {
     }
   }
 
+  /// Downloads the Lux MITM root CA certificate as PEM bytes.
+  /// This is the CA Lux uses for its own SSL interception (Corporate Proxy Fix).
+  Future<List<int>?> getMitmCAPem() async {
+    try {
+      final res = await dio.get<List<int>>(
+        '$baseHttpUrl/ssl-inspect/ca/pem',
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
+      if (res.statusCode == 200 && res.data != null && res.data!.isNotEmpty) {
+        return res.data;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('getMitmCAPem error: $e');
+      return null;
+    }
+  }
+
   /// Auto-detect an upstream proxy on the current network.
   /// Uses scutil (macOS), WPAD probe, and environment variables.
   /// Returns null if no proxy is detected or lux_core is not running.
