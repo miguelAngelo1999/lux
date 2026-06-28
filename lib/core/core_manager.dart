@@ -554,3 +554,62 @@ class CoreManager {
     }
   }
 }
+
+extension MitmApi on CoreManager {
+  // ── MITM / Corporate Proxy Fix ──────────────────────────────────────────
+
+  /// Get current MITM inspection settings (enabled flag + CA info).
+  Future<Map<String, dynamic>> getMitmSettings() async {
+    try {
+      final res = await dio.get('$baseHttpUrl/ssl-inspect/settings');
+      return res.data as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Enable or disable MITM SSL inspection.
+  Future<void> setMitmEnabled(bool enabled) async {
+    await dio.put('$baseHttpUrl/ssl-inspect/settings', data: {'enabled': enabled});
+  }
+
+  /// Get the MITM CA certificate as PEM bytes.
+  Future<List<int>?> getMitmCAPem() async {
+    try {
+      final res = await dio.get<List<int>>(
+        '$baseHttpUrl/ssl-inspect/ca/pem',
+        options: Options(responseType: ResponseType.bytes,
+            receiveTimeout: const Duration(seconds: 10)),
+      );
+      return res.data;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get all MITM inspection list entries.
+  Future<List<Map<String, dynamic>>> getMitmInspectionEntries() async {
+    try {
+      final res = await dio.get('$baseHttpUrl/ssl-inspect/inspection-list');
+      return List<Map<String, dynamic>>.from(
+          (res.data['entries'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Add a domain pattern to the MITM inspection list.
+  Future<void> addMitmPattern(String pattern) async {
+    await dio.put('$baseHttpUrl/ssl-inspect/inspection-list', data: {'pattern': pattern});
+  }
+
+  /// Remove a domain pattern from the MITM inspection list.
+  Future<void> removeMitmPattern(String pattern) async {
+    await dio.delete('$baseHttpUrl/ssl-inspect/inspection-list', data: {'pattern': pattern});
+  }
+
+  /// Toggle a pattern enabled/disabled in the inspection list.
+  Future<void> toggleMitmPattern(String pattern) async {
+    await dio.post('$baseHttpUrl/ssl-inspect/inspection-list/toggle', data: {'pattern': pattern});
+  }
+}

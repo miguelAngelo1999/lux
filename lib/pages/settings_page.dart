@@ -424,6 +424,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               _networkToolsSection(),
             ],
 
+            // ── Corporate Proxy Fix (MITM) ──
+            const SizedBox(height: 16),
+            _sectionHeader('Corporate Proxy Fix'),
+            _mitmSection(),
+
             // ── Config Backup ──
             const SizedBox(height: 16),
             _sectionHeader('Config Backup'),
@@ -1512,6 +1517,207 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (mounted) setState(() => _networkToolStatus = '$name: $result');
     } catch (e) {
       if (mounted) setState(() => _networkToolStatus = '$name failed: $e');
+    }
+  }
+
+  // ── Corporate Proxy Fix (MITM) ────────────────────────────────────────────
+
+  Widget _mitmSection() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: widget.coreManager.getMitmSettings(),
+      builder: (ctx, snap) {
+        final data = snap.data ?? {};
+        final enabled = data['enabled'] as bool? ?? false;
+        final fingerprint = data['caFingerprint'] as String?;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Description
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Text(
+                'Fixes apps that fail with certificate revocation errors '
+                '(CRYPT_E_NO_REVOCATION_CHECK) when behind a corporate SSL-inspecting proxy. '
+                'Lux acts as a local TLS proxy for selected domains, adding proper CRL/OCSP endpoints to generated certs.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ),
+            // Enable toggle
+            ListTile(
+              dense: true,
+              title: const Text('Enable Corporate Proxy Fix', style: TextStyle(fontSize: 14)),
+              subtitle: Text(
+                enabled ? 'Active — intercepting configured domains' : 'Disabled',
+                style: TextStyle(fontSize: 12,
+                    color: enabled ? Colors.green : Colors.grey),
+              ),
+              trailing: Switch(
+                value: enabled,
+                onChanged: _isSaving ? null : (v) async {
+                  setState(() => _isSaving = true);
+                  try {
+                    await widget.coreManager.setMitmEnabled(v);
+                    setState(() {}); // trigger FutureBuilder rebuild
+                  } catch (e) {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed: $e')));
+                  } finally {
+                    if (mounted) setState(() => _isSaving = false);
+                  }
+                },
+              ),
+            ),
+            // CA cert info + install button
+            if (fingerprint != null) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Local CA Certificate',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text(fingerprint.substring(0, 29) + '…',
+                          style: const TextStyle(fontSize: 11, fontFamily: 'monospace',
+                              color: Colors.grey)),
+                    ]),
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.install_desktop, size: 15),
+                    label: const Text('Install CA', style: TextStyle(fontSize: 12)),
+                    onPressed: () => _installMitmCA(),
+                  ),
+                ]),
+              ),
+            ],
+            // Inspection list
+            if (enabled) _mitmInspectionListTile(),
+            const SizedBox(height: 8),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _installMitmCA() async {
+    try {
+      final pemBytes = await widget.coreManager.getMitmCAPem();
+      if (pemBytes == null || pemBytes.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('CA not available — enable Corporate Proxy Fix first')));
+        return;
+      }
+      final result = await CertInstaller.install(pemBytes);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.success
+            ? 'CA certificate installed successfully'
+            : 'Installation partially failed'),
+        backgroundColor: result.success ? Colors.green : Colors.orange,
+      ));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  Widget _mitmInspectionListTile() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: widget.coreManager.getMitmInspectionEntries(),
+      builder: (ctx, snap) {
+        final entries = snap.data ?? [];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Row(children: [
+                const Text('Inspection Domains',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 15),
+                  label: const Text('Add', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _addMitmPattern(),
+                ),
+              ]),
+            ),
+            if (entries.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text('No domains configured. Add domains like *.blackmagicdesign.com',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+              )
+            else
+              ...entries.map((e) {
+                final pattern = e['pattern'] as String? ?? '';
+                final active = e['enabled'] as bool? ?? true;
+                return ListTile(
+                  dense: true,
+                  title: Text(pattern,
+                      style: TextStyle(fontSize: 13,
+                          color: active ? null : Colors.grey,
+                          decoration: active ? null : TextDecoration.lineThrough)),
+                  leading: Icon(Icons.security,
+                      size: 16, color: active ? Colors.orange : Colors.grey),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(
+                      icon: Icon(active ? Icons.toggle_on : Icons.toggle_off,
+                          size: 20, color: active ? Colors.green : Colors.grey),
+                      onPressed: () async {
+                        await widget.coreManager.toggleMitmPattern(pattern);
+                        setState(() {});
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                      onPressed: () async {
+                        await widget.coreManager.removeMitmPattern(pattern);
+                        setState(() {});
+                      },
+                    ),
+                  ]),
+                );
+              }),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _addMitmPattern() async {
+    final ctrl = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Inspection Domain', style: TextStyle(fontSize: 15)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Domain pattern',
+            hintText: '*.blackmagicdesign.com',
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+          style: const TextStyle(fontSize: 13),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+              child: const Text('Add')),
+        ],
+      ),
+    );
+    if (result != null && result.isNotEmpty) {
+      try {
+        await widget.coreManager.addMitmPattern(result);
+        setState(() {});
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to add: $e')));
+      }
     }
   }
 
