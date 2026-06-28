@@ -153,8 +153,6 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     );
   }
 }
-
-/// Minimal window control buttons (minimize / maximize / close) for
 /// the borderless window on Windows.
 class _WindowControls extends StatefulWidget {
   @override

@@ -21,13 +21,16 @@ Future<void> initSystemTray({
     );
   }).toList();
 
-  // Build quick edit submenu (shows username for each proxy)
+  // Build quick edit submenu (shows active proxy with tick mark)
   final editItems = proxies
       .where((p) => p.type != 'direct')
-      .map((p) => MenuItem(
-            key: 'proxy_edit_${p.id}',
-            label: p.name,
-          ))
+      .map((p) {
+        final isSelected = p.id == selectedProxyId;
+        return MenuItem(
+          key: 'proxy_edit_${p.id}',
+          label: isSelected ? '✓ ${p.name}' : '  ${p.name}',
+        );
+      })
       .toList();
 
   final items = <MenuItem>[
