@@ -12,6 +12,7 @@ import 'package:lux/util/cert_installer.dart';
 import 'package:lux/util/installed_certs_store.dart';
 import 'package:lux/util/network_detector.dart';
 import 'package:lux/util/network_reset.dart';
+import 'package:lux/widget/setup_wizard.dart';
 import 'package:lux/dashboard.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
@@ -400,7 +401,10 @@ class _HomeState extends State<Home>
           }
           if (await InstalledCertsStore.isFullyInstalled(fp)) return;
           _lastDetectedCertFingerprint = fp;
-          _showInlineCertTrustDialog(freshSsl);
+          // Show setup wizard instead of just cert dialog
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) SetupWizard.show(context, coreManager!, freshSsl);
+          });
         } else if (freshSsl.error != null && freshSsl.error!.contains('407')) {          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
             duration: Duration(seconds: 5)));
