@@ -5,7 +5,7 @@ import 'package:crypto/crypto.dart';
 // checksum-start
  const darwinAmd64Checksum = "6146982cd80750dff36ccba6b3e1aa117a2d2e2c539c758187acf226442a9a49";
  const darwinArm64Checksum = "c4d39d5f3dacc662773385e8dc4cc1a2206e5d5b44f26275d4a713d1639e140f";
- const darwinUniversalChecksum = "4b3a67e2cf2489c93f0b0dc3ab64f515a2465a44286124826972736ebd48a5eb";
+ const darwinUniversalChecksum = "0b1bead91646d773f76130a9dd4e59599e10cf52e29a3edb2404b019d778a21a";
  const windowsAmd64Checksum = "194e9fdd0ad04573ce93a93d38add9307c8aa8a42ff6b6a4f3fc074e1eb480d1";
 // checksum-end
 
