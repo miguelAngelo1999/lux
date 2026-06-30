@@ -415,6 +415,30 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   Widget _buildEnvStep() {
+    if (Platform.isMacOS) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('System configuration is handled automatically on macOS.',
+            style: TextStyle(fontSize: 13)),
+        const SizedBox(height: 10),
+        Container(padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: Colors.green.withValues(alpha:0.08),
+              border: Border.all(color: Colors.green.shade300), borderRadius: BorderRadius.circular(6)),
+          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children:[Icon(Icons.check_circle,size:14,color:Colors.green),SizedBox(width:6),
+              Text('HTTP_PROXY / HTTPS_PROXY set via launchctl', style: TextStyle(fontSize:12))]),
+            SizedBox(height:4),
+            Row(children:[Icon(Icons.check_circle,size:14,color:Colors.green),SizedBox(width:6),
+              Text('CURL_CA_BUNDLE set in /etc/zshenv', style: TextStyle(fontSize:12))]),
+            SizedBox(height:4),
+            Row(children:[Icon(Icons.check_circle,size:14,color:Colors.green),SizedBox(width:6),
+              Text('git & npm proxy configured automatically', style: TextStyle(fontSize:12))]),
+          ])),
+        const SizedBox(height:8),
+        const Text('These are applied automatically when Lux connects.',
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+        _statusWidget(),
+      ]);
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('Configure your system so Electron apps, Node.js tools, and '
           'terminal programs work correctly through the network proxy.',
