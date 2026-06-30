@@ -49,6 +49,15 @@ void main(List<String> args) async {
     );
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
+      // Explicitly re-apply title bar style after window is ready.
+      // WindowOptions.windowButtonVisibility alone is sometimes ignored
+      // on macOS — calling setTitleBarStyle here ensures traffic lights appear.
+      if (Platform.isMacOS) {
+        await windowManager.setTitleBarStyle(
+          TitleBarStyle.hidden,
+          windowButtonVisibility: true,
+        );
+      }
       windowManager.center();
       var isLaunchFromStartUp =
           Platform.isWindows && args.contains(launchFromStartupArg);

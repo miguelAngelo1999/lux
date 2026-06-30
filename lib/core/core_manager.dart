@@ -249,7 +249,9 @@ class CoreManager {
   }
 
   Future<void> toggleCustomizedRule(String rule) async {
-    await dio.post('$baseHttpUrl/rules/customized/toggle', data: {'rule': rule});
+    // Use dioFast — the default dio uses BackgroundTransformer which spawns
+    // an isolate even for tiny POST responses, causing the 10s timeout.
+    await dioFast.post('$baseHttpUrl/rules/customized/toggle', data: {'rule': rule});
   }
 
   /// Test proxy latency. Returns delay in ms or -1 on failure.
