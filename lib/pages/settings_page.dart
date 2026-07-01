@@ -301,6 +301,13 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               s.allowLan,
               (v) => _save(s.copyWith(allowLan: v)),
             ),
+            if (Platform.isWindows)
+              _switchTile(
+                'Restore Auto-Detect Proxy on Exit',
+                'Re-enable Windows "Automatically detect settings" when Lux stops',
+                s.restoreAutoDetect ?? false,
+                (v) => _save(s.copyWith(restoreAutoDetect: v)),
+              ),
 
             // ── Load Balancing ──
             const SizedBox(height: 16),

@@ -602,6 +602,7 @@ class Setting {
   final bool loadBalanceEnabled;
   final List<String> loadBalanceInterfaces;
   final String loadBalanceStrategy;
+  final bool? restoreAutoDetect;
 
   const Setting({
     this.mode = ProxyMode.mixed,
@@ -622,6 +623,7 @@ class Setting {
     this.loadBalanceEnabled = false,
     this.loadBalanceInterfaces = const [],
     this.loadBalanceStrategy = 'least-conn',
+    this.restoreAutoDetect,
   });
 
   Setting.fromJson(Map<String, dynamic> json)
@@ -645,7 +647,8 @@ class Setting {
                 ?.map((e) => e as String)
                 .toList() ??
             const [],
-        loadBalanceStrategy = (json['loadBalance'] as Map?)?['strategy'] as String? ?? 'least-conn';
+        loadBalanceStrategy = (json['loadBalance'] as Map?)?['strategy'] as String? ?? 'least-conn',
+        restoreAutoDetect = json['restoreAutoDetect'] as bool?;
 
   Map<String, dynamic> toJson() => {
         'mode': mode == ProxyMode.tun ? 'tun' : mode == ProxyMode.system ? 'system' : 'mixed',
@@ -672,6 +675,7 @@ class Setting {
           'interfaces': loadBalanceInterfaces,
           'strategy': loadBalanceStrategy,
         },
+        if (restoreAutoDetect != null) 'restoreAutoDetect': restoreAutoDetect,
       };
 
   Setting copyWith({
@@ -693,6 +697,7 @@ class Setting {
     bool? loadBalanceEnabled,
     List<String>? loadBalanceInterfaces,
     String? loadBalanceStrategy,
+    bool? restoreAutoDetect,
   }) =>
       Setting(
         mode: mode ?? this.mode,
@@ -713,6 +718,7 @@ class Setting {
         loadBalanceEnabled: loadBalanceEnabled ?? this.loadBalanceEnabled,
         loadBalanceInterfaces: loadBalanceInterfaces ?? this.loadBalanceInterfaces,
         loadBalanceStrategy: loadBalanceStrategy ?? this.loadBalanceStrategy,
+        restoreAutoDetect: restoreAutoDetect ?? this.restoreAutoDetect,
       );
 
   static ProxyMode _parseMode(String s) {
