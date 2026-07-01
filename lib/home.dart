@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
@@ -66,6 +67,7 @@ class _HomeState extends State<Home>
   String? _lastDetectedCertFingerprint;
   VoidCallback? _proxyListRefresh; // set by Dashboard, called after adding a proxy
   final _quickEditChannel = const MethodChannel('lux_quick_edit');
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   Future<void> _handleNativeQuickEdit(MethodCall call) async {
     if (call.method == 'onSave' && coreManager != null) {
@@ -336,6 +338,10 @@ class _HomeState extends State<Home>
   Future<void> _showProxyAndCertDialog(
       DetectedProxy detected, SslBumpStatus ssl) async {
     if (detected.host.isNotEmpty && _dismissedProxies.contains(detected.address)) return;
+
+    // Bring app to foreground to ensure user sees the prompt
+    await windowManager.show();
+    await windowManager.focus();
 
     // Use the SSL cert's organization name as default proxy name if available
     final defaultName = ssl.certInfo?.organizationName.isNotEmpty == true
@@ -1085,6 +1091,13 @@ class _HomeState extends State<Home>
   @override
   void initState() {
     super.initState();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
+      if (!result.contains(ConnectivityResult.none)) {
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) _checkForNetworkProxy();
+        });
+      }
+    });
     _listener = AppLifecycleListener(onExitRequested: _handleExitRequest);
     windowManager.addListener(this);
     powerMonitor.addListener(this);
@@ -1102,6 +1115,7 @@ class _HomeState extends State<Home>
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     powerMonitor.removeListener(this);
