@@ -68,6 +68,36 @@ Future<void> clearDismissedProxies() async {
   await _writePrefs(prefs);
 }
 
+// ── Wizard step dismissals ────────────────────────────────────────────────────
+// Key: "$certFingerprint:$stepName" — per cert, per step.
+// If a step is dismissed for a given cert, the wizard skips it on next launch.
+
+Future<Set<String>> readDismissedWizardSteps() async {
+  final prefs = await _readPrefs();
+  final raw = prefs['dismissedWizardSteps'];
+  if (raw is List) return raw.cast<String>().toSet();
+  return {};
+}
+
+Future<void> dismissWizardStep(String certFingerprint, String stepName) async {
+  final prefs = await _readPrefs();
+  final existing = (prefs['dismissedWizardSteps'] as List?)?.cast<String>().toSet() ?? {};
+  existing.add('$certFingerprint:$stepName');
+  prefs['dismissedWizardSteps'] = existing.toList();
+  await _writePrefs(prefs);
+}
+
+Future<bool> isWizardStepDismissed(String certFingerprint, String stepName) async {
+  final dismissed = await readDismissedWizardSteps();
+  return dismissed.contains('$certFingerprint:$stepName');
+}
+
+Future<void> clearDismissedWizardSteps() async {
+  final prefs = await _readPrefs();
+  prefs['dismissedWizardSteps'] = <String>[];
+  await _writePrefs(prefs);
+}
+
 Future<Map<String, dynamic>> readSetting() async {
   try {
     final config = await readConfig();

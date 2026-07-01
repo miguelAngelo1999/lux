@@ -271,6 +271,17 @@ class SetupWizard extends StatefulWidget {
 
   static Future<void> show(BuildContext context, CoreManager coreManager,
       SslBumpStatus sslStatus) async {
+    final fp = sslStatus.certInfo?.sha256Fingerprint ?? '';
+    // Skip wizard entirely if all steps are dismissed for this cert
+    if (fp.isNotEmpty) {
+      final allDismissed = await Future.wait([
+        isWizardStepDismissed(fp, 'cert'),
+        isWizardStepDismissed(fp, 'env'),
+        isWizardStepDismissed(fp, 'mitm'),
+      ]);
+      if (allDismissed.every((d) => d)) return;
+    }
+    if (!context.mounted) return;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -288,6 +299,7 @@ class _SetupWizardState extends State<SetupWizard> {
   String? _statusMsg;
   bool _statusOk = true;
   bool _certInstalled = false;
+  bool _dontAskAgain = false; // per-step "don't ask again" checkbox
 
   // Step: env vars
   bool _setNodeTlsReject = true;
@@ -390,8 +402,30 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   Future<void> _nextStep() async {
-    if (_step < _totalSteps - 1) setState(() { _step++; _statusMsg = null; });
-    else { Navigator.of(context).pop(); widget.onComplete?.call(); }
+    // Save "don't ask again" for this step+cert combo
+    if (_dontAskAgain) {
+      final fp = widget.sslStatus.certInfo?.sha256Fingerprint ?? '';
+      final stepName = ['cert', 'env', 'mitm'][_step];
+      if (fp.isNotEmpty) await dismissWizardStep(fp, stepName);
+    }
+    if (_step < _totalSteps - 1) {
+      var next = _step + 1;
+      // Auto-skip dismissed steps
+      final fp = widget.sslStatus.certInfo?.sha256Fingerprint ?? '';
+      if (fp.isNotEmpty) {
+        final stepNames = ['cert', 'env', 'mitm'];
+        while (next < _totalSteps && await isWizardStepDismissed(fp, stepNames[next])) {
+          next++;
+        }
+      }
+      if (next >= _totalSteps) {
+        if (mounted) { Navigator.of(context).pop(); widget.onComplete?.call(); }
+      } else {
+        setState(() { _step = next; _statusMsg = null; _dontAskAgain = false; });
+      }
+    } else {
+      if (mounted) { Navigator.of(context).pop(); widget.onComplete?.call(); }
+    }
   }
 
   Future<void> _applyAndNext() async {
@@ -416,6 +450,18 @@ class _SetupWizardState extends State<SetupWizard> {
       ]),
       content: SizedBox(width: 440, child: SingleChildScrollView(child: _buildStep())),
       actions: [
+        // "Don't ask again" checkbox on the left
+        Checkbox(
+          value: _dontAskAgain,
+          onChanged: _busy ? null : (v) => setState(() => _dontAskAgain = v ?? false),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        GestureDetector(
+          onTap: _busy ? null : () => setState(() => _dontAskAgain = !_dontAskAgain),
+          child: const Text("Don't ask again", style: TextStyle(fontSize: 12)),
+        ),
+        const Spacer(),
         TextButton(onPressed: _busy ? null : _nextStep,
             child: Text(_step == _totalSteps-1 ? 'Finish' : 'Skip')),
         FilledButton(

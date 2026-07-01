@@ -419,6 +419,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             _sectionHeader('Advanced'),
             _configFileTile(),
             _resetNetworkTile(),
+            _resetWizardDismissalsTile(),
             _pacStatusTile(),
 
             // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇ
@@ -859,6 +860,31 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Network settings reset. Reconnect Lux to use proxy.')),
+                  );
+                }
+              },
+        child: const Text('Reset', style: TextStyle(fontSize: 12)),
+      ),
+    );
+  }
+
+  Widget _resetWizardDismissalsTile() {
+    return ListTile(
+      dense: true,
+      title: const Text('Reset Setup Wizard', style: TextStyle(fontSize: 14)),
+      subtitle: const Text(
+          'Re-enable all "Don\'t ask again" wizard steps for re-configuration',
+          style: TextStyle(fontSize: 12)),
+      trailing: TextButton(
+        onPressed: _isSaving
+            ? null
+            : () async {
+                await clearDismissedWizardSteps();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Wizard steps reset — they will show again on next network connection.'),
+                    ),
                   );
                 }
               },
