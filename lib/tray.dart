@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/tr.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -65,6 +66,15 @@ Future<void> initSystemTray({
     MenuItem.separator(),
     MenuItem(key: 'exit_app', label: tr().exit),
   ]);
+
+  // Debug-only: simulate SSL bump detection for testing the cert install flow
+  if (kDebugMode) {
+    items.addAll([
+      MenuItem.separator(),
+      MenuItem(key: 'debug_simulate_ssl_bump', label: '🔬 Simulate SSL Bump (debug)'),
+      MenuItem(key: 'debug_simulate_ssl_bump_installed', label: '🔬 Simulate SSL Bump (already installed)'),
+    ]);
+  }
 
   await trayManager.setContextMenu(Menu(items: items));
   await trayManager.setToolTip(isConnected ? 'Lux — Connected' : 'Lux — Disconnected');

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:lux/const/const.dart';
@@ -273,6 +274,62 @@ class _HomeState extends State<Home>
     } catch (_) {
       return [];
     }
+  }
+
+  /// DEBUG ONLY: simulate an SSL bump detection to test the cert install flow
+  /// without needing a real corporate network.
+  /// - [alreadyInstalled]: if true, simulates cert already in all stores (should NOT prompt)
+  /// - [alreadyInstalled] false: simulates new cert (SHOULD show dialog)
+  Future<void> _debugSimulateSslBump({bool alreadyInstalled = false}) async {
+    if (!kDebugMode) return;
+    if (coreManager == null || !mounted) return;
+
+    // Fake cert info — realistic-looking corporate proxy CA
+    const fakeFp = 'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99';
+    const fakeFpClean = 'AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899';
+
+    if (alreadyInstalled) {
+      await InstalledCertsStore.markInstalled(fakeFpClean, ['macOS System Keychain', 'curl', 'Node.js']);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('🔬 Debug: cert marked as installed — triggering network-change path'),
+        duration: Duration(seconds: 2),
+      ));
+      // Mimic the connectivity listener's check — should silently skip
+      if (await InstalledCertsStore.isFullyInstalled(fakeFpClean)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('✅ Correctly skipped — cert already fully installed'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ));
+        return;
+      }
+    }
+
+    // Simulate a fresh detection — should show the proxy+cert dialog
+    final fakeDetected = DetectedProxy(
+      host: '10.0.0.1',
+      port: '8080',
+      scheme: 'http',
+      source: 'debug-simulation',
+      needsAuth: true,
+    );
+    final fakeSsl = SslBumpStatus(
+      detected: true,
+      hasCert: true,
+      certInfo: const CertInfo(
+        organizationName: 'Debug Corp Proxy CA',
+        sha256Fingerprint: fakeFpClean,
+        subject: 'CN=debug-proxy.corp.example, O=Debug Corp',
+        issuer: 'CN=Debug Corp Root CA',
+        notBefore: '2026-01-01T00:00:00Z',
+        notAfter: '2027-01-01T00:00:00Z',
+        isCA: true,
+      ),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showProxyAndCertDialog(fakeDetected, fakeSsl);
+    });
   }
 
   Future<void> _checkForNetworkProxy() async {
@@ -1205,6 +1262,10 @@ class _HomeState extends State<Home>
     } else if (key == 'exit_app') {
       await coreManager?.exitCore();
       exit(0);
+    } else if (key == 'debug_simulate_ssl_bump') {
+      await _debugSimulateSslBump(alreadyInstalled: false);
+    } else if (key == 'debug_simulate_ssl_bump_installed') {
+      await _debugSimulateSslBump(alreadyInstalled: true);
     }
   }
 
