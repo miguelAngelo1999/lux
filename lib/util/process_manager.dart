@@ -71,6 +71,22 @@ class ProcessManager {
           }
         }
       }
+      // Kill any stale lux_core holding port 1090 before starting a new one.
+      // This prevents "bind: address already in use" on restart/crash.
+      try {
+        final portCheck = await Process.run('lsof', ['-ti', ':1090']);
+        final pids = (portCheck.stdout as String)
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        for (final pid in pids) {
+          await Process.run('kill', ['-9', pid]);
+        }
+        if (pids.isNotEmpty) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      } catch (_) {}
       process = await Process.start(path, args);
       process?.stdout.transform(utf8.decoder).forEach(debugPrint);
       process?.stderr.transform(utf8.decoder).forEach(debugPrint);

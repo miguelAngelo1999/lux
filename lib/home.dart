@@ -334,37 +334,56 @@ class _HomeState extends State<Home>
 
   Future<void> _checkForNetworkProxy() async {
     if (coreManager == null || !mounted) return;
-    if (!mounted) return;
     try {
       final detected = await coreManager!.detectNetworkProxy();
-
       // Always do a direct SSL probe — transparent proxy gives cert without auth
       final sslStatus = await coreManager!.getSslBumpStatus(fresh: true);
 
-      if (detected == null || !mounted) {
-        // Detection failed but SSL bump detected — show dialog with empty fields
-        if (sslStatus.detected && sslStatus.hasCert && mounted) {
-          // Create a synthetic DetectedProxy — host empty, user fills it in
-          // The cert org name will be pre-filled as proxy name by the dialog
-          final syntheticProxy = DetectedProxy(
-            host: '',
-            port: '8080',
-            scheme: 'http',
-            source: 'ssl-bump',
-            needsAuth: true,
-          );
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _showProxyAndCertDialog(syntheticProxy, sslStatus);
-          });
-        }
+      // ── Determine what still needs to be done ─────────────────────────────
+
+      // Check if this proxy is already in Lux's proxy list
+      bool proxyAlreadyAdded = false;
+      if (detected != null && detected.host.isNotEmpty) {
+        try {
+          final proxyList = await coreManager!.getProxyList();
+          proxyAlreadyAdded = proxyList.proxies.any(
+              (p) => p.server == detected.host && p.port.toString() == detected.port);
+        } catch (_) {}
+      }
+
+      // Check if the cert is already installed in all stores
+      final certFp = sslStatus.certInfo?.sha256Fingerprint ?? '';
+      final certAlreadyInstalled = certFp.isNotEmpty
+          ? await InstalledCertsStore.isFullyInstalled(certFp)
+          : false;
+
+      final hasBump = sslStatus.detected && sslStatus.hasCert;
+
+      // ── Decision tree ─────────────────────────────────────────────────────
+      // Case 1: No proxy detected, no SSL bump → nothing to do
+      if (detected == null && !hasBump) return;
+
+      // Case 2: Proxy known + cert installed → nothing left to do
+      if (proxyAlreadyAdded && certAlreadyInstalled) return;
+
+      // Case 3: Proxy known + cert NOT installed → skip proxy dialog, go straight to cert
+      if (proxyAlreadyAdded && hasBump && !certAlreadyInstalled) {
+        if (!mounted) return;
+        _lastDetectedCertFingerprint = certFp;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            windowManager.show();
+            windowManager.focus();
+            SetupWizard.show(context, coreManager!, sslStatus);
+          }
+        });
         return;
       }
 
-      _detectedProxyAddr = detected.address;
-
+      // Case 4: Proxy not yet added (new network or new proxy) → full dialog
+      // Also handles: no proxy detected but SSL bump found (transparent proxy)
       SslBumpStatus finalSsl;
-      if (detected.needsAuth && !Platform.isWindows) {
-        // macOS: Give auto-connect time to complete (it starts immediately with backoff)
+      if (detected != null && detected.needsAuth && !Platform.isWindows) {
         await Future.delayed(const Duration(seconds: 3));
         bool isConnected = false;
         try { isConnected = await coreManager!.getIsStarted(); } catch (_) {}
@@ -376,16 +395,30 @@ class _HomeState extends State<Home>
             fresh: true,
           );
         } else {
-          finalSsl = sslStatus; // use the direct probe result
+          finalSsl = sslStatus;
         }
       } else {
-        finalSsl = sslStatus; // use already-fetched direct probe
+        finalSsl = sslStatus;
       }
 
       if (!mounted) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _showProxyAndCertDialog(detected, finalSsl);
-      });
+
+      if (detected == null) {
+        // SSL bump detected but no proxy found — show dialog with empty fields
+        if (!hasBump) return;
+        final syntheticProxy = DetectedProxy(
+          host: '', port: '8080', scheme: 'http',
+          source: 'ssl-bump', needsAuth: true,
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showProxyAndCertDialog(syntheticProxy, finalSsl);
+        });
+      } else {
+        _detectedProxyAddr = detected.address;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showProxyAndCertDialog(detected, finalSsl);
+        });
+      }
     } catch (e) {
       debugPrint('Proxy detection error: $e');
     }
@@ -1150,20 +1183,7 @@ class _HomeState extends State<Home>
     super.initState();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
       if (!result.contains(ConnectivityResult.none)) {
-        Future.delayed(const Duration(seconds: 3), () async {
-          if (!mounted || coreManager == null) return;
-          // Only show proxy/cert dialog if SSL bump is detected AND the cert
-          // is not already installed in all stores — avoids nagging on reconnect.
-          try {
-            final ssl = await coreManager!.getSslBumpStatus(fresh: true);
-            if (ssl.detected && ssl.hasCert) {
-              final fp = ssl.certInfo?.sha256Fingerprint ?? '';
-              if (fp.isNotEmpty && await InstalledCertsStore.isFullyInstalled(fp)) {
-                // Cert already trusted everywhere — no need to prompt
-                return;
-              }
-            }
-          } catch (_) {}
+        Future.delayed(const Duration(seconds: 3), () {
           if (mounted) _checkForNetworkProxy();
         });
       }
