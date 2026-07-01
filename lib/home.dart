@@ -1093,7 +1093,20 @@ class _HomeState extends State<Home>
     super.initState();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
       if (!result.contains(ConnectivityResult.none)) {
-        Future.delayed(const Duration(seconds: 3), () {
+        Future.delayed(const Duration(seconds: 3), () async {
+          if (!mounted || coreManager == null) return;
+          // Only show proxy/cert dialog if SSL bump is detected AND the cert
+          // is not already installed in all stores — avoids nagging on reconnect.
+          try {
+            final ssl = await coreManager!.getSslBumpStatus(fresh: true);
+            if (ssl.detected && ssl.hasCert) {
+              final fp = ssl.certInfo?.sha256Fingerprint ?? '';
+              if (fp.isNotEmpty && await InstalledCertsStore.isFullyInstalled(fp)) {
+                // Cert already trusted everywhere — no need to prompt
+                return;
+              }
+            }
+          } catch (_) {}
           if (mounted) _checkForNetworkProxy();
         });
       }
