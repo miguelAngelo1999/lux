@@ -21,10 +21,21 @@ Future<String?> getFileOwner(String path) async {
   }
 }
 
-/// Checks if the NOPASSWD sudoers entry already exists for lux_core.
+/// Checks if the NOPASSWD sudoers entry already exists for lux_core
+/// AND covers the proxy/cert scripts (so sudo -n works without prompting).
 Future<bool> _isSudoersConfigured(String corePath) async {
   final sudoersFile = File('/etc/sudoers.d/lux_core');
-  return await sudoersFile.exists();
+  if (!await sudoersFile.exists()) return false;
+  // Also verify the proxy scripts are covered — if not, re-run setup
+  // so that sudo -n bash /tmp/lux_proxy_apply.sh works without osascript.
+  try {
+    final content = await Process.run('sudo', ['-n', 'cat', '/etc/sudoers.d/lux_core']);
+    if (content.exitCode != 0) return true; // can't read — assume ok, don't re-prompt
+    final text = content.stdout.toString();
+    return text.contains('lux_proxy_apply') && text.contains('lux_cert_install');
+  } catch (_) {
+    return true; // assume ok on error
+  }
 }
 
 /// Checks if the core binary is already wrapped with the sudo script.

@@ -49,6 +49,34 @@ class InstalledCertsStore {
     }
   }
 
+  /// Clears the in-memory cache, forcing the next read to reload from disk.
+  /// Also migrates old store name mismatches so isFullyInstalled works correctly.
+  static Future<void> ensureConsistentStoreNames() async {
+    _cache = null; // force reload
+    final certs = await _read();
+    bool changed = false;
+    for (final fp in certs.keys) {
+      final entry = certs[fp] as Map<String, dynamic>;
+      final stores = List<String>.from(entry['stores'] ?? []);
+      // Migrate old name → new name
+      final migrated = stores.map((s) {
+        if (s == 'Node.js (NODE_EXTRA_CA_CERTS)') return 'Node.js / npm (NODE_EXTRA_CA_CERTS)';
+        return s;
+      }).toList();
+      if (!_listEqual(stores, migrated)) {
+        certs[fp] = {...entry, 'stores': migrated};
+        changed = true;
+      }
+    }
+    if (changed) { _cache = certs; await _write(); }
+  }
+
+  static bool _listEqual(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) if (a[i] != b[i]) return false;
+    return true;
+  }
+
   /// Returns true if the cert is installed in ALL currently available stores.
   /// Returns false if there are new stores that don't have the cert yet.
   static Future<bool> isFullyInstalled(String fingerprint) async {
@@ -117,7 +145,7 @@ class InstalledCertsStore {
       }
 
       // Node.js
-      stores.add('Node.js (NODE_EXTRA_CA_CERTS)');
+      stores.add('Node.js / npm (NODE_EXTRA_CA_CERTS)');
 
       // Homebrew openssl@3
       for (final p in ['/opt/homebrew/etc/openssl@3/cert.pem', '/usr/local/etc/openssl@3/cert.pem']) {
@@ -158,7 +186,7 @@ class InstalledCertsStore {
       }
     } else if (Platform.isWindows) {
       stores.add('Windows Trusted Root');
-      stores.add('Node.js (NODE_EXTRA_CA_CERTS)');
+      stores.add('Node.js / npm (NODE_EXTRA_CA_CERTS)');
 
       // Git for Windows
       for (final p in [r'C:\Program Files\Git\usr\ssl\certs\ca-bundle.crt', r'C:\Program Files (x86)\Git\usr\ssl\certs\ca-bundle.crt']) {

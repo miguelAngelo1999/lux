@@ -991,6 +991,9 @@ class _HomeState extends State<Home>
     await windowManager.setPreventClose(true);
     // Load persisted dismissed proxies before detection runs
     await _loadDismissedProxies();
+    // Migrate any old store names in the cert store (e.g. 'Node.js' → 'Node.js / npm')
+    // so isFullyInstalled() doesn't keep returning false for already-installed certs.
+    InstalledCertsStore.ensureConsistentStoreNames();
 
     // Detect network proxy early — before lux_core starts, so system proxy
     // settings still reflect the real upstream proxy (not Lux's own 127.0.0.1)
