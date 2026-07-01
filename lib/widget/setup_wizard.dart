@@ -16,6 +16,10 @@ class _AppEntry {
   final List<String> macosPaths;
   final List<String> domains;
   final String reason; // shown as tooltip/subtitle
+  /// If true, this app is known to have TLS cert issues with corporate proxies
+  /// (typically Go-based language servers or apps with strict cert validation).
+  /// Only apps with hasCertIssues=true are shown in the wizard.
+  final bool hasCertIssues;
   const _AppEntry({
     required this.name,
     required this.icon,
@@ -23,11 +27,35 @@ class _AppEntry {
     required this.macosPaths,
     required this.domains,
     required this.reason,
+    this.hasCertIssues = false,
   });
 }
 
 const _allApps = [
-  // Creative / Video
+  // ── Apps with embedded Go binaries requiring MITM ─────────────────────────
+  // These apps contain Go-based language servers or download managers that
+  // do strict TLS cert validation (boringcrypto/FIPS). Corporate proxy certs
+  // often have non-standard key usage or incomplete chains that Go rejects
+  // even when trusted in the system keychain. Lux's MITM CA is properly
+  // formed and passes Go strict validation.
+  _AppEntry(
+    name: 'Antigravity IDE',
+    icon: Icons.auto_awesome,
+    windowsPaths: [r'C:\Users\*\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe'],
+    macosPaths: [
+      '/Applications/Antigravity IDE.app',
+      '/Applications/Antigravity.app',
+    ],
+    domains: [
+      'daily-cloudcode-pa.googleapis.com',
+      'cloudcode-pa.googleapis.com',
+      'oauth2.googleapis.com',
+      'play.googleapis.com',
+      'antigravity-unleash.goog',
+    ],
+    reason: 'Go language server rejects corporate proxy certs — Lux re-signs with a compliant CA',
+    hasCertIssues: true,
+  ),
   _AppEntry(
     name: 'DaVinci Resolve',
     icon: Icons.movie_creation,
@@ -35,10 +63,53 @@ const _allApps = [
       r'C:\Program Files\Blackmagic Design\DaVinci Resolve\Resolve.exe',
       r'C:\Program Files\Blackmagic Design\DaVinci Resolve\DDM\DDM.exe',
     ],
-    macosPaths: ['/Applications/DaVinci Resolve/DaVinci Resolve.app'],
-    domains: ['*.blackmagicdesign.com', 'resolve-dl.cloud.blackmagicdesign.com'],
-    reason: 'DDM download manager uses schannel which requires CRL endpoints',
+    macosPaths: [
+      '/Applications/DaVinci Resolve',
+      '/Applications/DaVinci Resolve/DaVinci Resolve.app',
+    ],
+    domains: [
+      '*.blackmagicdesign.com',
+      'resolve-dl.cloud.blackmagicdesign.com',
+      'auth.cloud.blackmagicdesign.com',
+    ],
+    reason: 'DDM download manager is a Go binary — rejects partial corporate proxy cert chains',
+    hasCertIssues: true,
   ),
+  _AppEntry(
+    name: 'Windsurf',
+    icon: Icons.air,
+    windowsPaths: [r'C:\Users\*\AppData\Local\Programs\Windsurf\Windsurf.exe'],
+    macosPaths: ['/Applications/Windsurf.app'],
+    domains: [
+      'server.self-serve.windsurf.com',
+      'inference.codeium.com',
+      'api.codeium.com',
+      '*.codeium.com',
+    ],
+    reason: 'Codeium Go language server uses strict TLS validation',
+    hasCertIssues: true,
+  ),
+  _AppEntry(
+    name: 'Kiro',
+    icon: Icons.developer_mode,
+    windowsPaths: [r'C:\Users\*\AppData\Local\Programs\Kiro\Kiro.exe'],
+    macosPaths: [
+      '/Applications/Kiro.app',
+      '/Applications/Kiro CLI.app',
+    ],
+    domains: [
+      'prod.us-east-1.telemetry.desktop.kiro.dev',
+      'prod.download.desktop.kiro.dev',
+      '*.kiro.dev',
+      'bedrock-runtime.us-east-1.amazonaws.com',
+    ],
+    reason: 'AWS-based language server uses Go strict certificate validation',
+    hasCertIssues: true,
+  ),
+
+  // ── Apps that work fine with just NODE_EXTRA_CA_CERTS ─────────────────────
+  // These use Node.js/Electron and respect system keychain + NODE_EXTRA_CA_CERTS.
+  // Listed here so the wizard can inform users, but no MITM needed.
   _AppEntry(
     name: 'Adobe Creative Cloud',
     icon: Icons.photo_filter,
@@ -47,7 +118,7 @@ const _allApps = [
       r'C:\Program Files\Adobe\Adobe Creative Cloud\ACC\Creative Cloud.exe',
     ],
     macosPaths: ['/Applications/Adobe Creative Cloud/Adobe Creative Cloud.app'],
-    domains: ['*.adobe.com', '*.adobecc.com', 'cc-api-data.adobe.io', '*.services.adobe.com'],
+    domains: ['*.adobe.com', '*.adobecc.com', 'cc-api-data.adobe.io'],
     reason: 'Creative Cloud license checks and update downloads',
   ),
   _AppEntry(
@@ -66,8 +137,6 @@ const _allApps = [
     domains: ['*.adobe.com', '*.adobecc.com', 'ppro.adobe.com'],
     reason: 'Premiere cloud collaboration and media export',
   ),
-
-  // Developer Tools
   _AppEntry(
     name: 'Visual Studio Code',
     icon: Icons.code,
@@ -76,18 +145,15 @@ const _allApps = [
       r'C:\Users\*\AppData\Local\Programs\Microsoft VS Code\Code.exe',
     ],
     macosPaths: ['/Applications/Visual Studio Code.app'],
-    domains: ['*.vscode.dev', 'marketplace.visualstudio.com', '*.gallerycdn.vsassets.io',
-        'update.code.visualstudio.com', '*.vsassets.io'],
+    domains: ['*.vscode.dev', 'marketplace.visualstudio.com', 'update.code.visualstudio.com'],
     reason: 'Extension marketplace downloads and updates',
   ),
   _AppEntry(
     name: 'GitHub Desktop',
     icon: Icons.source,
-    windowsPaths: [
-      r'C:\Users\*\AppData\Local\GitHubDesktop\GitHubDesktop.exe',
-    ],
+    windowsPaths: [r'C:\Users\*\AppData\Local\GitHubDesktop\GitHubDesktop.exe'],
     macosPaths: ['/Applications/GitHub Desktop.app'],
-    domains: ['*.github.com', 'api.github.com', 'objects.githubusercontent.com', '*.githubassets.com'],
+    domains: ['*.github.com', 'api.github.com', 'objects.githubusercontent.com'],
     reason: 'Repository sync and release downloads',
   ),
   _AppEntry(
@@ -95,123 +161,79 @@ const _allApps = [
     icon: Icons.grid_view,
     windowsPaths: [r'C:\Program Files\Docker\Docker\Docker Desktop.exe'],
     macosPaths: ['/Applications/Docker.app'],
-    domains: ['*.docker.com', 'registry-1.docker.io', '*.docker.io', 'production.cloudflare.docker.com'],
+    domains: ['*.docker.com', 'registry-1.docker.io', '*.docker.io'],
     reason: 'Image pulls from Docker Hub and registry',
   ),
   _AppEntry(
     name: 'JetBrains IDEs',
     icon: Icons.terminal,
-    windowsPaths: [
-      r'C:\Program Files\JetBrains\*\bin\*.exe',
-      r'C:\Users\*\AppData\Local\JetBrains\Toolbox\apps\*',
-    ],
+    windowsPaths: [r'C:\Program Files\JetBrains\*\bin\*.exe'],
     macosPaths: ['/Applications/JetBrains Toolbox.app', '/Applications/IntelliJ IDEA*.app'],
-    domains: ['*.jetbrains.com', 'plugins.jetbrains.com', 'download.jetbrains.com',
-        'account.jetbrains.com', '*.intellij.net'],
+    domains: ['*.jetbrains.com', 'plugins.jetbrains.com', 'download.jetbrains.com'],
     reason: 'Plugin downloads and license validation',
   ),
   _AppEntry(
     name: 'Postman',
     icon: Icons.send,
-    windowsPaths: [
-      r'C:\Users\*\AppData\Local\Postman\Postman.exe',
-      r'C:\Program Files\Postman\Postman.exe',
-    ],
+    windowsPaths: [r'C:\Users\*\AppData\Local\Postman\Postman.exe'],
     macosPaths: ['/Applications/Postman.app'],
-    domains: ['*.postman.com', 'api.getpostman.com', 'go.pstmn.io', '*.postmanlabs.com'],
+    domains: ['*.postman.com', 'api.getpostman.com', 'go.pstmn.io'],
     reason: 'Workspace sync and API collections',
   ),
-
-  // AI Tools
   _AppEntry(
-    name: 'Google AI / Gemini Apps',
-    icon: Icons.auto_awesome,
-    windowsPaths: [],
-    macosPaths: [],
-    domains: ['generativelanguage.googleapis.com', 'aistudio.google.com',
-        '*.googleapis.com', 'optimizationguide-pa.googleapis.com'],
-    reason: 'Gemini API calls from Electron and desktop AI apps',
-  ),
-  _AppEntry(
-    name: 'ChatGPT / OpenAI',
+    name: 'ChatGPT',
     icon: Icons.psychology,
-    windowsPaths: [
-      r'C:\Users\*\AppData\Local\Programs\chatgpt\ChatGPT.exe',
-    ],
+    windowsPaths: [r'C:\Users\*\AppData\Local\Programs\chatgpt\ChatGPT.exe'],
     macosPaths: ['/Applications/ChatGPT.app'],
-    domains: ['*.openai.com', 'api.openai.com', 'chat.openai.com', '*.oaistatic.com'],
+    domains: ['*.openai.com', 'api.openai.com', 'chat.openai.com'],
     reason: 'ChatGPT desktop app API calls',
   ),
   _AppEntry(
-    name: 'GitHub Copilot (VS Code)',
-    icon: Icons.smart_toy,
-    windowsPaths: [
-      r'C:\Users\*\AppData\Roaming\Code\extensions\github.copilot*',
-    ],
-    macosPaths: [r'~/.vscode/extensions/github.copilot*'],
-    domains: ['copilot-proxy.githubusercontent.com', '*.githubcopilot.com', 'api.github.com'],
-    reason: 'Copilot code completion API requests',
-  ),
-
-  // Communication & Collaboration
-  _AppEntry(
     name: 'Slack',
     icon: Icons.chat_bubble,
-    windowsPaths: [
-      r'C:\Users\*\AppData\Local\slack\slack.exe',
-      r'C:\Program Files\Slack\slack.exe',
-    ],
+    windowsPaths: [r'C:\Users\*\AppData\Local\slack\slack.exe'],
     macosPaths: ['/Applications/Slack.app'],
-    domains: ['*.slack.com', 'files.slack.com', '*.slack-edge.com', 'slack.com'],
+    domains: ['*.slack.com', 'files.slack.com', '*.slack-edge.com'],
     reason: 'File uploads/downloads and app integrations',
   ),
   _AppEntry(
     name: 'Microsoft Teams',
     icon: Icons.groups,
-    windowsPaths: [
-      r'C:\Users\*\AppData\Local\Microsoft\Teams\current\Teams.exe',
-      r'C:\Program Files\WindowsApps\MicrosoftTeams*',
-    ],
+    windowsPaths: [r'C:\Users\*\AppData\Local\Microsoft\Teams\current\Teams.exe'],
     macosPaths: ['/Applications/Microsoft Teams.app'],
-    domains: ['*.teams.microsoft.com', '*.skype.com', 'teams.microsoft.com',
-        '*.teams.cdn.office.net'],
+    domains: ['*.teams.microsoft.com', '*.skype.com', 'teams.microsoft.com'],
     reason: 'Meeting calls and file sharing',
   ),
   _AppEntry(
     name: 'Zoom',
     icon: Icons.video_call,
-    windowsPaths: [
-      r'C:\Users\*\AppData\Roaming\Zoom\bin\Zoom.exe',
-      r'C:\Program Files\Zoom\bin\Zoom.exe',
-    ],
+    windowsPaths: [r'C:\Users\*\AppData\Roaming\Zoom\bin\Zoom.exe'],
     macosPaths: ['/Applications/Zoom.app'],
-    domains: ['*.zoom.us', '*.zoomgov.com', 'zoom.us', '*.zmtg.us'],
+    domains: ['*.zoom.us', 'zoom.us'],
     reason: 'Meeting connectivity and cloud recordings',
   ),
   _AppEntry(
     name: 'Notion',
     icon: Icons.article,
-    windowsPaths: [
-      r'C:\Users\*\AppData\Local\Programs\Notion\Notion.exe',
-    ],
+    windowsPaths: [r'C:\Users\*\AppData\Local\Programs\Notion\Notion.exe'],
     macosPaths: ['/Applications/Notion.app'],
-    domains: ['*.notion.so', 'api.notion.com', '*.notion-static.com'],
+    domains: ['*.notion.so', 'api.notion.com'],
     reason: 'Database sync and file uploads',
   ),
 ];
 
 // ── App detection ─────────────────────────────────────────────────────────────
 
-Future<List<_AppEntry>> detectInstalledApps() async {
+/// Detects which apps from _allApps are installed.
+/// [certIssuesOnly] — if true, only returns apps with hasCertIssues=true
+/// (those with Go binaries needing MITM). If false, returns all installed apps.
+Future<List<_AppEntry>> detectInstalledApps({bool certIssuesOnly = true}) async {
   final found = <_AppEntry>[];
-  // Always include AI tools (can't easily detect if a web API is "installed")
-  final alwaysShow = ['Google AI / Gemini Apps'];
 
   for (final app in _allApps) {
-    if (alwaysShow.contains(app.name)) {
-      found.add(app);
-      continue;
-    }
+    // Filter by cert issues if requested
+    if (certIssuesOnly && !app.hasCertIssues) continue;
+
     final paths = Platform.isWindows ? app.windowsPaths : app.macosPaths;
     if (paths.isEmpty) continue;
     bool detected = false;
@@ -224,7 +246,12 @@ Future<List<_AppEntry>> detectInstalledApps() async {
           if (await Directory(base).exists()) { detected = true; break; }
         } catch (_) {}
       } else {
-        if (await File(p).exists()) { detected = true; break; }
+        // On macOS, .app bundles are directories — check both File and Directory
+        try {
+          if (await File(p).exists() || await Directory(p).exists()) {
+            detected = true; break;
+          }
+        } catch (_) {}
       }
     }
     if (detected) found.add(app);
@@ -336,7 +363,29 @@ class _SetupWizardState extends State<SetupWizard> {
         }
       }
       _setStatus('Configured — restart apps for changes to take effect');
-    } catch (e) { _setStatus('Failed: $e', ok: false); }
+    } catch (e) {
+      // 500 from setMitmEnabled means the CA could not be initialised —
+      // usually a permission issue (key file owned by root from a prior
+      // privileged run). The patterns can still be saved; the user just
+      // needs to toggle SSL inspection off/on once from Settings to fix it.
+      final msg = e.toString();
+      if (msg.contains('500') || msg.contains('permission denied') ||
+          msg.contains('CA') || msg.contains('initialise')) {
+        _setStatus(
+          'Saved app list. To activate, go to Settings → Corporate Proxy Fix '
+          'and toggle SSL Inspection off then on.',
+          ok: true, // treat as soft success
+        );
+        // Still try to save the patterns even if enable failed
+        for (final idx in _selectedApps) {
+          for (final d in _installedApps[idx].domains) {
+            try { await widget.coreManager.addMitmPattern(d); } catch (_) {}
+          }
+        }
+      } else {
+        _setStatus('Failed: $e', ok: false);
+      }
+    }
     finally { setState(() => _busy = false); }
   }
 
