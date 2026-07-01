@@ -85,7 +85,7 @@ class CoreManager {
     // dioFast: no BackgroundTransformer — inline JSON decode on the main thread.
     // For small payloads (proxy list, subscription list) isolate spawn latency
     // (~50-500ms cold) is far worse than just decoding inline.
-    dioFast.options.receiveTimeout = const Duration(seconds: 10);
+    dioFast.options.receiveTimeout = const Duration(seconds: 30);
     dioFast.httpClientAdapter = _makeLocalAdapter();
     dioFast.interceptors.add(InterceptorsWrapper(onRequest:
         (RequestOptions options, RequestInterceptorHandler handler) async {
