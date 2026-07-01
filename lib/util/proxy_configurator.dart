@@ -58,10 +58,10 @@ class ProxyConfigurator {
       'launchctl setenv https_proxy "\$PROXY" 2>/dev/null || true\n'
       'launchctl setenv NO_PROXY "\$NO_PROXY_VAL" 2>/dev/null || true\n'
       'launchctl setenv no_proxy "\$NO_PROXY_VAL" 2>/dev/null || true\n'
-      '# NODE_TLS_REJECT_UNAUTHORIZED=0 lets Electron/Node apps (e.g. Antigravity IDE)\n'
-      '# work through corporate proxies that do SSL inspection without crashing on\n'
-      '# non-standard or intercepted certificates.\n'
-      'launchctl setenv NODE_TLS_REJECT_UNAUTHORIZED 0 2>/dev/null || true\n'
+      '# NODE_EXTRA_CA_CERTS makes Node.js/Electron apps trust the corporate proxy CA\n'
+      '# without disabling certificate verification (safer than NODE_TLS_REJECT_UNAUTHORIZED).\n'
+      '# /etc/ssl/cert.pem has the corporate CA appended by the cert installer.\n'
+      'launchctl setenv NODE_EXTRA_CA_CERTS /etc/ssl/cert.pem 2>/dev/null || true\n'
       'launchctl setenv CURL_CA_BUNDLE /etc/ssl/cert.pem 2>/dev/null || true\n'
       '\n'
       '# Add bypass domains directly to macOS networksetup for all active services\n'
@@ -90,7 +90,7 @@ class ProxyConfigurator {
       'printf "export NO_PROXY=\\"%s\\" # LUX_PROXY\\n" "\$NO_PROXY_VAL" >> /tmp/lux_zshenv_clean\n'
       'printf "export no_proxy=\\"%s\\" # LUX_PROXY\\n" "\$NO_PROXY_VAL" >> /tmp/lux_zshenv_clean\n'
       'printf "export CURL_CA_BUNDLE=/etc/ssl/cert.pem # LUX_PROXY\\n" >> /tmp/lux_zshenv_clean\n'
-      'printf "export NODE_TLS_REJECT_UNAUTHORIZED=0 # LUX_PROXY\\n" >> /tmp/lux_zshenv_clean\n'
+      'printf "export NODE_EXTRA_CA_CERTS=/etc/ssl/cert.pem # LUX_PROXY\\n" >> /tmp/lux_zshenv_clean\n'
       'cp /tmp/lux_zshenv_clean /etc/zshenv 2>/dev/null || true\n'
       'echo "LUX_PROXY_APPLY_OK"\n',
     );
@@ -105,7 +105,7 @@ class ProxyConfigurator {
     final script = File('/tmp/lux_proxy_clear.sh');
     await script.writeAsString(
       '#!/bin/bash\n'
-      'for VAR in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy NODE_TLS_REJECT_UNAUTHORIZED CURL_CA_BUNDLE; do\n'
+      'for VAR in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy NODE_EXTRA_CA_CERTS CURL_CA_BUNDLE; do\n'
       '  launchctl unsetenv "\$VAR" 2>/dev/null || true\n'
       'done\n'
       'grep -v "LUX_PROXY" /etc/launchd.conf > /tmp/lux_launchd_clean.conf 2>/dev/null || true\n'
