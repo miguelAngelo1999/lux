@@ -58,12 +58,15 @@ class InstalledCertsStore {
     for (final fp in certs.keys) {
       final entry = certs[fp] as Map<String, dynamic>;
       final stores = List<String>.from(entry['stores'] ?? []);
-      // Migrate old name → new name
+      // Normalize all known name variants → canonical names
       final migrated = stores.map((s) {
         if (s == 'Node.js (NODE_EXTRA_CA_CERTS)') return 'Node.js / npm (NODE_EXTRA_CA_CERTS)';
+        if (s == 'Firefox (NSS)') return 'Firefox / Thunderbird (NSS)';
+        if (s == 'Thunderbird (NSS)') return 'Firefox / Thunderbird (NSS)';
+        if (s.startsWith('Python certifi')) return 'Python certifi'; // strip version suffix
         return s;
-      }).toList();
-      if (!_listEqual(stores, migrated)) {
+      }).toSet().toList(); // toSet to deduplicate after merges
+      if (!_setEqual(stores.toSet(), migrated.toSet())) {
         certs[fp] = {...entry, 'stores': migrated};
         changed = true;
       }
@@ -71,11 +74,7 @@ class InstalledCertsStore {
     if (changed) { _cache = certs; await _write(); }
   }
 
-  static bool _listEqual(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) if (a[i] != b[i]) return false;
-    return true;
-  }
+  static bool _setEqual(Set<String> a, Set<String> b) => a.length == b.length && a.containsAll(b);
 
   /// Returns true if the cert is installed in ALL currently available stores.
   /// Returns false if there are new stores that don't have the cert yet.
@@ -155,25 +154,25 @@ class InstalledCertsStore {
       // Python certifi
       try {
         final r = await Process.run('/usr/bin/env', ['python3', '-c', 'import certifi; print(certifi.where())']);
-        if (r.exitCode == 0 && r.stdout.toString().trim().isNotEmpty) stores.add('Python certifi');
+        if (r.exitCode == 0 && r.stdout.toString().trim().isNotEmpty) {
+          stores.add('Python certifi'); // normalized name
+        }
       } catch (_) {}
 
-      // Firefox
+      // Firefox / Thunderbird (NSS)
       final home = Platform.environment['HOME'] ?? '';
       final firefoxProfiles = Directory('$home/Library/Application Support/Firefox/Profiles');
-      if (await firefoxProfiles.exists()) {
-        final hasDb = await firefoxProfiles.list().any((e) =>
-            e is Directory && (File('${e.path}/cert9.db').existsSync() || File('${e.path}/cert8.db').existsSync()));
-        if (hasDb) stores.add('Firefox (NSS)');
-      }
-
-      // Thunderbird
       final tbProfiles = Directory('$home/Library/Application Support/Thunderbird/Profiles');
-      if (await tbProfiles.exists()) {
-        final hasDb = await tbProfiles.list().any((e) =>
+      bool hasNss = false;
+      if (await firefoxProfiles.exists()) {
+        hasNss = await firefoxProfiles.list().any((e) =>
             e is Directory && (File('${e.path}/cert9.db').existsSync() || File('${e.path}/cert8.db').existsSync()));
-        if (hasDb) stores.add('Thunderbird (NSS)');
       }
+      if (!hasNss && await tbProfiles.exists()) {
+        hasNss = await tbProfiles.list().any((e) =>
+            e is Directory && (File('${e.path}/cert9.db').existsSync() || File('${e.path}/cert8.db').existsSync()));
+      }
+      if (hasNss) stores.add('Firefox / Thunderbird (NSS)'); // normalized name
 
       // App bundles (Anaconda, DaVinci, etc.)
       final appBundlePaths = [
