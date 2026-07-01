@@ -64,6 +64,9 @@ class InstalledCertsStore {
         if (s == 'Firefox (NSS)') return 'Firefox / Thunderbird (NSS)';
         if (s == 'Thunderbird (NSS)') return 'Firefox / Thunderbird (NSS)';
         if (s.startsWith('Python certifi')) return 'Python certifi'; // strip version suffix
+        // Windows migrations
+        if (s == 'Windows Trusted Root') return 'Windows Trusted Root (certutil)';
+        if (s == 'Git for Windows') return 'Git for Windows (ca-bundle.crt)';
         return s;
       }).toSet().toList(); // toSet to deduplicate after merges
       if (!_setEqual(stores.toSet(), migrated.toSet())) {
@@ -184,12 +187,14 @@ class InstalledCertsStore {
         if (await File(p).exists()) { stores.add('App cert bundles'); break; }
       }
     } else if (Platform.isWindows) {
-      stores.add('Windows Trusted Root');
+      stores.add('Windows Trusted Root (certutil)');
       stores.add('Node.js / npm (NODE_EXTRA_CA_CERTS)');
+      // curl on Windows uses the Windows cert store — always add it
+      stores.add('curl (uses Windows cert store)');
 
       // Git for Windows
       for (final p in [r'C:\Program Files\Git\usr\ssl\certs\ca-bundle.crt', r'C:\Program Files (x86)\Git\usr\ssl\certs\ca-bundle.crt']) {
-        if (await File(p).exists()) { stores.add('Git for Windows'); break; }
+        if (await File(p).exists()) { stores.add('Git for Windows (ca-bundle.crt)'); break; }
       }
 
       // Python certifi
