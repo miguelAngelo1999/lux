@@ -55,13 +55,21 @@ class _DashboardState extends State<Dashboard> with WindowListener {
   }
 
   Future<void> _runUpdateCheck() async {
-    // Small delay so it doesn't race with startup
-    await Future.delayed(const Duration(seconds: 5));
+    // Wait for proxy to connect before checking (lux_core needs time to start + connect)
+    await Future.delayed(const Duration(seconds: 15));
     if (!mounted) return;
-    final info = await checkForUpdate();
-    if (info == null || !info.hasUpdate) return;
-    if (!mounted) return;
-    await showUpdateDialog(context, info);
+    // Try up to 3 times with backoff (network may not be ready yet)
+    for (int attempt = 0; attempt < 3; attempt++) {
+      try {
+        final info = await checkForUpdate();
+        if (info == null || !info.hasUpdate) return;
+        if (!mounted) return;
+        await showUpdateDialog(context, info);
+        return;
+      } catch (_) {
+        if (attempt < 2) await Future.delayed(Duration(seconds: 10 * (attempt + 1)));
+      }
+    }
   }
 
   @override
