@@ -15,6 +15,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   List<CustomizedRuleItem> _rules = [];
   bool _isLoading = true;
   bool _isMutating = false; // prevent reload during mutations
+  DateTime _lastMutation = DateTime.fromMillisecondsSinceEpoch(0);
   String _search = '';
   final _searchCtrl = TextEditingController();
 
@@ -45,7 +46,10 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
 
   @override
   void onWindowFocus() {
-    if (!_isMutating) _load();
+    // Don't reload if mutating OR if a mutation happened within the last 3 seconds
+    // (backend may still be processing, reload would show stale state)
+    final msSinceMutation = DateTime.now().difference(_lastMutation).inMilliseconds;
+    if (!_isMutating && msSinceMutation > 3000) _load();
   }
 
   @override
@@ -85,6 +89,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   }
 
   Future<void> _toggle(CustomizedRuleItem item) async {
+    _lastMutation = DateTime.now();
     setState(() {
       _isMutating = true;
       final idx = _rules.indexOf(item);
@@ -111,6 +116,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   }
 
   Future<void> _delete(CustomizedRuleItem item) async {
+    _lastMutation = DateTime.now();
     setState(() { _isMutating = true; _rules.remove(item); });
     try {
       await widget.coreManager.deleteCustomizedRules([item.raw]);
@@ -122,6 +128,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   }
 
   Future<void> _moveUp(int filteredIdx) async {
+    _lastMutation = DateTime.now();
     final item = _filtered[filteredIdx];
     final fullIdx = _rules.indexOf(item);
     if (fullIdx <= 0) return;
@@ -134,6 +141,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   }
 
   Future<void> _moveDown(int filteredIdx) async {
+    _lastMutation = DateTime.now();
     final item = _filtered[filteredIdx];
     final fullIdx = _rules.indexOf(item);
     if (fullIdx >= _rules.length - 1) return;
