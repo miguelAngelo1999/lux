@@ -6,7 +6,8 @@ import 'package:lux/pages/log_page.dart';
 import 'package:lux/pages/proxies_page.dart';
 import 'package:lux/pages/rules_page.dart';
 import 'package:lux/pages/settings_page.dart';
-import 'package:lux/util/utils.dart';
+import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
+import 'package:lux/util/utils.dart' hide checkForUpdate;
 import 'package:lux/widget/app_bottom_bar.dart';
 import 'package:lux/widget/app_header_bar.dart';
 import 'package:window_manager/window_manager.dart';
@@ -47,10 +48,20 @@ class _DashboardState extends State<Dashboard> with WindowListener {
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    checkForUpdate();
+    _runUpdateCheck();
     // Register refresh callback so external callers (e.g. startup wizard) can
     // trigger a proxy list refresh after adding a proxy.
     widget.onRegisterProxyRefresh?.call(() => _refreshProxies?.call());
+  }
+
+  Future<void> _runUpdateCheck() async {
+    // Small delay so it doesn't race with startup
+    await Future.delayed(const Duration(seconds: 5));
+    if (!mounted) return;
+    final info = await checkForUpdate();
+    if (info == null || !info.hasUpdate) return;
+    if (!mounted) return;
+    await showUpdateDialog(context, info);
   }
 
   @override

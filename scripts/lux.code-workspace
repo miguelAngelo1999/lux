@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../itun2socks"
+		},
+		{
+			"path": "../../lux-client"
+		}
+	],
+	"settings": {}
+}

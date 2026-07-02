@@ -58,7 +58,15 @@ const launchFromStartupArg = 'launch_from_startup';
 
 const localServersGroupKey = 'local_servers';
 
-const latestReleaseUrl = 'https://github.com/igoogolx/lux/releases/latest';
+/// Google Drive direct-download URL for appcast.json (stable file ID — never changes).
+/// Updated by scripts/release.py after each release.
+const appcastUrl = 'https://drive.google.com/uc?export=download&id=APPCAST_ID_PLACEHOLDER&confirm=t';
+
+/// Fallback: browser releases page
+const releasesPageUrl = 'https://github.com/miguelAngelo1999/lux/releases/latest';
+
+/// Legacy alias kept for compatibility
+const latestReleaseUrl = releasesPageUrl;
 
 enum ProxyItemAction {
   edit,
