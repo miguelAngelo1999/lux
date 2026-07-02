@@ -332,7 +332,15 @@ class _HomeState extends State<Home>
     });
   }
 
+  // Debounce for _checkForNetworkProxy — don't re-run within 60s of last run
+  DateTime? _lastProxyCheck;
+
   Future<void> _checkForNetworkProxy() async {
+    // Don't re-run within 60 seconds (prevents connectivity-change retriggering)
+    final now = DateTime.now();
+    if (_lastProxyCheck != null && now.difference(_lastProxyCheck!).inSeconds < 60) return;
+    _lastProxyCheck = now;
+
     if (coreManager == null || !mounted) return;
     try {
       final detected = await coreManager!.detectNetworkProxy();
@@ -993,7 +1001,7 @@ class _HomeState extends State<Home>
     await _loadDismissedProxies();
     // Migrate any old store names in the cert store (e.g. 'Node.js' → 'Node.js / npm')
     // so isFullyInstalled() doesn't keep returning false for already-installed certs.
-    InstalledCertsStore.ensureConsistentStoreNames();
+    await InstalledCertsStore.ensureConsistentStoreNames();
 
     // Detect network proxy early — before lux_core starts, so system proxy
     // settings still reflect the real upstream proxy (not Lux's own 127.0.0.1)

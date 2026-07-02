@@ -79,8 +79,10 @@ class InstalledCertsStore {
 
   static bool _setEqual(Set<String> a, Set<String> b) => a.length == b.length && a.containsAll(b);
 
-  /// Returns true if the cert is installed in ALL currently available stores.
-  /// Returns false if there are new stores that don't have the cert yet.
+  /// Returns true if the cert has been installed (recorded in any stores).
+  /// We don't require ALL currently-detectable stores to have it — that would
+  /// cause the wizard to re-appear whenever a new store (e.g. Python certifi)
+  /// appears on the machine after the initial install.
   static Future<bool> isFullyInstalled(String fingerprint) async {
     if (fingerprint.isEmpty) return false;
     final certs = await _read();
@@ -89,11 +91,12 @@ class InstalledCertsStore {
     final entry = certs[fingerprint] as Map<String, dynamic>;
     final installedStores = List<String>.from(entry['stores'] ?? []);
 
-    // Check if there are new stores available that weren't patched
-    final currentStores = await _detectAvailableStores();
-    final missingStores = currentStores.where((s) => !installedStores.contains(s)).toList();
+    // Require the primary system trust store to be installed.
+    // That's the minimum needed for the cert to actually work.
+    if (Platform.isMacOS && !installedStores.contains('macOS System Keychain')) return false;
+    if (Platform.isWindows && !installedStores.contains('Windows Trusted Root (certutil)')) return false;
 
-    return missingStores.isEmpty;
+    return installedStores.isNotEmpty;
   }
 
   /// Returns stores that exist on this machine but don't have the cert installed.

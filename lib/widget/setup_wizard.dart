@@ -448,20 +448,32 @@ class _SetupWizardState extends State<SetupWizard> {
         Text('${_step+1}/$_totalSteps',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
       ]),
-      content: SizedBox(width: 440, child: SingleChildScrollView(child: _buildStep())),
+      content: SizedBox(width: 440, child: SingleChildScrollView(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildStep(),
+          // "Don't ask again" lives in content so it doesn't break the action bar layout
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: _busy ? null : () => setState(() => _dontAskAgain = !_dontAskAgain),
+            child: Row(children: [
+              SizedBox(
+                width: 20, height: 20,
+                child: Checkbox(
+                  value: _dontAskAgain,
+                  onChanged: _busy ? null : (v) => setState(() => _dontAskAgain = v ?? false),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text("Don't ask again for this step",
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            ]),
+          ),
+        ],
+      ))),
       actions: [
-        // "Don't ask again" checkbox on the left
-        Checkbox(
-          value: _dontAskAgain,
-          onChanged: _busy ? null : (v) => setState(() => _dontAskAgain = v ?? false),
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-        ),
-        GestureDetector(
-          onTap: _busy ? null : () => setState(() => _dontAskAgain = !_dontAskAgain),
-          child: const Text("Don't ask again", style: TextStyle(fontSize: 12)),
-        ),
-        const Spacer(),
         TextButton(onPressed: _busy ? null : _nextStep,
             child: Text(_step == _totalSteps-1 ? 'Finish' : 'Skip')),
         FilledButton(

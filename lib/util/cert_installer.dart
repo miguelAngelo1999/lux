@@ -583,18 +583,25 @@ $store.Close()
   /// Finds Python certifi's cacert.pem and appends the cert.
   static Future<List<InstallStep>> _installPythonCertifi(
       List<int> pemBytes) async {
-    for (final python in ['python3', 'python', 'python3.12', 'python3.11']) {
+    final candidates = Platform.isWindows
+        ? ['python', 'python3', 'py']      // Windows: just the executable name
+        : ['python3', 'python'];            // macOS/Linux: will be run via /usr/bin/env
+
+    for (final python in candidates) {
       try {
-        final result = await Process.run(
-            Platform.isWindows ? python : '/usr/bin/env',
-            [python, '-c', 'import certifi; print(certifi.where())']);
+        final ProcessResult result;
+        if (Platform.isWindows) {
+          result = await Process.run(python, ['-c', 'import certifi; print(certifi.where())']);
+        } else {
+          result = await Process.run('/usr/bin/env', [python, '-c', 'import certifi; print(certifi.where())']);
+        }
         if (result.exitCode != 0) continue;
 
         final certifiPath = result.stdout.toString().trim();
         if (certifiPath.isEmpty) continue;
 
         final step = await _appendToPemStore(
-            pemBytes, [certifiPath], 'Python certifi ($python)');
+            pemBytes, [certifiPath], 'Python certifi');
         if (step.success) return [step];
       } catch (_) {
         continue;
