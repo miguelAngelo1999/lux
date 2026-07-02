@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/model/app.dart';
-import 'package:lux/util/utils.dart';
+import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
+import 'package:lux/util/utils.dart' hide checkForUpdate;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
@@ -417,6 +418,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
             const SizedBox(height: 16),
             _sectionHeader('Advanced'),
+            _checkForUpdatesTile(),
             _configFileTile(),
             _resetNetworkTile(),
             _resetWizardDismissalsTile(),
@@ -821,6 +823,44 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         );
       },
     );
+  }
+
+  Widget _checkForUpdatesTile() {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      leading: const Icon(Icons.system_update_alt, size: 20),
+      title: const Text('Check for Updates', style: TextStyle(fontSize: 14)),
+      subtitle: const Text('Current: 1.41.0',
+          style: TextStyle(fontSize: 12)),
+      trailing: _checking
+          ? const SizedBox(width: 20, height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.chevron_right, size: 20),
+      onTap: _checking ? null : _doCheckForUpdates,
+    );
+  }
+
+  bool _checking = false;
+
+  Future<void> _doCheckForUpdates() async {
+    setState(() => _checking = true);
+    try {
+      final info = await checkForUpdate();
+      if (!mounted) return;
+      if (info == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not reach update server')));
+        return;
+      }
+      if (!info.hasUpdate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lux ${info.currentVersion} is up to date ✓')));
+        return;
+      }
+      await showUpdateDialog(context, info);
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
   }
 
   Widget _resetNetworkTile() {
