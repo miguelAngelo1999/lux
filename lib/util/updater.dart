@@ -138,7 +138,17 @@ Future<void> downloadAndInstall(
 
     if (response.statusCode != 200) {
       appLog('UPDATE', 'download failed — HTTP ${response.statusCode}');
-      await launchUrl(Uri.parse(releasesPageUrl));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed — server returned ${response.statusCode}'),
+            action: SnackBarAction(
+              label: 'Open in browser',
+              onPressed: () => launchUrl(Uri.parse(releasesPageUrl)),
+            ),
+          ),
+        );
+      }
       return;
     }
 
@@ -166,7 +176,21 @@ Future<void> downloadAndInstall(
       final text = String.fromCharCodes(peek.take(200));
       appLog('UPDATE', 'file too small (${fileSize}B) — likely HTML. Preview: ${text.substring(0, text.length.clamp(0, 100))}');
       debugPrint('[Updater] file too small, probably HTML: $text');
-      await launchUrl(Uri.parse(releasesPageUrl));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Download failed — received ${fileSize}B (expected ~37MB). '
+              'Check your internet connection.',
+            ),
+            action: SnackBarAction(
+              label: 'Open in browser',
+              onPressed: () => launchUrl(Uri.parse(releasesPageUrl)),
+            ),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
       return;
     }
 
@@ -175,14 +199,18 @@ Future<void> downloadAndInstall(
       await Process.run('xattr', ['-d', 'com.apple.quarantine', file.path]);
       appLog('UPDATE', 'quarantine removed, mounting DMG and installing');
 
-      // Mount the DMG
+      // Mount the DMG (get plist output so we can find the mount point reliably)
       final mountResult = await Process.run('hdiutil', [
         'attach', file.path,
-        '-nobrowse', '-quiet', '-noverify',
+        '-nobrowse', '-noverify', '-plist',
       ]);
       if (mountResult.exitCode != 0) {
         appLog('UPDATE', 'hdiutil attach failed: ${mountResult.stderr}');
-        await launchUrl(Uri.parse(releasesPageUrl));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not mount DMG: ${mountResult.stderr}')),
+          );
+        }
         return;
       }
 
@@ -191,31 +219,62 @@ Future<void> downloadAndInstall(
         '/Volumes', '-maxdepth', '2', '-name', 'Lux.app', '-type', 'd'
       ]);
       final appPath = volumesResult.stdout.toString().trim().split('\n').firstWhere(
-        (l) => l.contains('Lux.app'),
+        (l) => l.endsWith('Lux.app'),
         orElse: () => '',
       );
 
       if (appPath.isEmpty) {
         appLog('UPDATE', 'Lux.app not found in mounted DMG');
-        await launchUrl(Uri.parse(releasesPageUrl));
+        await Process.run('hdiutil', ['detach', '-quiet', '-force', '/Volumes']);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Lux.app not found in downloaded DMG')),
+          );
+        }
         return;
       }
-      appLog('UPDATE', 'found app at $appPath — copying to /Applications');
 
-      // Copy to /Applications (overwrites existing)
-      final copyResult = await Process.run('cp', ['-R', appPath, '/Applications/Lux.app']);
-      if (copyResult.exitCode != 0) {
-        // Try with osascript for admin rights
-        appLog('UPDATE', 'cp failed (${copyResult.exitCode}), trying with admin rights');
-        await Process.run('/usr/bin/osascript', [
+      // Derive the volume mount point (parent dir of Lux.app inside /Volumes)
+      final mountPoint = appPath.substring(0, appPath.lastIndexOf('/'));
+      appLog('UPDATE', 'found app at $appPath mount=$mountPoint — installing');
+
+      // Install script:
+      //  1. rm -rf existing /Applications/Lux.app  (avoids cp-into-directory issue)
+      //  2. cp -R from DMG
+      //  3. set up elevation wrapper + sudoers (same as initial deploy)
+      final installScript = _buildInstallScript(appPath);
+      appLog('UPDATE', 'running install script');
+
+      // Try sudo -n first (NOPASSWD already configured after first launch)
+      final sudoResult = await Process.run(
+        'sudo', ['-n', 'bash', '-c', installScript],
+      );
+      if (sudoResult.exitCode != 0) {
+        // Fall back to osascript (Touch ID / password dialog)
+        appLog('UPDATE', 'sudo -n failed (${sudoResult.exitCode}), using osascript');
+        final osaResult = await Process.run('/usr/bin/osascript', [
           '-e',
-          'do shell script "cp -R \\"$appPath\\" /Applications/Lux.app" with administrator privileges',
+          'do shell script ${_shellQuote(installScript)} with administrator privileges',
         ]);
+        if (osaResult.exitCode != 0) {
+          appLog('UPDATE', 'osascript install failed: ${osaResult.stderr}');
+          // Clean up DMG and show error — don't silently open GitHub
+          await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text(
+                'Install cancelled. Download is in your temp folder — you can install manually.',
+              )),
+            );
+          }
+          return;
+        }
       }
-      appLog('UPDATE', 'copy complete — detaching DMG and relaunching');
+
+      appLog('UPDATE', 'install complete — detaching DMG and relaunching');
 
       // Detach the DMG
-      await Process.run('hdiutil', ['detach', appPath.replaceAll('/Lux.app', ''), '-quiet']);
+      await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
 
       // Relaunch Lux from the newly installed version
       await Process.run('open', ['/Applications/Lux.app']);
@@ -228,8 +287,71 @@ Future<void> downloadAndInstall(
   } catch (e) {
     appLog('UPDATE', 'download error: $e');
     debugPrint('[Updater] download failed: $e');
-    await launchUrl(Uri.parse(releasesPageUrl));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Update failed: $e'),
+          action: SnackBarAction(
+            label: 'Open in browser',
+            onPressed: () => launchUrl(Uri.parse(releasesPageUrl)),
+          ),
+          duration: const Duration(seconds: 10),
+        ),
+      );
+    }
   }
+}
+
+// ── macOS install helpers ──────────────────────────────────────────────────────
+
+/// Builds the bash install script that replaces /Applications/Lux.app cleanly
+/// and sets up the elevation wrapper + sudoers entry (same as initial deploy).
+String _buildInstallScript(String srcApp) {
+  // srcApp = /Volumes/Lux 1.x.y/Lux.app
+  return r'''
+set -e
+SRC="''' + srcApp + r'''"
+DEST="/Applications/Lux.app"
+BIN="$DEST/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core"
+REAL="${BIN}_real"
+
+# Kill running instance before replacing
+pkill -9 -x lux_core_real 2>/dev/null || true
+pkill -9 -x Lux           2>/dev/null || true
+sleep 1
+
+# Remove old app (must rm first — cp -R copies INTO existing dir on macOS)
+rm -rf "$DEST"
+cp -R "$SRC" "$DEST"
+
+# Set up elevation wrapper (idempotent — safe to run on every update)
+if [ -f "$BIN" ] && ! grep -q "exec sudo" "$BIN" 2>/dev/null; then
+  mv "$BIN" "$REAL"
+  printf '#!/bin/bash\nexec sudo "%s" "$@"\n' "$REAL" > "$BIN"
+  chmod 755 "$BIN"
+fi
+if [ -f "$REAL" ]; then
+  chown root:wheel "$REAL"
+  chmod 770 "$REAL"
+  chmod u+s "$REAL"
+fi
+
+# Update sudoers entry
+SUDO_FILE="/etc/sudoers.d/lux_core"
+USER_NAME=$(stat -f '%Su' /dev/console 2>/dev/null || echo "$SUDO_USER")
+if [ -n "$USER_NAME" ] && [ -f "$REAL" ]; then
+  echo "$USER_NAME ALL=(root) NOPASSWD: $REAL *" > "$SUDO_FILE"
+  chmod 0440 "$SUDO_FILE"
+  visudo -c -f "$SUDO_FILE" 2>/dev/null || rm -f "$SUDO_FILE"
+fi
+''';
+}
+
+/// Shell-quotes a string for use inside an osascript do shell script argument.
+String _shellQuote(String s) {
+  // Escape backslashes and double-quotes, then wrap in double quotes
+  final escaped = s.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+  return '"$escaped"';
 }
 
 // ── Dialog widget ──────────────────────────────────────────────────────────────
