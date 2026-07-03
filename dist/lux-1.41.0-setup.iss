@@ -13,7 +13,7 @@ AppPublisherURL=https://github.com/miguelAngelo1999/lux
 DefaultDirName={localappdata}\Programs\lux
 DisableProgramGroupPage=yes
 OutputDir=C:\tmp
-OutputBaseFilename=lux-{#MyAppVersion}-windows-setup-v6
+OutputBaseFilename=lux-{#MyAppVersion}-windows-setup-v8
 Compression=lzma
 SolidCompression=yes
 SetupIconFile={#AssetsDir}\app_icon.ico
@@ -57,15 +57,20 @@ var ResultCode: Integer;
 begin
   if CurStep = ssInstall then
   begin
-    // Stop lux gracefully via scheduled task (works even if lux runs elevated)
+    // Stop lux — try multiple methods in case one doesn't work
+    // Method 1: graceful via scheduled task (works when lux runs elevated)
     Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(2000);
-    // Also kill any leftover lux_core process
+    // Method 2: force kill (works when lux is NOT elevated, e.g. first install)
+    Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(1000);
+    Sleep(3000);
   end;
   if CurStep = ssPostInstall then
   begin
+    // Kill any orphan lux_core left from the previous session
+    Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(1000);
+    // Register scheduled task and launch lux
     LuxExe := ExpandConstant('{app}\lux.exe');
     // Register scheduled task so lux can auto-elevate for TUN mode
     PsCmd := '$a=New-ScheduledTaskAction -Execute ' + #39 + LuxExe + #39 + ';' +
