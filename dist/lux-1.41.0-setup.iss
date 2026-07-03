@@ -13,7 +13,7 @@ AppPublisherURL=https://github.com/miguelAngelo1999/lux
 DefaultDirName={localappdata}\Programs\lux
 DisableProgramGroupPage=yes
 OutputDir=C:\tmp
-OutputBaseFilename=lux-{#MyAppVersion}-windows-setup-v4
+OutputBaseFilename=lux-{#MyAppVersion}-windows-setup-v6
 Compression=lzma
 SolidCompression=yes
 SetupIconFile={#AssetsDir}\app_icon.ico
@@ -57,10 +57,12 @@ var ResultCode: Integer;
 begin
   if CurStep = ssInstall then
   begin
-    // Stop lux and lux_core before overwriting files
-    Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // Stop lux gracefully via scheduled task (works even if lux runs elevated)
+    Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Sleep(2000);
+    // Also kill any leftover lux_core process
+    Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(1000);
   end;
   if CurStep = ssPostInstall then
   begin
