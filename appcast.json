@@ -4,8 +4,8 @@
   "notes": "Fix auto-updater: external installer, Lux relaunches after update",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1UbDzXlMBqXEwXh21Z68R1bUhL9ZLq4kL&export=download&confirm=t",
-    "sha256": "b32a1bd2cb8105cca415ac8c53654518d83ccdb2f4072d66da2453d833510d35",
-    "size": 38900092
+    "sha256": "2f7cdfdbfd63cf57801fde65b6da814179db8861e72ff536fcef4848a54d8632",
+    "size": 38900134
   },
   "windows": {
     "url": "",
