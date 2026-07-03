@@ -1,11 +1,11 @@
 {
   "version": "1.42.0",
   "channel": "stable",
-  "notes": "Fix auto-updater: external installer process, cert patches all Pythons",
+  "notes": "Fix auto-updater: external installer, Lux relaunches after update",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1UbDzXlMBqXEwXh21Z68R1bUhL9ZLq4kL&export=download&confirm=t",
-    "sha256": "333c7b1e8a8ed5cd1b56a8f6f3eef47fbe22d0d85e10dac350425fa19ae371db",
-    "size": 38901220
+    "sha256": "b32a1bd2cb8105cca415ac8c53654518d83ccdb2f4072d66da2453d833510d35",
+    "size": 38900092
   },
   "windows": {
     "url": "",
