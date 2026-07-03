@@ -260,37 +260,38 @@ Future<void> downloadAndInstall(
       final mountPoint = appPath.substring(0, appPath.lastIndexOf('/'));
       appLog('UPDATE', 'found app at $appPath mount=$mountPoint — installing');
 
-      // Install script:
-      //  1. rm -rf existing /Applications/Lux.app  (avoids cp-into-directory issue)
-      //  2. cp -R from DMG
-      //  3. set up elevation wrapper + sudoers (same as initial deploy)
-      final installScript = _buildInstallScript(appPath);
-      appLog('UPDATE', 'running install script');
+      // Write a standalone installer script that runs OUTSIDE this process.
+      // Flow: Lux writes script → launches it detached → Lux exits →
+      //       script waits → kills lux_core → installs → relaunches Lux.
+      final installerScript = File('/tmp/lux_updater.sh');
+      await installerScript.writeAsString(_buildInstallerScript(appPath, mountPoint));
+      await Process.run('chmod', ['+x', installerScript.path]);
 
-      // Try sudo -n first (NOPASSWD already configured after first launch)
-      final sudoResult = await Process.run(
-        'sudo', ['-n', 'bash', '-c', installScript],
-      );
-      final sudoOk = sudoResult.exitCode == 0 &&
-          sudoResult.stdout.toString().contains('INSTALL_OK');
-      if (!sudoOk) {
-        // Fall back to osascript (Touch ID / password dialog)
-        appLog('UPDATE', 'sudo -n failed (${sudoResult.exitCode}), using osascript');
-        final osaResult = await Process.run('/usr/bin/osascript', [
-          '-e',
-          'do shell script ${_shellQuote(installScript)} with administrator privileges',
+      appLog('UPDATE', 'launching external installer and exiting');
+
+      // Launch installer detached — it will outlive this process.
+      // Use osascript to get admin rights and run the script backgrounded.
+      // The script itself handles waiting for Lux to exit before installing.
+      final sudoTest = await Process.run('sudo', ['-n', 'true']);
+      if (sudoTest.exitCode == 0) {
+        // NOPASSWD works — start directly with sudo, backgrounded
+        await Process.run('bash', ['-c',
+          'sudo bash ${installerScript.path} &'
         ]);
-        final osaOk = osaResult.exitCode == 0 &&
-            osaResult.stdout.toString().contains('INSTALL_OK');
-        if (!osaOk) {
-          appLog('UPDATE', 'install failed: exit=${osaResult.exitCode} err=${osaResult.stderr}');
-          // Clean up DMG
+      } else {
+        // Need password/Touch ID — osascript runs it backgrounded via &
+        final osaResult = await Process.run('/usr/bin/osascript', ['-e',
+          'do shell script "bash \'${installerScript.path}\' &" '
+          'with administrator privileges',
+        ]);
+        if (osaResult.exitCode != 0) {
+          appLog('UPDATE', 'osascript failed: ${osaResult.stderr}');
           await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(
-                osaResult.exitCode == -1 || osaResult.stderr.toString().contains('cancel')
-                    ? 'Install cancelled.'
+                osaResult.stderr.toString().contains('cancel')
+                    ? 'Update cancelled.'
                     : 'Install failed: ${osaResult.stderr}',
               )),
             );
@@ -299,21 +300,8 @@ Future<void> downloadAndInstall(
         }
       }
 
-      appLog('UPDATE', 'install complete — detaching DMG and relaunching');
-
-      // Detach the DMG
-      await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
-
-      // Wait a moment for the killed processes to fully exit
-      await Future.delayed(const Duration(seconds: 2));
-
-      // Relaunch as the current user (NOT via sudo/osascript — just open)
-      await Process.run('open', ['-n', '/Applications/Lux.app']);
-
-      // Give it a moment to start, then exit this instance
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      // Quit this instance
+      // Give the script a moment to start, then exit gracefully
+      await Future.delayed(const Duration(seconds: 1));
       exit(0);
     } else {
       await Process.run(file.path, ['/SILENT']);
@@ -338,57 +326,73 @@ Future<void> downloadAndInstall(
 
 // ── macOS install helpers ──────────────────────────────────────────────────────
 
-/// Builds the bash install script that replaces /Applications/Lux.app cleanly
-/// and sets up the elevation wrapper + sudoers entry (same as initial deploy).
-/// Does NOT relaunch — relaunch is done by the Dart caller after this returns.
-String _buildInstallScript(String srcApp) {
-  // srcApp = /Volumes/Lux 1.x.y/Lux.app
-  return r'''
-set -e
-SRC="''' + srcApp + r'''"
-DEST="/Applications/Lux.app"
-BIN="$DEST/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core"
-REAL="${BIN}_real"
+/// Builds a standalone installer script that runs independently of the Lux process.
+/// It waits for Lux to exit, installs the new app, sets up elevation, and relaunches.
+String _buildInstallerScript(String srcApp, String mountPoint) {
+  return '''#!/bin/bash
+# Lux external updater — runs after Lux exits
+exec > /tmp/lux_updater.log 2>&1
+echo "Updater started at \$(date)"
 
-# Kill running instance before replacing
+# Wait for Lux to fully exit
+sleep 3
+for i in \$(seq 1 10); do
+  if ! pgrep -x Lux > /dev/null 2>&1; then
+    break
+  fi
+  echo "Waiting for Lux to exit... attempt \$i"
+  sleep 1
+done
+
+# Force kill if still running
 pkill -9 -x lux_core_real 2>/dev/null || true
-pkill -9 -x Lux           2>/dev/null || true
+pkill -9 -x Lux 2>/dev/null || true
 sleep 1
 
-# Remove old app (must rm first — cp -R copies INTO existing dir on macOS)
-rm -rf "$DEST"
-cp -R "$SRC" "$DEST"
+SRC="$srcApp"
+DEST="/Applications/Lux.app"
+BIN="\$DEST/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core"
+REAL="\${BIN}_real"
 
-# Set up elevation wrapper (idempotent — safe to run on every update)
-if [ -f "$BIN" ] && ! grep -q "exec sudo" "$BIN" 2>/dev/null; then
-  mv "$BIN" "$REAL"
-  printf '#!/bin/bash\nexec sudo "%s" "$@"\n' "$REAL" > "$BIN"
-  chmod 755 "$BIN"
+# Install
+echo "Removing old app..."
+rm -rf "\$DEST"
+echo "Copying new app from \$SRC..."
+cp -R "\$SRC" "\$DEST"
+
+# Set up elevation wrapper
+if [ -f "\$BIN" ] && ! grep -q "exec sudo" "\$BIN" 2>/dev/null; then
+  mv "\$BIN" "\$REAL"
+  printf '#!/bin/bash\\nexec sudo "%s" "\$@"\\n' "\$REAL" > "\$BIN"
+  chmod 755 "\$BIN"
 fi
-if [ -f "$REAL" ]; then
-  chown root:wheel "$REAL"
-  chmod 770 "$REAL"
-  chmod u+s "$REAL"
+if [ -f "\$REAL" ]; then
+  chown root:wheel "\$REAL"
+  chmod 770 "\$REAL"
+  chmod u+s "\$REAL"
 fi
 
-# Update sudoers entry
+# Update sudoers
 SUDO_FILE="/etc/sudoers.d/lux_core"
-USER_NAME=$(stat -f '%Su' /dev/console 2>/dev/null || echo "$SUDO_USER")
-if [ -n "$USER_NAME" ] && [ -f "$REAL" ]; then
-  echo "$USER_NAME ALL=(root) NOPASSWD: $REAL *" > "$SUDO_FILE"
-  chmod 0440 "$SUDO_FILE"
-  visudo -c -f "$SUDO_FILE" 2>/dev/null || rm -f "$SUDO_FILE"
+USER_NAME=\$(stat -f '%Su' /dev/console 2>/dev/null || echo "\$SUDO_USER")
+if [ -n "\$USER_NAME" ] && [ -f "\$REAL" ]; then
+  echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *" > "\$SUDO_FILE"
+  chmod 0440 "\$SUDO_FILE"
+  visudo -c -f "\$SUDO_FILE" 2>/dev/null || rm -f "\$SUDO_FILE"
 fi
-# Signal success
-echo "INSTALL_OK"
-''';
-}
 
-/// Shell-quotes a string for use inside an osascript do shell script argument.
-String _shellQuote(String s) {
-  // Escape backslashes and double-quotes, then wrap in double quotes
-  final escaped = s.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
-  return '"$escaped"';
+# Detach the DMG
+echo "Detaching DMG..."
+hdiutil detach "$mountPoint" -quiet -force 2>/dev/null || true
+
+# Relaunch Lux as the logged-in user (not as root)
+echo "Relaunching Lux..."
+LOGGED_USER=\$(stat -f '%Su' /dev/console)
+sudo -u "\$LOGGED_USER" open /Applications/Lux.app
+
+echo "Update complete at \$(date)"
+rm -f /tmp/lux_updater.sh
+''';
 }
 
 // ── Dialog widget ──────────────────────────────────────────────────────────────
