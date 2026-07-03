@@ -1,11 +1,11 @@
 {
   "version": "1.42.0",
   "channel": "stable",
-  "notes": "\ud83e\uddea Test release \u2014 ignore this update. The updater is working!",
+  "notes": "Fix auto-updater: DMG installs correctly, Lux relaunches after update",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1fqQSl9emMPKqDkn9Lx7Om9ma2wGt9RWF&export=download&confirm=t",
-    "sha256": "fc9b96c88f25f1831885a587a0499190dcc3368a5c054247fd11895725492f35",
-    "size": 38823194
+    "url": "https://drive.usercontent.google.com/download?id=1UbDzXlMBqXEwXh21Z68R1bUhL9ZLq4kL&export=download&confirm=t",
+    "sha256": "f1b62f0269b679abbf296e2efda08fc634906ef20be82c5beff3506d999c905f",
+    "size": 38900361
   },
   "windows": {
     "url": "",
