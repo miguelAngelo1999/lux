@@ -55,78 +55,98 @@ class InstalledCertsStore {
     _cache = null; // force reload
     final certs = await _read();
     bool changed = false;
-    for (final fp in certs.keys) {
-      final entry = certs[fp] as Map<String, dynamic>;
+
+    // First pass: normalize all keys to no-colon format
+    final normalized = <String, dynamic>{};
+    for (final k in certs.keys) {
+      final cleanKey = _normalizeFp(k);
+      if (normalized.containsKey(cleanKey)) {
+        // Merge duplicate entries (colon + no-colon version of same cert)
+        final existing = normalized[cleanKey] as Map<String, dynamic>;
+        final incoming = certs[k] as Map<String, dynamic>;
+        final merged = <String>{
+          ...List<String>.from(existing['stores'] ?? []),
+          ...List<String>.from(incoming['stores'] ?? []),
+        }.toList();
+        normalized[cleanKey] = {...existing, 'stores': merged};
+      } else {
+        normalized[cleanKey] = certs[k];
+      }
+      if (cleanKey != k) changed = true;
+    }
+
+    // Second pass: normalize store names
+    for (final fp in normalized.keys) {
+      final entry = normalized[fp] as Map<String, dynamic>;
       final stores = List<String>.from(entry['stores'] ?? []);
-      // Normalize all known name variants → canonical names
       final migrated = stores.map((s) {
         if (s == 'Node.js (NODE_EXTRA_CA_CERTS)') return 'Node.js / npm (NODE_EXTRA_CA_CERTS)';
         if (s == 'Firefox (NSS)') return 'Firefox / Thunderbird (NSS)';
         if (s == 'Thunderbird (NSS)') return 'Firefox / Thunderbird (NSS)';
-        if (s.startsWith('Python certifi')) return 'Python certifi'; // strip version suffix
-        // Windows migrations
+        if (s.startsWith('Python certifi')) return 'Python certifi';
         if (s == 'Windows Trusted Root') return 'Windows Trusted Root (certutil)';
         if (s == 'Git for Windows') return 'Git for Windows (ca-bundle.crt)';
         return s;
-      }).toSet().toList(); // toSet to deduplicate after merges
+      }).toSet().toList();
       if (!_setEqual(stores.toSet(), migrated.toSet())) {
-        certs[fp] = {...entry, 'stores': migrated};
+        normalized[fp] = {...entry, 'stores': migrated};
         changed = true;
       }
     }
-    if (changed) { _cache = certs; await _write(); }
+
+    if (changed) { _cache = normalized; await _write(); }
+    else { _cache = normalized; } // keep normalized even if no changes
   }
 
   static bool _setEqual(Set<String> a, Set<String> b) => a.length == b.length && a.containsAll(b);
 
-  /// Returns true if the cert has been installed (recorded in any stores).
-  /// We don't require ALL currently-detectable stores to have it — that would
-  /// cause the wizard to re-appear whenever a new store (e.g. Python certifi)
-  /// appears on the machine after the initial install.
+  static String _normalizeFp(String fp) =>
+      fp.toLowerCase().replaceAll(':', '').replaceAll(' ', '');
+
   static Future<bool> isFullyInstalled(String fingerprint) async {
     if (fingerprint.isEmpty) return false;
+    final fp = _normalizeFp(fingerprint);
     final certs = await _read();
-    if (!certs.containsKey(fingerprint)) return false;
 
-    final entry = certs[fingerprint] as Map<String, dynamic>;
+    // Look up by normalized key (handles both colon and no-colon formats)
+    String? matchKey;
+    for (final k in certs.keys) {
+      if (_normalizeFp(k) == fp) { matchKey = k; break; }
+    }
+    if (matchKey == null) return false;
+
+    final entry = certs[matchKey] as Map<String, dynamic>;
     final installedStores = List<String>.from(entry['stores'] ?? []);
-
-    // Require the primary system trust store to be installed.
-    // That's the minimum needed for the cert to actually work.
     if (Platform.isMacOS && !installedStores.contains('macOS System Keychain')) return false;
     if (Platform.isWindows && !installedStores.contains('Windows Trusted Root (certutil)')) return false;
-
     return installedStores.isNotEmpty;
   }
 
-  /// Returns stores that exist on this machine but don't have the cert installed.
-  static Future<List<String>> getMissingStores(String fingerprint) async {
-    if (fingerprint.isEmpty) return [];
-    final certs = await _read();
-    if (!certs.containsKey(fingerprint)) return await _detectAvailableStores();
-
-    final entry = certs[fingerprint] as Map<String, dynamic>;
-    final installedStores = List<String>.from(entry['stores'] ?? []);
-    final currentStores = await _detectAvailableStores();
-
-    return currentStores.where((s) => !installedStores.contains(s)).toList();
-  }
-
-  /// Records that a cert was installed into specific stores.
   static Future<void> markInstalled(String fingerprint, List<String> storeNames) async {
     if (fingerprint.isEmpty || storeNames.isEmpty) return;
+    final fp = _normalizeFp(fingerprint); // always store without colons
     final certs = await _read();
 
-    if (certs.containsKey(fingerprint)) {
-      final entry = certs[fingerprint] as Map<String, dynamic>;
+    // Find existing entry regardless of old colon format
+    String? existingKey;
+    for (final k in certs.keys) {
+      if (_normalizeFp(k) == fp) { existingKey = k; break; }
+    }
+
+    if (existingKey != null && existingKey != fp) {
+      // Migrate old colon-format key to clean format
+      certs[fp] = certs.remove(existingKey)!;
+    }
+
+    if (certs.containsKey(fp)) {
+      final entry = certs[fp] as Map<String, dynamic>;
       final existing = List<String>.from(entry['stores'] ?? []);
-      final merged = {...existing, ...storeNames}.toList();
-      certs[fingerprint] = {
+      certs[fp] = {
         'installedAt': entry['installedAt'] ?? DateTime.now().toIso8601String(),
-        'stores': merged,
+        'stores': {...existing, ...storeNames}.toList(),
       };
     } else {
-      certs[fingerprint] = {
+      certs[fp] = {
         'installedAt': DateTime.now().toIso8601String(),
         'stores': storeNames,
       };
@@ -134,6 +154,24 @@ class InstalledCertsStore {
 
     _cache = certs;
     await _write();
+  }
+
+  /// Returns stores that exist on this machine but don't have the cert installed.
+  static Future<List<String>> getMissingStores(String fingerprint) async {
+    if (fingerprint.isEmpty) return [];
+    final fp = _normalizeFp(fingerprint);
+    final certs = await _read();
+
+    String? matchKey;
+    for (final k in certs.keys) {
+      if (_normalizeFp(k) == fp) { matchKey = k; break; }
+    }
+    if (matchKey == null) return await _detectAvailableStores();
+
+    final entry = certs[matchKey] as Map<String, dynamic>;
+    final installedStores = List<String>.from(entry['stores'] ?? []);
+    final currentStores = await _detectAvailableStores();
+    return currentStores.where((s) => !installedStores.contains(s)).toList();
   }
 
   /// Detects which cert stores currently exist on this machine.
