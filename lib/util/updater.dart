@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -10,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:version/version.dart';
 
 import '../const/const.dart';
+import 'app_log.dart';
 
 /// Result of an update check.
 class UpdateInfo {
@@ -122,37 +121,113 @@ Future<void> downloadAndInstall(
     final ext  = Platform.isMacOS ? '.dmg' : '.exe';
     final file = File('${tmp.path}/Lux-${info.latestVersion}$ext');
 
-    final dio = Dio();
-    // Use Lux's own local proxy + accept intercepted certs
-    (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final client = HttpClient();
-      client.badCertificateCallback = (_, __, ___) => true;
-      client.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
-      return client;
-    };
-    await dio.download(
-      url,
-      file.path,
-      onReceiveProgress: (received, total) {
-        if (total > 0 && onProgress != null) {
-          onProgress(received / total);
-        }
-      },
-    );
+    debugPrint('[Updater] downloading $url → ${file.path}');
+    appLog('UPDATE', 'download started url=$url dest=${file.path}');
+
+    final client = HttpClient();
+    client.badCertificateCallback = (_, __, ___) => true;
+    client.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
+
+    final request = await client.getUrl(Uri.parse(url));
+    request.followRedirects = true;
+    final response = await request.close().timeout(const Duration(minutes: 5));
+
+    appLog('UPDATE', 'download response status=${response.statusCode} '
+        'contentType=${response.headers.contentType} '
+        'contentLength=${response.contentLength}');
+
+    if (response.statusCode != 200) {
+      appLog('UPDATE', 'download failed — HTTP ${response.statusCode}');
+      await launchUrl(Uri.parse(releasesPageUrl));
+      return;
+    }
+
+    final total = response.contentLength;
+    int received = 0;
+    final sink = file.openWrite();
+    await response.listen((chunk) {
+      sink.add(chunk);
+      received += chunk.length;
+      if (total > 0 && onProgress != null) {
+        onProgress(received / total);
+      }
+    }).asFuture();
+    await sink.flush();
+    await sink.close();
+    client.close();
+
+    final fileSize = await file.length();
+    appLog('UPDATE', 'download complete size=${fileSize}B file=${file.path}');
+    debugPrint('[Updater] downloaded ${fileSize}B to ${file.path}');
+
+    // Sanity check — reject HTML pages (< 1MB means we got an error page)
+    if (fileSize < 1024 * 1024) {
+      final peek = await file.openRead(0, 500).fold<List<int>>([], (a, b) => a..addAll(b));
+      final text = String.fromCharCodes(peek.take(200));
+      appLog('UPDATE', 'file too small (${fileSize}B) — likely HTML. Preview: ${text.substring(0, text.length.clamp(0, 100))}');
+      debugPrint('[Updater] file too small, probably HTML: $text');
+      await launchUrl(Uri.parse(releasesPageUrl));
+      return;
+    }
 
     if (Platform.isMacOS) {
       // Remove quarantine attribute added by macOS to internet-downloaded files.
-      // Without this the DMG shows "corrupted" even if it's perfectly valid.
       await Process.run('xattr', ['-d', 'com.apple.quarantine', file.path]);
-      // Open the DMG — user drags to Applications
-      await Process.run('open', [file.path]);
+      appLog('UPDATE', 'quarantine removed, mounting DMG and installing');
+
+      // Mount the DMG
+      final mountResult = await Process.run('hdiutil', [
+        'attach', file.path,
+        '-nobrowse', '-quiet', '-noverify',
+      ]);
+      if (mountResult.exitCode != 0) {
+        appLog('UPDATE', 'hdiutil attach failed: ${mountResult.stderr}');
+        await launchUrl(Uri.parse(releasesPageUrl));
+        return;
+      }
+
+      // Find the mounted volume containing Lux.app
+      final volumesResult = await Process.run('find', [
+        '/Volumes', '-maxdepth', '2', '-name', 'Lux.app', '-type', 'd'
+      ]);
+      final appPath = volumesResult.stdout.toString().trim().split('\n').firstWhere(
+        (l) => l.contains('Lux.app'),
+        orElse: () => '',
+      );
+
+      if (appPath.isEmpty) {
+        appLog('UPDATE', 'Lux.app not found in mounted DMG');
+        await launchUrl(Uri.parse(releasesPageUrl));
+        return;
+      }
+      appLog('UPDATE', 'found app at $appPath — copying to /Applications');
+
+      // Copy to /Applications (overwrites existing)
+      final copyResult = await Process.run('cp', ['-R', appPath, '/Applications/Lux.app']);
+      if (copyResult.exitCode != 0) {
+        // Try with osascript for admin rights
+        appLog('UPDATE', 'cp failed (${copyResult.exitCode}), trying with admin rights');
+        await Process.run('/usr/bin/osascript', [
+          '-e',
+          'do shell script "cp -R \\"$appPath\\" /Applications/Lux.app" with administrator privileges',
+        ]);
+      }
+      appLog('UPDATE', 'copy complete — detaching DMG and relaunching');
+
+      // Detach the DMG
+      await Process.run('hdiutil', ['detach', appPath.replaceAll('/Lux.app', ''), '-quiet']);
+
+      // Relaunch Lux from the newly installed version
+      await Process.run('open', ['/Applications/Lux.app']);
+
+      // Quit this instance
+      exit(0);
     } else {
-      // Run the installer silently on Windows
       await Process.run(file.path, ['/SILENT']);
     }
   } catch (e) {
+    appLog('UPDATE', 'download error: $e');
     debugPrint('[Updater] download failed: $e');
-    // Fall back to browser
     await launchUrl(Uri.parse(releasesPageUrl));
   }
 }
