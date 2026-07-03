@@ -271,21 +271,27 @@ Future<void> downloadAndInstall(
       final sudoResult = await Process.run(
         'sudo', ['-n', 'bash', '-c', installScript],
       );
-      if (sudoResult.exitCode != 0) {
+      final sudoOk = sudoResult.exitCode == 0 &&
+          sudoResult.stdout.toString().contains('INSTALL_OK');
+      if (!sudoOk) {
         // Fall back to osascript (Touch ID / password dialog)
         appLog('UPDATE', 'sudo -n failed (${sudoResult.exitCode}), using osascript');
         final osaResult = await Process.run('/usr/bin/osascript', [
           '-e',
           'do shell script ${_shellQuote(installScript)} with administrator privileges',
         ]);
-        if (osaResult.exitCode != 0) {
-          appLog('UPDATE', 'osascript install failed: ${osaResult.stderr}');
-          // Clean up DMG and show error — don't silently open GitHub
+        final osaOk = osaResult.exitCode == 0 &&
+            osaResult.stdout.toString().contains('INSTALL_OK');
+        if (!osaOk) {
+          appLog('UPDATE', 'install failed: exit=${osaResult.exitCode} err=${osaResult.stderr}');
+          // Clean up DMG
           await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text(
-                'Install cancelled. Download is in your temp folder — you can install manually.',
+              SnackBar(content: Text(
+                osaResult.exitCode == -1 || osaResult.stderr.toString().contains('cancel')
+                    ? 'Install cancelled.'
+                    : 'Install failed: ${osaResult.stderr}',
               )),
             );
           }
@@ -298,8 +304,14 @@ Future<void> downloadAndInstall(
       // Detach the DMG
       await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
 
-      // Relaunch Lux from the newly installed version
-      await Process.run('open', ['/Applications/Lux.app']);
+      // Wait a moment for the killed processes to fully exit
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Relaunch as the current user (NOT via sudo/osascript — just open)
+      await Process.run('open', ['-n', '/Applications/Lux.app']);
+
+      // Give it a moment to start, then exit this instance
+      await Future.delayed(const Duration(milliseconds: 800));
 
       // Quit this instance
       exit(0);
@@ -328,6 +340,7 @@ Future<void> downloadAndInstall(
 
 /// Builds the bash install script that replaces /Applications/Lux.app cleanly
 /// and sets up the elevation wrapper + sudoers entry (same as initial deploy).
+/// Does NOT relaunch — relaunch is done by the Dart caller after this returns.
 String _buildInstallScript(String srcApp) {
   // srcApp = /Volumes/Lux 1.x.y/Lux.app
   return r'''
@@ -366,6 +379,8 @@ if [ -n "$USER_NAME" ] && [ -f "$REAL" ]; then
   chmod 0440 "$SUDO_FILE"
   visudo -c -f "$SUDO_FILE" 2>/dev/null || rm -f "$SUDO_FILE"
 fi
+# Signal success
+echo "INSTALL_OK"
 ''';
 }
 

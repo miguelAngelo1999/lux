@@ -581,11 +581,25 @@ $store.Close()
   }
 
   /// Finds Python certifi's cacert.pem and appends the cert.
+  /// Tries all Python installations found on the system, not just the first one.
   static Future<List<InstallStep>> _installPythonCertifi(
       List<int> pemBytes) async {
+    // All Python executables to try — include full Homebrew paths explicitly
+    // since they may not be on PATH when running as root/via osascript
     final candidates = Platform.isWindows
-        ? ['python', 'python3', 'py']      // Windows: just the executable name
-        : ['python3', 'python'];            // macOS/Linux: will be run via /usr/bin/env
+        ? ['python', 'python3', 'py']
+        : [
+            'python3', 'python',
+            '/opt/homebrew/bin/python3',
+            '/opt/homebrew/bin/python',
+            '/usr/local/bin/python3',
+            '/usr/local/bin/python',
+            '/usr/bin/python3',
+            '/usr/bin/python',
+          ];
+
+    final seen = <String>{};
+    final results = <InstallStep>[];
 
     for (final python in candidates) {
       try {
@@ -593,26 +607,34 @@ $store.Close()
         if (Platform.isWindows) {
           result = await Process.run(python, ['-c', 'import certifi; print(certifi.where())']);
         } else {
-          result = await Process.run('/usr/bin/env', [python, '-c', 'import certifi; print(certifi.where())']);
+          // Use the executable directly if it's a full path, otherwise use env
+          if (python.startsWith('/')) {
+            result = await Process.run(python, ['-c', 'import certifi; print(certifi.where())']);
+          } else {
+            result = await Process.run('/usr/bin/env', [python, '-c', 'import certifi; print(certifi.where())']);
+          }
         }
         if (result.exitCode != 0) continue;
 
         final certifiPath = result.stdout.toString().trim();
-        if (certifiPath.isEmpty) continue;
+        if (certifiPath.isEmpty || seen.contains(certifiPath)) continue;
+        seen.add(certifiPath);
 
-        final step = await _appendToPemStore(
-            pemBytes, [certifiPath], 'Python certifi');
-        if (step.success) return [step];
+        final step = await _appendToPemStore(pemBytes, [certifiPath], 'Python certifi ($python)');
+        results.add(step);
       } catch (_) {
         continue;
       }
     }
 
-    return [const InstallStep(
-      name: 'Python certifi',
-      success: false,
-      note: 'Python not found or certifi not installed',
-    )];
+    if (results.isEmpty) {
+      return [const InstallStep(
+        name: 'Python certifi',
+        success: false,
+        note: 'Python not found or certifi not installed',
+      )];
+    }
+    return results;
   }
 }
 
