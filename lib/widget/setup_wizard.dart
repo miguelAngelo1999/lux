@@ -280,19 +280,6 @@ class SetupWizard extends StatefulWidget {
         isWizardStepDismissed(fp, 'mitm'),
       ]);
       if (allDismissed.every((d) => d)) return;
-
-      // If cert step not dismissed, check if cert is already trusted in the system store.
-      // If so, auto-dismiss the cert step so we don't nag about something already done.
-      if (!allDismissed[0]) {
-        final alreadyTrusted = await _isCertAlreadyTrusted(fp);
-        if (alreadyTrusted) {
-          await dismissWizardStep(fp, 'cert');
-          // Re-check if everything is now dismissed
-          final envDismissed = await isWizardStepDismissed(fp, 'env');
-          final mitmDismissed = await isWizardStepDismissed(fp, 'mitm');
-          if (envDismissed && mitmDismissed) return;
-        }
-      }
     }
     if (!context.mounted) return;
     await showDialog<void>(
@@ -300,35 +287,6 @@ class SetupWizard extends StatefulWidget {
       barrierDismissible: false,
       builder: (ctx) => SetupWizard(coreManager: coreManager, sslStatus: sslStatus),
     );
-  }
-
-  /// Returns true if the cert fingerprint is already trusted in the OS cert store.
-  static Future<bool> _isCertAlreadyTrusted(String sha256Fp) async {
-    if (sha256Fp.isEmpty) return false;
-    try {
-      if (Platform.isWindows) {
-        // Convert SHA256 hex to SHA1 format for Windows cert store lookup
-        // We check by SHA256 using PowerShell
-        final fpColon = sha256Fp.toUpperCase().replaceAllMapped(
-          RegExp(r'(.{2})'), (m) => '${m[1]}:').replaceAll(RegExp(r':$'), '');
-        final r = await Process.run('powershell.exe', [
-          '-noprofile', '-NonInteractive', '-command',
-          'Get-ChildItem Cert:\\CurrentUser\\Root,Cert:\\LocalMachine\\Root '
-          '| Where-Object { \$_.GetCertHashString("SHA256") -eq "${sha256Fp.toUpperCase()}" } '
-          '| Select-Object -First 1 | ForEach-Object { "found" }',
-        ]);
-        return r.stdout.toString().trim() == 'found';
-      } else if (Platform.isMacOS) {
-        final r = await Process.run('security', [
-          'find-certificate', '-a', '-Z',
-          '/Library/Keychains/System.keychain',
-        ]);
-        final out = r.stdout.toString().toLowerCase();
-        return out.contains(sha256Fp.toLowerCase().replaceAllMapped(
-          RegExp(r'(.{2})'), (m) => '${m[1]}:').replaceAll(RegExp(r':$'), ''));
-      }
-    } catch (_) {}
-    return false;
   }
 
   @override
