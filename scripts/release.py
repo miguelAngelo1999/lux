@@ -133,7 +133,7 @@ def upload_json(service, data, folder_id, name):
     return f['id']
 
 def direct_url(file_id):
-    return f'https://drive.google.com/uc?export=download&id={file_id}&confirm=t'
+    return f'https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t'
 
 # ── Build ──────────────────────────────────────────────────────────────────────
 def build_macos(version, args):
@@ -195,6 +195,10 @@ def main():
     print(f'\n  SHA-256: {dmg_sha256}')
     print(f'  Size:    {dmg_size // 1024 // 1024} MB')
 
+    # Strip quarantine so manual downloads also open cleanly
+    if sys.platform == 'darwin':
+        run(f'xattr -d com.apple.quarantine "{dmg_path}" 2>/dev/null || true')
+
     if args.dry_run:
         print('\n✅ Dry run complete — no upload.')
         return
@@ -242,10 +246,19 @@ def main():
     print(f'\n   Add this to lib/const/const.dart:')
     print(f'   const appcastUrl = \'{appcast_url}\';')
 
-    # Save appcast locally for reference
-    local_appcast = SCRIPTS_DIR / 'appcast.json'
-    local_appcast.write_text(json.dumps(appcast, indent=2))
-    print(f'\n   Saved locally: scripts/appcast.json')
+    # Save appcast locally and commit to repo
+    local_appcast = REPO_ROOT / 'appcast.json'
+    local_appcast.write_text(json.dumps(appcast, indent=2) + '\n')
+    print(f'\n   Saved locally: appcast.json')
+    print(f'\n── Committing appcast.json to repo ─────────────────────────────')
+    try:
+        run('git add appcast.json', cwd=REPO_ROOT)
+        run(f'git commit -m "release: update appcast.json for {version}"', cwd=REPO_ROOT)
+        run('git push origin personal/all-features', cwd=REPO_ROOT)
+        print('  ✓ Pushed to GitHub — updater URL is live')
+    except Exception as e:
+        print(f'  ⚠ Could not push to GitHub: {e}')
+        print(f'  Run manually: git add appcast.json && git commit -m "release: {version}" && git push')
 
 if __name__ == '__main__':
     main()
