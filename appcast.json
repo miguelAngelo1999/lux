@@ -1,11 +1,11 @@
 {
-  "version": "1.42.0",
+  "version": "1.41.0",
   "channel": "stable",
-  "notes": "\ud83e\uddea Test release \u2014 ignore this update. The updater is working!",
+  "notes": "Initial release with auto-updater, load balancing, PAC import, SSL cert automation, and many fixes.",
   "macOS": {
-    "url": "https://drive.google.com/uc?export=download&id=1fqQSl9emMPKqDkn9Lx7Om9ma2wGt9RWF&confirm=t",
-    "sha256": "fc9b96c88f25f1831885a587a0499190dcc3368a5c054247fd11895725492f35",
-    "size": 38823194
+    "url": "https://drive.usercontent.google.com/download?id=1fqQSl9emMPKqDkn9Lx7Om9ma2wGt9RWF&export=download&confirm=t",
+    "sha256": "8338f33cbd602ac8e9cb452b6b36b4aca0e67bcc91943c7d9b4b7058a36e6a0b",
+    "size": 38861273
   },
   "windows": {
     "url": "",
