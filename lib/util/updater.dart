@@ -141,6 +141,9 @@ Future<void> downloadAndInstall(
     );
 
     if (Platform.isMacOS) {
+      // Remove quarantine attribute added by macOS to internet-downloaded files.
+      // Without this the DMG shows "corrupted" even if it's perfectly valid.
+      await Process.run('xattr', ['-d', 'com.apple.quarantine', file.path]);
       // Open the DMG — user drags to Applications
       await Process.run('open', [file.path]);
     } else {
