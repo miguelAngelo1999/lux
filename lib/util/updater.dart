@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -29,20 +31,46 @@ class UpdateInfo {
 }
 
 /// Fetches the appcast.json from Google Drive and compares versions.
-Future<UpdateInfo?> checkForUpdate() async {
+/// [proxyPort] is the local Lux proxy port (default 1090) — needed because
+/// Dart's HttpClient doesn't pick up the system proxy in TUN/Mixed mode.
+Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
   try {
     final pkg = await PackageInfo.fromPlatform();
     final current = pkg.version;
 
-    final dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-      // bypass proxy for update check — goes direct
-      headers: {'Cache-Control': 'no-cache'},
-    ));
+    // Use Dart's HttpClient directly with proxy + SSL bypass
+    final client = HttpClient();
+    client.badCertificateCallback = (_, __, ___) => true;
+    client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
 
-    final resp = await dio.get<Map<String, dynamic>>(appcastUrl);
-    final data = resp.data!;
+    final request = await client.getUrl(Uri.parse(appcastUrl));
+    request.followRedirects = true;
+    final response = await request.close().timeout(const Duration(seconds: 15));
+    final body = await response.transform(const SystemEncoding().decoder).join();
+
+    if (response.statusCode != 200) {
+      debugPrint('[Updater] HTTP ${response.statusCode}');
+      // Try without proxy (DIRECT) as fallback
+      client.findProxy = (_) => 'DIRECT';
+      final req2 = await client.getUrl(Uri.parse(appcastUrl));
+      req2.followRedirects = true;
+      final resp2 = await req2.close().timeout(const Duration(seconds: 10));
+      if (resp2.statusCode != 200) return null;
+      final body2 = await resp2.transform(const SystemEncoding().decoder).join();
+      return _parseAppcast(body2, current);
+    }
+    client.close();
+    return _parseAppcast(body, current);
+  } catch (e) {
+    debugPrint('[Updater] check failed: $e');
+    return null;
+  }
+}
+
+UpdateInfo? _parseAppcast(String body, String current) {
+  try {
+    final data = Map<String, dynamic>.from(
+        const JsonDecoder().convert(body) as Map);
 
     final latest = (data['version'] as String?) ?? '';
     if (latest.isEmpty) return null;
@@ -62,7 +90,7 @@ Future<UpdateInfo?> checkForUpdate() async {
       hasUpdate:      hasUpdate,
     );
   } catch (e) {
-    debugPrint('[Updater] check failed: $e');
+    debugPrint('[Updater] parse failed: $e');
     return null;
   }
 }
@@ -95,6 +123,13 @@ Future<void> downloadAndInstall(
     final file = File('${tmp.path}/Lux-${info.latestVersion}$ext');
 
     final dio = Dio();
+    // Use Lux's own local proxy + accept intercepted certs
+    (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+      final client = HttpClient();
+      client.badCertificateCallback = (_, __, ___) => true;
+      client.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
+      return client;
+    };
     await dio.download(
       url,
       file.path,

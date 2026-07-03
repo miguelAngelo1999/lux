@@ -281,6 +281,25 @@ class SetupWizard extends StatefulWidget {
       ]);
       if (allDismissed.every((d) => d)) return;
     }
+    // Machine-specific steps (env, mitm) should only show once per machine,
+    // not once per network. Use a stable machine key 'machine' for those.
+    // If already dismissed for 'machine', pre-dismiss for this cert too.
+    const machineKey = 'machine';
+    final envDone  = await isWizardStepDismissed(machineKey, 'env');
+    final mitmDone = await isWizardStepDismissed(machineKey, 'mitm');
+    if (fp.isNotEmpty) {
+      if (envDone)  await dismissWizardStep(fp, 'env');
+      if (mitmDone) await dismissWizardStep(fp, 'mitm');
+    }
+    // Re-check after pre-dismissing machine-specific steps
+    if (fp.isNotEmpty) {
+      final allDone = await Future.wait([
+        isWizardStepDismissed(fp, 'cert'),
+        isWizardStepDismissed(fp, 'env'),
+        isWizardStepDismissed(fp, 'mitm'),
+      ]);
+      if (allDone.every((d) => d)) return;
+    }
     if (!context.mounted) return;
     await showDialog<void>(
       context: context,
@@ -402,11 +421,15 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   Future<void> _nextStep() async {
-    // Save "don't ask again" for this step+cert combo
+    // Save "don't ask again" for this step+cert combo AND machine-level
     if (_dontAskAgain) {
       final fp = widget.sslStatus.certInfo?.sha256Fingerprint ?? '';
       final stepName = ['cert', 'env', 'mitm'][_step];
       if (fp.isNotEmpty) await dismissWizardStep(fp, stepName);
+      // env/mitm are machine-specific — dismiss globally so new networks skip them
+      if (stepName == 'env' || stepName == 'mitm') {
+        await dismissWizardStep('machine', stepName);
+      }
     }
     if (_step < _totalSteps - 1) {
       var next = _step + 1;

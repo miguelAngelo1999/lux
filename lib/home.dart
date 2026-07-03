@@ -334,12 +334,16 @@ class _HomeState extends State<Home>
 
   // Debounce for _checkForNetworkProxy — don't re-run within 60s of last run
   DateTime? _lastProxyCheck;
+  // Guard against running check while wizard is already showing
+  bool _wizardShowing = false;
 
   Future<void> _checkForNetworkProxy() async {
     // Don't re-run within 60 seconds (prevents connectivity-change retriggering)
     final now = DateTime.now();
     if (_lastProxyCheck != null && now.difference(_lastProxyCheck!).inSeconds < 60) return;
     _lastProxyCheck = now;
+    // Don't stack wizards
+    if (_wizardShowing) return;
 
     if (coreManager == null || !mounted) return;
     try {
@@ -379,11 +383,13 @@ class _HomeState extends State<Home>
         if (!mounted) return;
         _lastDetectedCertFingerprint = certFp;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            windowManager.show();
-            windowManager.focus();
-            SetupWizard.show(context, coreManager!, sslStatus);
-          }
+          if (!mounted || _wizardShowing) return;
+          _wizardShowing = true;
+          windowManager.show();
+          windowManager.focus();
+          SetupWizard.show(context, coreManager!, sslStatus).whenComplete(() {
+            _wizardShowing = false;
+          });
         });
         return;
       }
@@ -507,7 +513,11 @@ class _HomeState extends State<Home>
           _lastDetectedCertFingerprint = fp;
           // Show setup wizard instead of just cert dialog
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) SetupWizard.show(context, coreManager!, freshSsl);
+            if (!mounted || _wizardShowing) return;
+            _wizardShowing = true;
+            SetupWizard.show(context, coreManager!, freshSsl).whenComplete(() {
+              _wizardShowing = false;
+            });
           });
         } else if (freshSsl.error != null && freshSsl.error!.contains('407')) {          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
