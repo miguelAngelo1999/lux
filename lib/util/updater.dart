@@ -199,10 +199,23 @@ Future<void> downloadAndInstall(
       await Process.run('xattr', ['-d', 'com.apple.quarantine', file.path]);
       appLog('UPDATE', 'quarantine removed, mounting DMG and installing');
 
-      // Mount the DMG (get plist output so we can find the mount point reliably)
+      // Detach any previous mount of this same DMG (avoids "Resource busy")
+      // Find any mounted Lux volume and detach it first
+      final luxMounts = await Process.run('bash', ['-c',
+        "hdiutil info 2>/dev/null | grep -o '/Volumes/[^[:space:]]*Lux[^[:space:]]*' || true",
+      ]);
+      for (final vol in luxMounts.stdout.toString().trim().split('\n')) {
+        final v = vol.trim();
+        if (v.isNotEmpty) {
+          appLog('UPDATE', 'detaching previous Lux mount: $v');
+          await Process.run('hdiutil', ['detach', v, '-quiet', '-force']);
+        }
+      }
+
+      // Mount the DMG
       final mountResult = await Process.run('hdiutil', [
         'attach', file.path,
-        '-nobrowse', '-noverify', '-plist',
+        '-nobrowse', '-noverify', '-noautoopen',
       ]);
       if (mountResult.exitCode != 0) {
         appLog('UPDATE', 'hdiutil attach failed: ${mountResult.stderr}');
