@@ -199,16 +199,25 @@ Future<void> downloadAndInstall(
       await Process.run('xattr', ['-d', 'com.apple.quarantine', file.path]);
       appLog('UPDATE', 'quarantine removed, mounting DMG and installing');
 
-      // Detach any previous mount of this same DMG (avoids "Resource busy")
-      // Find any mounted Lux volume and detach it first
-      final luxMounts = await Process.run('bash', ['-c',
-        "hdiutil info 2>/dev/null | grep -o '/Volumes/[^[:space:]]*Lux[^[:space:]]*' || true",
-      ]);
-      for (final vol in luxMounts.stdout.toString().trim().split('\n')) {
-        final v = vol.trim();
-        if (v.isNotEmpty) {
-          appLog('UPDATE', 'detaching previous Lux mount: $v');
-          await Process.run('hdiutil', ['detach', v, '-quiet', '-force']);
+      // Detach any existing mount of this DMG file (avoids "Resource busy").
+      // hdiutil info -plist gives structured XML; parse the image-path lines
+      // to find the right disk, then detach by device node.
+      final infoResult = await Process.run('hdiutil', ['info']);
+      final infoLines = infoResult.stdout.toString().split('\n');
+      String? pendingImagePath;
+      for (final rawLine in infoLines) {
+        final line = rawLine.trim();
+        if (line.startsWith('image-path')) {
+          pendingImagePath = line.contains(':') ? line.split(':').sublist(1).join(':').trim() : null;
+        } else if (pendingImagePath != null && line.startsWith('/dev/')) {
+          // This device belongs to the last seen image-path.
+          // If that image path is our DMG file, detach it.
+          if (pendingImagePath == file.path) {
+            final dev = line.split(RegExp(r'\s+')).first.trim();
+            appLog('UPDATE', 'detaching previous mount of DMG: $dev');
+            await Process.run('hdiutil', ['detach', dev, '-quiet', '-force']);
+          }
+          pendingImagePath = null;
         }
       }
 
