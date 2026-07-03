@@ -272,14 +272,27 @@ class SetupWizard extends StatefulWidget {
   static Future<void> show(BuildContext context, CoreManager coreManager,
       SslBumpStatus sslStatus) async {
     final fp = sslStatus.certInfo?.sha256Fingerprint ?? '';
-    // Skip wizard entirely if all steps are dismissed for this cert
     if (fp.isNotEmpty) {
+      // Skip wizard entirely if all steps already dismissed
       final allDismissed = await Future.wait([
         isWizardStepDismissed(fp, 'cert'),
         isWizardStepDismissed(fp, 'env'),
         isWizardStepDismissed(fp, 'mitm'),
       ]);
       if (allDismissed.every((d) => d)) return;
+
+      // If cert step not dismissed, check if cert is already trusted in the system store.
+      // If so, auto-dismiss the cert step so we don't nag about something already done.
+      if (!allDismissed[0]) {
+        final alreadyTrusted = await _isCertAlreadyTrusted(fp);
+        if (alreadyTrusted) {
+          await dismissWizardStep(fp, 'cert');
+          // Re-check if everything is now dismissed
+          final envDismissed = await isWizardStepDismissed(fp, 'env');
+          final mitmDismissed = await isWizardStepDismissed(fp, 'mitm');
+          if (envDismissed && mitmDismissed) return;
+        }
+      }
     }
     if (!context.mounted) return;
     await showDialog<void>(
@@ -287,6 +300,35 @@ class SetupWizard extends StatefulWidget {
       barrierDismissible: false,
       builder: (ctx) => SetupWizard(coreManager: coreManager, sslStatus: sslStatus),
     );
+  }
+
+  /// Returns true if the cert fingerprint is already trusted in the OS cert store.
+  static Future<bool> _isCertAlreadyTrusted(String sha256Fp) async {
+    if (sha256Fp.isEmpty) return false;
+    try {
+      if (Platform.isWindows) {
+        // Convert SHA256 hex to SHA1 format for Windows cert store lookup
+        // We check by SHA256 using PowerShell
+        final fpColon = sha256Fp.toUpperCase().replaceAllMapped(
+          RegExp(r'(.{2})'), (m) => '${m[1]}:').replaceAll(RegExp(r':$'), '');
+        final r = await Process.run('powershell.exe', [
+          '-noprofile', '-NonInteractive', '-command',
+          'Get-ChildItem Cert:\\CurrentUser\\Root,Cert:\\LocalMachine\\Root '
+          '| Where-Object { \$_.GetCertHashString("SHA256") -eq "${sha256Fp.toUpperCase()}" } '
+          '| Select-Object -First 1 | ForEach-Object { "found" }',
+        ]);
+        return r.stdout.toString().trim() == 'found';
+      } else if (Platform.isMacOS) {
+        final r = await Process.run('security', [
+          'find-certificate', '-a', '-Z',
+          '/Library/Keychains/System.keychain',
+        ]);
+        final out = r.stdout.toString().toLowerCase();
+        return out.contains(sha256Fp.toLowerCase().replaceAllMapped(
+          RegExp(r'(.{2})'), (m) => '${m[1]}:').replaceAll(RegExp(r':$'), ''));
+      }
+    } catch (_) {}
+    return false;
   }
 
   @override
@@ -402,29 +444,44 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   Future<void> _nextStep() async {
-    // Save "don't ask again" for this step+cert combo
-    if (_dontAskAgain) {
-      final fp = widget.sslStatus.certInfo?.sha256Fingerprint ?? '';
-      final stepName = ['cert', 'env', 'mitm'][_step];
-      if (fp.isNotEmpty) await dismissWizardStep(fp, stepName);
+    final fp = widget.sslStatus.certInfo?.sha256Fingerprint ?? '';
+    const stepNames = ['cert', 'env', 'mitm'];
+
+    // "Don't ask again" checked → dismiss ALL remaining steps for this cert
+    if (_dontAskAgain && fp.isNotEmpty) {
+      for (final s in stepNames) {
+        await dismissWizardStep(fp, s);
+      }
+      if (mounted) { Navigator.of(context).pop(); widget.onComplete?.call(); }
+      return;
     }
-    if (_step < _totalSteps - 1) {
-      var next = _step + 1;
-      // Auto-skip dismissed steps
-      final fp = widget.sslStatus.certInfo?.sha256Fingerprint ?? '';
+
+    // Last step completed/skipped → dismiss all steps so wizard never shows again
+    if (_step >= _totalSteps - 1) {
       if (fp.isNotEmpty) {
-        final stepNames = ['cert', 'env', 'mitm'];
-        while (next < _totalSteps && await isWizardStepDismissed(fp, stepNames[next])) {
-          next++;
+        for (final s in stepNames) {
+          await dismissWizardStep(fp, s);
         }
       }
-      if (next >= _totalSteps) {
-        if (mounted) { Navigator.of(context).pop(); widget.onComplete?.call(); }
-      } else {
-        setState(() { _step = next; _statusMsg = null; _dontAskAgain = false; });
-      }
-    } else {
       if (mounted) { Navigator.of(context).pop(); widget.onComplete?.call(); }
+      return;
+    }
+
+    // Otherwise advance to next non-dismissed step
+    var next = _step + 1;
+    if (fp.isNotEmpty) {
+      while (next < _totalSteps && await isWizardStepDismissed(fp, stepNames[next])) {
+        next++;
+      }
+    }
+    if (next >= _totalSteps) {
+      // All remaining steps dismissed — close
+      if (fp.isNotEmpty) {
+        for (final s in stepNames) { await dismissWizardStep(fp, s); }
+      }
+      if (mounted) { Navigator.of(context).pop(); widget.onComplete?.call(); }
+    } else {
+      setState(() { _step = next; _statusMsg = null; _dontAskAgain = false; });
     }
   }
 
@@ -467,7 +524,7 @@ class _SetupWizardState extends State<SetupWizard> {
                 ),
               ),
               const SizedBox(width: 6),
-              Text("Don't ask again for this step",
+              Text("Don't show again",
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
             ]),
           ),
@@ -507,8 +564,13 @@ class _SetupWizardState extends State<SetupWizard> {
           decoration: BoxDecoration(color: Colors.orange.withValues(alpha:0.08),
               border: Border.all(color: Colors.orange.shade300), borderRadius: BorderRadius.circular(6)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(cert.organizationName.isNotEmpty ? cert.organizationName : cert.subject,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            Row(children: [
+              const Icon(Icons.verified_user, size: 14, color: Colors.orange),
+              const SizedBox(width: 6),
+              Expanded(child: Text(
+                cert.organizationName.isNotEmpty ? cert.organizationName : cert.subject,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+            ]),
             const SizedBox(height: 2),
             Text('${cert.sha256Fingerprint.substring(0,29)}…',
                 style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.grey)),
