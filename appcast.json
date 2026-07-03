@@ -1,11 +1,11 @@
 {
   "version": "1.42.0",
   "channel": "stable",
-  "notes": "Fix auto-updater + cert installer patches all Python installs",
+  "notes": "Fix auto-updater: external installer process, cert patches all Pythons",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1UbDzXlMBqXEwXh21Z68R1bUhL9ZLq4kL&export=download&confirm=t",
-    "sha256": "f1b62f0269b679abbf296e2efda08fc634906ef20be82c5beff3506d999c905f",
-    "size": 38900361
+    "sha256": "333c7b1e8a8ed5cd1b56a8f6f3eef47fbe22d0d85e10dac350425fa19ae371db",
+    "size": 38901220
   },
   "windows": {
     "url": "",
