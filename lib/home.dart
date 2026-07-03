@@ -10,6 +10,7 @@ import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
+import 'package:lux/util/app_log.dart';
 import 'package:lux/util/cert_installer.dart';
 import 'package:lux/util/installed_certs_store.dart';
 import 'package:lux/util/network_detector.dart';
@@ -346,6 +347,7 @@ class _HomeState extends State<Home>
     if (_wizardShowing) return;
 
     if (coreManager == null || !mounted) return;
+    appLog('NET', 'checkForNetworkProxy started');
     try {
       final detected = await coreManager!.detectNetworkProxy();
       // Always do a direct SSL probe — transparent proxy gives cert without auth
@@ -434,6 +436,7 @@ class _HomeState extends State<Home>
         });
       }
     } catch (e) {
+      appLog('NET', 'checkForNetworkProxy error: $e');
       debugPrint('Proxy detection error: $e');
     }
   }
@@ -1019,6 +1022,8 @@ class _HomeState extends State<Home>
 
     var corePath = path.join(Paths.assetsBin.path, LuxCoreName.name);
     var curHomeDir = await getHomeDir();
+    await initAppLog(curHomeDir);
+    appLog('APP', 'init started homeDir=$curHomeDir');
     final port = await findAvailablePort(8000, 9000);
     var uuid = Uuid();
     var secret = uuid.v4();
@@ -1073,11 +1078,14 @@ class _HomeState extends State<Home>
   void _startCoreWatchdog() {
     final proc = coreManager?.coreProcess?.process;
     if (proc == null) return;
+    appLog('WATCHDOG', 'started — monitoring lux_core process');
     // Watch for unexpected exit
     proc.exitCode.then((code) async {
+      appLog('WATCHDOG', 'lux_core exited with code=$code — unexpected=${code != 0}');
       debugPrint('[watchdog] lux_core exited with code $code');
       if (mounted && code != 0) {
         await NetworkReset.reset();
+        appLog('WATCHDOG', 'network reset after unexpected core exit code=$code');
         debugPrint('[watchdog] network reset after unexpected core exit');
       }
     });
@@ -1097,17 +1105,21 @@ class _HomeState extends State<Home>
         return mounted;
       } catch (e) {
         _failCount++;
+        appLog('WATCHDOG', 'lux_core heartbeat FAILED attempt=$_failCount err=$e');
         debugPrint('[watchdog] lux_core unresponsive (attempt $_failCount): $e');
         // Auto-recover: reset network + restart core silently
         await NetworkReset.reset();
         try {
           await coreManager!.restart();
+          appLog('WATCHDOG', 'lux_core restarted successfully after $_failCount failures');
           debugPrint('[watchdog] lux_core restarted successfully');
           _failCount = 0;
           return mounted; // continue watchdog
         } catch (restartErr) {
+          appLog('WATCHDOG', 'restart failed attempt=$_failCount err=$restartErr');
           debugPrint('[watchdog] restart failed: $restartErr');
           if (_failCount >= 3) {
+            appLog('WATCHDOG', 'giving up after 3 failures — user must restart manually');
             // Only show error after 3 consecutive failures
             if (mounted) {
               setState(() {
@@ -1204,9 +1216,12 @@ class _HomeState extends State<Home>
     super.initState();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
       if (!result.contains(ConnectivityResult.none)) {
+        appLog('NET', 'connectivity changed: $result — scheduling proxy check in 3s');
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) _checkForNetworkProxy();
         });
+      } else {
+        appLog('NET', 'connectivity lost: $result');
       }
     });
     _listener = AppLifecycleListener(onExitRequested: _handleExitRequest);
@@ -1260,9 +1275,11 @@ class _HomeState extends State<Home>
       await windowManager.show();
       await windowManager.focus();
     } else if (key == 'connect') {
+      appLog('PROXY', 'user tapped connect from tray');
       await coreManager?.start();
       _refreshTray();
     } else if (key == 'disconnect') {
+      appLog('PROXY', 'user tapped disconnect from tray');
       await coreManager?.stop();
       _refreshTray();
     } else if (key.startsWith('proxy_select_')) {
