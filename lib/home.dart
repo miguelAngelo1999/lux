@@ -1258,6 +1258,24 @@ class _HomeState extends State<Home>
                 await coreManager?.exitCore();
                 exitApp();
               }
+            case 'proxy_expired':
+              {
+                final expiredId = message['expiredId'] as String? ?? '';
+                final fallbackId = message['fallbackId'] as String? ?? '';
+                appLog('PROXY', 'password expired for proxy $expiredId'
+                    '${fallbackId.isNotEmpty ? " — switched to $fallbackId" : ""}');
+                if (!mounted) return;
+                // Show a snackbar notification
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(fallbackId.isNotEmpty
+                        ? 'Proxy password expired — switched to previous proxy'
+                        : 'Proxy password expired'),
+                    duration: const Duration(seconds: 5),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
           }
         });
       });
