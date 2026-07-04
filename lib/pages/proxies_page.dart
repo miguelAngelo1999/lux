@@ -289,6 +289,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     final userFocus  = FocusNode();
     final passFocus  = FocusNode();
     bool obscure = true;
+    String passwordMode = 'persistent';
+    int passwordTTL = 60;
 
     const sourceLabel = {
       'dhcp_wpad':      'DHCP/WPAD',
@@ -456,6 +458,37 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                           style: TextStyle(fontSize: 11, color: Colors.orange)),
                     ]),
                   ],
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: passwordMode,
+                    decoration: const InputDecoration(
+                        labelText: 'Password Mode',
+                        isDense: true,
+                        border: OutlineInputBorder()),
+                    style: const TextStyle(fontSize: 13),
+                    items: const [
+                      DropdownMenuItem(value: 'persistent',
+                          child: Text('Persistent', style: TextStyle(fontSize: 13))),
+                      DropdownMenuItem(value: 'one-time',
+                          child: Text('One-time (clears on switch)', style: TextStyle(fontSize: 13))),
+                      DropdownMenuItem(value: 'timed',
+                          child: Text('Timed (auto-expires)', style: TextStyle(fontSize: 13))),
+                    ],
+                    onChanged: (v) => setSt(() => passwordMode = v!),
+                  ),
+                  if (passwordMode == 'timed') ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: TextEditingController(text: passwordTTL.toString()),
+                      decoration: const InputDecoration(
+                          labelText: 'Expires after (minutes)',
+                          isDense: true,
+                          border: OutlineInputBorder()),
+                      style: const TextStyle(fontSize: 13),
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) => passwordTTL = int.tryParse(v) ?? 60,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -483,6 +516,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     'port': int.tryParse(port) ?? 8080,
                     if (user.isNotEmpty) 'username': user,
                     if (pass.isNotEmpty) 'password': pass,
+                    'passwordMode': passwordMode,
+                    if (passwordMode == 'timed') 'passwordTTLMinutes': passwordTTL,
                   });
 
                   if (!mounted) return;
@@ -515,6 +550,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                           'port': int.tryParse(port) ?? 8080,
                           if (user.isNotEmpty) 'username': user,
                           if (pass.isNotEmpty) 'password': pass,
+                          'passwordMode': passwordMode,
+                          if (passwordMode == 'timed') 'passwordTTLMinutes': passwordTTL,
                         });
                       } catch (_) {}
                     }
