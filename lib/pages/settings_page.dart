@@ -55,6 +55,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   @override
   void dispose() {
     windowManager.removeListener(this);
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -225,229 +226,111 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     exit(0);
   }
 
+  // ── Category model for settings navigation ──────────────────────────────────
+
+  static const _categories = [
+    (id: 'general',   icon: Icons.tune,              label: 'General'),
+    (id: 'network',   icon: Icons.wifi,               label: 'Network'),
+    (id: 'dns',       icon: Icons.dns,                label: 'DNS'),
+    (id: 'tun',       icon: Icons.hub,                label: 'TUN / Mixed'),
+    (id: 'balance',   icon: Icons.balance,            label: 'Load Balancing'),
+    (id: 'ssl',       icon: Icons.security,           label: 'SSL & MITM'),
+    (id: 'advanced',  icon: Icons.settings_suggest,  label: 'Advanced'),
+  ];
+
+  int _selectedCategory = 0;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading || _setting == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    final s = _setting!;
-    final isTun = s.mode == ProxyMode.tun || s.mode == ProxyMode.mixed;
+
+    final isSearching = _searchQuery.isNotEmpty;
 
     return Stack(
       children: [
-        ListView(
-          padding: const EdgeInsets.all(16),
+        Row(
           children: [
-            // ΓöÇΓöÇ General ΓöÇΓöÇ
-            _sectionHeader('General'),
-            _dropdownTile<String>(
-              'Language',
-              _currentLanguage(),
-              ['system', 'en', 'zh-CN'],
-              (v) => _languageLabel(v),
-              (v) => _saveLanguage(v),
-            ),
-            _dropdownTile<String>(
-              'Theme',
-              _currentTheme(),
-              ['system', 'dark', 'light'],
-              (v) => _themeLabel(v),
-              (v) => _saveTheme(v),
-            ),
-            _switchTile(
-              'Auto Launch',
-              'Start Lux when you log in',
-              s.autoLaunch,
-              (v) => _save(s.copyWith(autoLaunch: v)),
-            ),
-            _switchTile(
-              'Auto Connect',
-              'Connect proxy when Lux opens',
-              s.autoConnect,
-              (v) => _save(s.copyWith(autoConnect: v)),
-            ),
-            _switchTile(
-              'Sensitive Info Mode',
-              'Hide IP addresses and proxy names in UI',
-              s.sensitiveInfoMode ?? false,
-              (v) => _save(s.copyWith(sensitiveInfoMode: v)),
-            ),
-            _resetDismissedProxiesTile(),
-            if (Platform.isWindows) _clearSavedProxyTile(),
-
-            // ── Network ──
-            const SizedBox(height: 16),
-            _sectionHeader('Network'),
-            _dropdownTile<ProxyMode>(
-              'Proxy Mode',
-              s.mode,
-              [ProxyMode.system, ProxyMode.tun, ProxyMode.mixed],
-              (v) => getModeLabel(v),
-              (v) => _save(s.copyWith(mode: v)),
-            ),
-            _dropdownTile<String>(
-              'Default Interface',
-              s.defaultInterface.isEmpty ? '' : s.defaultInterface,
-              ['', ..._interfaces],
-              (v) => v.isEmpty ? 'Auto' : v,
-              (v) => _save(s.copyWith(defaultInterface: v)),
-            ),
-            _numberTile(
-              'Local Server Port',
-              s.localServerPort,
-              (v) => _save(s.copyWith(localServerPort: v)),
-            ),
-            _switchTile(
-              'Allow LAN',
-              'Allow other devices to connect via LAN',
-              s.allowLan,
-              (v) => _save(s.copyWith(allowLan: v)),
-            ),
-            if (Platform.isWindows)
-              _switchTile(
-                'Restore Auto-Detect Proxy on Exit',
-                'Re-enable Windows "Automatically detect settings" when Lux stops',
-                s.restoreAutoDetect ?? false,
-                (v) => _save(s.copyWith(restoreAutoDetect: v)),
+            // ── Left category sidebar ─────────────────────────────────────
+            SizedBox(
+              width: 160,
+              child: Column(
+                children: [
+                  // Search bar
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 10, 8, 6),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (v) => setState(() => _searchQuery = v.toLowerCase().trim()),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Search settings…',
+                        hintStyle: const TextStyle(fontSize: 12),
+                        isDense: true,
+                        prefixIcon: const Icon(Icons.search, size: 16),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close, size: 14),
+                                onPressed: () => setState(() {
+                                  _searchCtrl.clear();
+                                  _searchQuery = '';
+                                }),
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                    ),
+                  ),
+                  // Category list
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      itemCount: _categories.length,
+                      itemBuilder: (ctx, i) {
+                        final cat = _categories[i];
+                        final selected = !isSearching && _selectedCategory == i;
+                        return ListTile(
+                          dense: true,
+                          selected: selected,
+                          selectedTileColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 0),
+                          leading: Icon(cat.icon, size: 16,
+                              color: selected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null),
+                          title: Text(cat.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              )),
+                          onTap: () => setState(() {
+                            _selectedCategory = i;
+                            _searchQuery = '';
+                            _searchCtrl.clear();
+                          }),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-
-            // ── Load Balancing ──
-            const SizedBox(height: 16),
-            _sectionHeader('Load Balancing'),
-            _switchTile(
-              'Enable Load Balancing',
-              'Distribute DIRECT connections across multiple interfaces in round-robin. Needs 2+ interfaces.',
-              s.loadBalanceEnabled,
-              (v) => _save(s.copyWith(loadBalanceEnabled: v)),
             ),
-            if (s.loadBalanceEnabled) ...[
-              _dropdownTile<String>(
-                'Strategy',
-                s.loadBalanceStrategy.isEmpty ? 'least-conn' : s.loadBalanceStrategy,
-                ['least-conn', 'round-robin', 'weighted', 'failover'],
-                (v) {
-                  switch (v) {
-                    case 'round-robin': return 'Round Robin — rotate evenly';
-                    case 'weighted':    return 'Weighted — faster interface gets more';
-                    case 'failover':    return 'Failover — primary + standby';
-                    default:            return 'Least Connections (recommended)';
-                  }
-                },
-                (v) => _save(s.copyWith(loadBalanceStrategy: v)),
-              ),
-              _interfaceMultiSelectTile(
-                'Balance Interfaces',
-                'Select 2 or more interfaces to balance across',
-                s.loadBalanceInterfaces,
-                (selected) => _save(s.copyWith(loadBalanceInterfaces: selected)),
-              ),
-              _loadBalanceStatusTile(),
-            ],
-
-            // ── TUN/Mixed only ──
-            if (isTun) ...[
-              const SizedBox(height: 16),
-              _sectionHeader('TUN / Mixed Mode'),
-              _switchTile(
-                'Block QUIC',
-                'Disable HTTP/3 (fixes YouTube and some sites)',
-                s.blockQuic ?? false,
-                (v) => _save(s.copyWith(blockQuic: v)),
-              ),
-              _switchTile(
-                'Find Process',
-                'Identify which app made each connection (shows in Connections)',
-                s.shouldFindProcess ?? false,
-                (v) => _save(s.copyWith(shouldFindProcess: v)),
-              ),
-              _switchTile(
-                'Fake IP',
-                'Forward DNS queries to proxy for better performance',
-                s.fakeIp ?? false,
-                (v) => _save(s.copyWith(fakeIp: v)),
-              ),
-
-              // ΓöÇΓöÇ DNS Servers ΓöÇΓöÇ
-              const SizedBox(height: 8),
-              if (s.fakeIp != true)
-                _dnsListTile('Remote DNS', 'Resolve foreign domains', _dnsRemote,
-                    (v) => _saveDnsList('remote', v)),
-              _dnsListTile('Local DNS', 'Resolve domestic domains', _dnsLocal,
-                  (v) => _saveDnsList('local', v)),
-              _dnsListTile('Boost DNS', 'Initial bootstrap resolution', _dnsBoost,
-                  (v) => _saveDnsList('boost', v)),
-              const SizedBox(height: 8),
-
-              _switchTile(
-                'Disable DNS Cache',
-                'Always get latest DNS responses',
-                s.disableDnsCache ?? false,
-                (v) => _save(s.copyWith(disableDnsCache: v)),
-              ),
-              _switchTile(
-                'Hijack DNS',
-                'Modify system DNS to route through Lux',
-                s.hijackDns,
-                (v) => _save(s.copyWith(hijackDns: v)),
-              ),
-            ],
-
-            // ΓöÇΓöÇ Auto Mode ΓöÇΓöÇ
-            const SizedBox(height: 16),
-            _sectionHeader('Auto Mode'),
-            _switchTile(
-              'Enable Auto Mode',
-              'Automatically test proxies and select the best one',
-              s.autoModeEnabled,
-              (v) => _save(s.copyWith(autoModeEnabled: v)),
+            const VerticalDivider(width: 1),
+            // ── Right content area ────────────────────────────────────────
+            Expanded(
+              child: _buildContent(isSearching),
             ),
-            if (s.autoModeEnabled) ...[
-              _dropdownTile<String>(
-                'Auto Mode Type',
-                s.autoModeType.isEmpty ? 'fallback' : s.autoModeType,
-                ['fallback', 'url-test'],
-                (v) => v == 'fallback' ? 'Fallback' : 'URL Test (fastest)',
-                (v) => _save(s.copyWith(autoModeType: v)),
-              ),
-              _textFieldTile(
-                'Test URL',
-                s.autoModeUrl,
-                'https://google.com',
-                (v) => _save(s.copyWith(autoModeUrl: v)),
-              ),
-            ],
-
-            const SizedBox(height: 16),
-            _sectionHeader('Advanced'),
-            _checkForUpdatesTile(),
-            _configFileTile(),
-            _resetNetworkTile(),
-            _resetWizardDismissalsTile(),
-            _pacStatusTile(),
-
-            // ΓöÇΓöÇ SSL Inspection ΓöÇΓöÇ
-            const SizedBox(height: 16),
-            _sectionHeader('SSL Inspection'),
-            _sslInspectionSection(),
-
-            // ── Network Tools ──
-            if (Platform.isWindows) ...[
-              const SizedBox(height: 16),
-              _sectionHeader('Network Tools'),
-              _networkToolsSection(),
-            ],
-
-            // ── Corporate Proxy Fix (MITM) ──
-            const SizedBox(height: 16),
-            _sectionHeader('Corporate Proxy Fix'),
-            _mitmSection(),
-
-            // ── Config Backup ──
-            const SizedBox(height: 16),
-            _sectionHeader('Config Backup'),
-            _importExportTile(),
-
-            const SizedBox(height: 32),
           ],
         ),
         if (_isSaving)
@@ -455,11 +338,227 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             top: 8,
             right: 8,
             child: SizedBox(
-              width: 16,
-              height: 16,
+              width: 16, height: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildContent(bool isSearching) {
+    final s = _setting!;
+    final isTun = s.mode == ProxyMode.tun || s.mode == ProxyMode.mixed;
+
+    // All items grouped by category for search
+    final allGroups = <({String category, List<Widget> items})>[
+      (
+        category: 'General',
+        items: [
+          _dropdownTile<String>('Language', _currentLanguage(),
+              ['system', 'en', 'zh-CN'], _languageLabel, _saveLanguage),
+          _dropdownTile<String>('Theme', _currentTheme(),
+              ['system', 'dark', 'light'], _themeLabel, _saveTheme),
+          _switchTile('Auto Launch', 'Start Lux when you log in',
+              s.autoLaunch, (v) => _save(s.copyWith(autoLaunch: v))),
+          _switchTile('Auto Connect', 'Connect proxy when Lux opens',
+              s.autoConnect, (v) => _save(s.copyWith(autoConnect: v))),
+          _switchTile('Sensitive Info Mode',
+              'Hide IP addresses and proxy names in UI',
+              s.sensitiveInfoMode ?? false,
+              (v) => _save(s.copyWith(sensitiveInfoMode: v))),
+          _resetDismissedProxiesTile(),
+          if (Platform.isWindows) _clearSavedProxyTile(),
+        ],
+      ),
+      (
+        category: 'Network',
+        items: [
+          _dropdownTile<ProxyMode>('Proxy Mode', s.mode,
+              [ProxyMode.system, ProxyMode.tun, ProxyMode.mixed],
+              getModeLabel, (v) => _save(s.copyWith(mode: v))),
+          _dropdownTile<String>(
+              'Default Interface',
+              s.defaultInterface.isEmpty ? '' : s.defaultInterface,
+              ['', ..._interfaces],
+              (v) => v.isEmpty ? 'Auto' : v,
+              (v) => _save(s.copyWith(defaultInterface: v))),
+          _numberTile('Local Server Port', s.localServerPort,
+              (v) => _save(s.copyWith(localServerPort: v))),
+          _switchTile('Allow LAN', 'Allow other devices to connect via LAN',
+              s.allowLan, (v) => _save(s.copyWith(allowLan: v))),
+          if (Platform.isWindows)
+            _switchTile('Restore Auto-Detect Proxy on Exit',
+                'Re-enable Windows "Automatically detect settings" when Lux stops',
+                s.restoreAutoDetect ?? false,
+                (v) => _save(s.copyWith(restoreAutoDetect: v))),
+          _dropdownTile<String>('Auto Mode Type',
+              s.autoModeType.isEmpty ? 'fallback' : s.autoModeType,
+              ['fallback', 'url-test'],
+              (v) => v == 'fallback' ? 'Fallback' : 'URL Test (fastest)',
+              (v) => _save(s.copyWith(autoModeType: v))),
+          _switchTile('Enable Auto Mode',
+              'Automatically test proxies and select the best one',
+              s.autoModeEnabled,
+              (v) => _save(s.copyWith(autoModeEnabled: v))),
+          if (s.autoModeEnabled)
+            _textFieldTile('Test URL', s.autoModeUrl, 'https://google.com',
+                (v) => _save(s.copyWith(autoModeUrl: v))),
+        ],
+      ),
+      (
+        category: 'DNS',
+        items: [
+          if (!isTun)
+            const ListTile(
+              dense: true,
+              leading: Icon(Icons.info_outline, size: 16, color: Colors.grey),
+              title: Text('DNS settings apply in TUN / Mixed mode only',
+                  style: TextStyle(fontSize: 13, color: Colors.grey)),
+            )
+          else ...[
+            _switchTile('Fake IP',
+                'Forward DNS queries to proxy for better performance',
+                s.fakeIp ?? false,
+                (v) => _save(s.copyWith(fakeIp: v))),
+            if (s.fakeIp != true)
+              _dnsListTile('Remote DNS', 'Resolve foreign domains',
+                  _dnsRemote, (v) => _saveDnsList('remote', v)),
+            _dnsListTile('Local DNS', 'Resolve domestic domains',
+                _dnsLocal, (v) => _saveDnsList('local', v)),
+            _dnsListTile('Boost DNS', 'Initial bootstrap resolution',
+                _dnsBoost, (v) => _saveDnsList('boost', v)),
+            _switchTile('Disable DNS Cache',
+                'Always get latest DNS responses',
+                s.disableDnsCache ?? false,
+                (v) => _save(s.copyWith(disableDnsCache: v))),
+            _switchTile('Hijack DNS',
+                'Modify system DNS to route through Lux',
+                s.hijackDns,
+                (v) => _save(s.copyWith(hijackDns: v))),
+          ],
+        ],
+      ),
+      (
+        category: 'TUN / Mixed',
+        items: [
+          if (!isTun)
+            const ListTile(
+              dense: true,
+              leading: Icon(Icons.info_outline, size: 16, color: Colors.grey),
+              title: Text('Switch to TUN or Mixed mode to enable these options',
+                  style: TextStyle(fontSize: 13, color: Colors.grey)),
+            )
+          else ...[
+            _switchTile('Block QUIC',
+                'Disable HTTP/3 (fixes YouTube and some sites)',
+                s.blockQuic ?? false,
+                (v) => _save(s.copyWith(blockQuic: v))),
+            _switchTile('Find Process',
+                'Identify which app made each connection (shows in Connections)',
+                s.shouldFindProcess ?? false,
+                (v) => _save(s.copyWith(shouldFindProcess: v))),
+          ],
+        ],
+      ),
+      (
+        category: 'Load Balancing',
+        items: [
+          _switchTile('Enable Load Balancing',
+              'Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.',
+              s.loadBalanceEnabled,
+              (v) => _save(s.copyWith(loadBalanceEnabled: v))),
+          if (s.loadBalanceEnabled) ...[
+            _dropdownTile<String>(
+                'Strategy',
+                s.loadBalanceStrategy.isEmpty
+                    ? 'least-conn'
+                    : s.loadBalanceStrategy,
+                ['least-conn', 'round-robin', 'weighted', 'failover'],
+                (v) {
+                  switch (v) {
+                    case 'round-robin': return 'Round Robin — rotate evenly';
+                    case 'weighted': return 'Weighted — faster gets more';
+                    case 'failover': return 'Failover — primary + standby';
+                    default: return 'Least Connections (recommended)';
+                  }
+                },
+                (v) => _save(s.copyWith(loadBalanceStrategy: v))),
+            _interfaceMultiSelectTile(
+                'Balance Interfaces',
+                'Select 2 or more interfaces',
+                s.loadBalanceInterfaces,
+                (sel) => _save(s.copyWith(loadBalanceInterfaces: sel))),
+            _loadBalanceStatusTile(),
+          ],
+        ],
+      ),
+      (
+        category: 'SSL & MITM',
+        items: [
+          _sslInspectionSection(),
+          if (Platform.isWindows) _networkToolsSection(),
+          _mitmSection(),
+        ],
+      ),
+      (
+        category: 'Advanced',
+        items: [
+          _checkForUpdatesTile(),
+          _configFileTile(),
+          _resetNetworkTile(),
+          _resetWizardDismissalsTile(),
+          _pacStatusTile(),
+          _importExportTile(),
+        ],
+      ),
+    ];
+
+    if (isSearching) {
+      // Search mode — show matches from all categories
+      final results = <Widget>[];
+      for (final group in allGroups) {
+        // We can't search widget content directly, so we match on category name
+        // and always show the full category when searching its name
+        if (group.category.toLowerCase().contains(_searchQuery)) {
+          results.add(_sectionHeader(group.category));
+          results.addAll(group.items);
+        }
+      }
+      if (results.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.search_off, size: 32, color: Colors.grey),
+              const SizedBox(height: 8),
+              Text('No settings match "$_searchQuery"',
+                  style: const TextStyle(color: Colors.grey)),
+            ],
+          ),
+        );
+      }
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: results,
+      );
+    }
+
+    // Category mode — show selected category
+    final group = allGroups[_selectedCategory];
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            group.category,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+        ...group.items,
       ],
     );
   }
