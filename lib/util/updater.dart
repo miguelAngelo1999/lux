@@ -377,11 +377,16 @@ if [ -f "\$REAL" ]; then
   chmod u+s "\$REAL"
 fi
 
-# Update sudoers
+# Update sudoers — preserve all four NOPASSWD entries (same as initial setup)
 SUDO_FILE="/etc/sudoers.d/lux_core"
 USER_NAME=\$(stat -f '%Su' /dev/console 2>/dev/null || echo "\$SUDO_USER")
 if [ -n "\$USER_NAME" ] && [ -f "\$REAL" ]; then
-  echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *" > "\$SUDO_FILE"
+  {
+    echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *"
+    echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_proxy_apply.sh"
+    echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_proxy_clear.sh"
+    echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_cert_install.sh"
+  } > "\$SUDO_FILE"
   chmod 0440 "\$SUDO_FILE"
   visudo -c -f "\$SUDO_FILE" 2>/dev/null || rm -f "\$SUDO_FILE"
 fi

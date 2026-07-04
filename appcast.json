@@ -1,11 +1,11 @@
 {
   "version": "1.42.0",
   "channel": "stable",
-  "notes": "Fix auto-updater: downloads via system proxy, external installer, Lux relaunches after update.",
+  "notes": "Fix auto-updater: downloads via system proxy, external installer, full sudoers preserved after update.",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1UbDzXlMBqXEwXh21Z68R1bUhL9ZLq4kL&export=download&confirm=t",
-    "sha256": "305a0b13226fe9f7240ada327a3ba8eb8ff3969923f2e5df307e19ff59c3eabc",
-    "size": 38901420
+    "sha256": "604f381c5b396b1e9696ecb699f051d3b89a24c1ac8be342c4707f073f441103",
+    "size": 38901894
   },
   "windows": {
     "url": "",
