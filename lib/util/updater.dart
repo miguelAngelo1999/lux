@@ -311,14 +311,28 @@ Future<void> downloadAndInstall(
       await Future.delayed(const Duration(seconds: 1));
       exit(0);
     } else if (Platform.isWindows) {
-      // On Windows: kill lux via the scheduled task, then run the installer silently.
-      // The installer (InnoSetup) handles killing lux_core and relaunching.
-      appLog('UPDATE', 'stopping lux via LuxApp task before installer');
-      await Process.run('schtasks.exe', ['/end', '/tn', 'LuxApp']);
-      await Future.delayed(const Duration(seconds: 2));
-      // Run installer — it will kill remaining processes and relaunch lux when done
-      await Process.run(file.path, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART']);
-      appLog('UPDATE', 'installer launched — exiting');
+      // Same pattern as macOS: write a standalone updater script, launch it
+      // detached so it outlives this process, then exit lux.
+      // The script waits for lux to fully die, then runs the installer.
+      appLog('UPDATE', 'writing detached Windows updater script');
+
+      final scriptPath = '${file.parent.path}\\lux_updater.bat';
+      final script = _buildWindowsUpdaterScript(file.path);
+      await File(scriptPath).writeAsString(script);
+
+      appLog('UPDATE', 'launching detached updater script and exiting');
+
+      // Launch via cmd /c start "" /b — fully detached, no window, outlives lux
+      await Process.start(
+        'cmd.exe',
+        ['/c', 'start', '', '/b', 'cmd.exe', '/c', scriptPath],
+        mode: ProcessStartMode.detached,
+        runInShell: false,
+      );
+
+      // Give script a moment to start, then exit
+      await Future.delayed(const Duration(milliseconds: 500));
+      appLog('UPDATE', 'exiting lux for updater');
       exit(0);
     }
   } catch (e) {
@@ -337,6 +351,38 @@ Future<void> downloadAndInstall(
       );
     }
   }
+}
+
+// ── Windows updater script ────────────────────────────────────────────────────
+
+/// Builds a standalone Windows batch file that runs OUTSIDE the Lux process.
+/// Flow: Lux writes script → launches detached → Lux exits →
+///       script waits → stops lux_core → runs installer → installer relaunches Lux.
+String _buildWindowsUpdaterScript(String installerPath) {
+  // Escape backslashes for the batch file
+  final escaped = installerPath.replaceAll('/', '\\');
+  return '@echo off\r\n'
+      'echo Lux updater started at %date% %time% > "%TEMP%\\lux_updater.log"\r\n'
+      '\r\n'
+      ':: Wait for lux.exe to fully exit (it exits after launching us)\r\n'
+      ':wait_lux\r\n'
+      'timeout /t 2 /nobreak >nul\r\n'
+      'tasklist /FI "IMAGENAME eq lux.exe" 2>nul | find /i "lux.exe" >nul\r\n'
+      'if not errorlevel 1 goto wait_lux\r\n'
+      '\r\n'
+      ':: Also stop lux_core via scheduled task (handles elevated processes)\r\n'
+      'schtasks /end /tn LuxApp >nul 2>&1\r\n'
+      'timeout /t 2 /nobreak >nul\r\n'
+      'taskkill /F /IM lux_core.exe /T >nul 2>&1\r\n'
+      'timeout /t 1 /nobreak >nul\r\n'
+      '\r\n'
+      ':: Run installer silently — it will relaunch lux on finish\r\n'
+      'echo Running installer: $escaped >> "%TEMP%\\lux_updater.log"\r\n'
+      '"$escaped" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART\r\n'
+      'echo Installer exited with code %errorlevel% >> "%TEMP%\\lux_updater.log"\r\n'
+      '\r\n'
+      ':: Clean up this script\r\n'
+      'del "%~f0"\r\n';
 }
 
 // ── macOS install helpers ──────────────────────────────────────────────────────
