@@ -195,6 +195,53 @@ class _HomeState extends State<Home>
   // -- Proxy address detected at startup --
   String? _detectedProxyAddr;
 
+  /// Silently applies UWP loopback exemption for all installed Windows Store apps.
+  /// This allows apps like Teams, Slack, etc. to route through lux as system proxy.
+  /// Also sets NODE_TLS_REJECT_UNAUTHORIZED and NODE_EXTRA_CA_CERTS if not already set.
+  /// Runs once in the background — no dialog, no user interaction needed.
+  Future<void> _ensureUwpLoopback() async {
+    try {
+      // UWP loopback exemption
+      await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-WindowStyle', 'Hidden', '-command',
+        r'Get-AppxPackage | ForEach-Object { CheckNetIsolation.exe LoopbackExempt -a -n=$($_.PackageFamilyName) 2>$null }',
+      ]);
+      debugPrint('[UWP] loopback exemption applied');
+
+      // NODE_TLS_REJECT_UNAUTHORIZED — only set if not already present
+      final existing = await Process.run('powershell.exe', [
+        '-noprofile', '-NonInteractive', '-command',
+        '[Environment]::GetEnvironmentVariable("NODE_TLS_REJECT_UNAUTHORIZED","User")',
+      ]);
+      if (existing.stdout.toString().trim().isEmpty) {
+        await Process.run('powershell.exe', [
+          '-noprofile', '-NonInteractive', '-command',
+          '[Environment]::SetEnvironmentVariable("NODE_TLS_REJECT_UNAUTHORIZED","0","User")',
+        ]);
+        debugPrint('[UWP] set NODE_TLS_REJECT_UNAUTHORIZED=0');
+      }
+
+      // NODE_EXTRA_CA_CERTS — only set if CA file exists and var not already present
+      final caPath = '${Platform.environment['APPDATA']}\\com.github.igoogolx\\lux\\1.0\\mitm_ca.crt';
+      final caExists = await File(caPath).exists();
+      if (caExists) {
+        final existingCa = await Process.run('powershell.exe', [
+          '-noprofile', '-NonInteractive', '-command',
+          '[Environment]::GetEnvironmentVariable("NODE_EXTRA_CA_CERTS","User")',
+        ]);
+        if (existingCa.stdout.toString().trim().isEmpty) {
+          await Process.run('powershell.exe', [
+            '-noprofile', '-NonInteractive', '-command',
+            '[Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS","$caPath","User")',
+          ]);
+          debugPrint('[UWP] set NODE_EXTRA_CA_CERTS=$caPath');
+        }
+      }
+    } catch (e) {
+      debugPrint('[UWP] background setup failed: $e');
+    }
+  }
+
   /// On Windows with a corporate proxy, ensure DNS is set to use the local
   /// DHCP DNS server directly (UDP) so TUN/Mixed mode works without DNS failures.
   /// Corporate proxies block tcp://8.8.8.8:53 but local DNS is always reachable.
@@ -1144,6 +1191,11 @@ class _HomeState extends State<Home>
     Future.delayed(const Duration(milliseconds: 500), () => _checkForNetworkProxy());
     // Detect corporate vs home network and switch rules accordingly
     Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
+    // On Windows: silently apply UWP loopback exemption in the background.
+    // This ensures Windows Store apps can route through lux without requiring the setup wizard.
+    if (Platform.isWindows) {
+      Future.delayed(const Duration(seconds: 5), _ensureUwpLoopback);
+    }
     if (eventChannel == null) {
       coreManager?.getEventChannel().then((channel) async {
         if (channel == null) return;
