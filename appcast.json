@@ -1,7 +1,7 @@
 {
-  "version": "1.42.0",
+  "version": "1.43.0",
   "channel": "stable",
-  "notes": "Proxy detection improvements, auto UWP loopback, cert store fixes, silent Windows updater",
+  "notes": "TEST — updater test",
   "macOS": {
     "sha256": "b09fcc1c91f2529fb332f856b337b8db429e2621cb4fa2a73e061fe14263b1e9",
     "size": 38902331,
