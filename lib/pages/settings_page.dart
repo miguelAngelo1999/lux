@@ -273,6 +273,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               (v) => _save(s.copyWith(sensitiveInfoMode: v)),
             ),
             _resetDismissedProxiesTile(),
+            if (Platform.isWindows) _clearSavedProxyTile(),
 
             // ── Network ──
             const SizedBox(height: 16),
@@ -1870,6 +1871,34 @@ Write-Output "ok"
           }
         },
         child: const Text('Reset', style: TextStyle(fontSize: 12)),
+      ),
+    );
+  }
+
+  Widget _clearSavedProxyTile() {
+    return ListTile(
+      dense: true,
+      title: const Text('Saved Proxy Address', style: TextStyle(fontSize: 14)),
+      subtitle: const Text(
+          'Clear the proxy address saved from before Lux was installed. '
+          'Use this if the wrong proxy is being pre-filled at startup.',
+          style: TextStyle(fontSize: 12)),
+      trailing: TextButton(
+        onPressed: () async {
+          try {
+            await Process.run('reg', [
+              'delete', r'HKCU\Software\LuxProxy',
+              '/v', 'OriginalProxyServer', '/f'
+            ]);
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Saved proxy address cleared'),
+                  duration: Duration(seconds: 2)));
+          } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed: $e')));
+          }
+        },
+        child: const Text('Clear', style: TextStyle(fontSize: 12)),
       ),
     );
   }

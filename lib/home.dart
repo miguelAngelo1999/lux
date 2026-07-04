@@ -420,7 +420,8 @@ class _HomeState extends State<Home>
       if (!mounted) return;
 
       if (detected == null) {
-        // SSL bump detected but no proxy found — show dialog with empty fields
+        // SSL bump detected but no proxy found — show dialog with empty server field.
+        // User must enter the proxy address manually.
         if (!hasBump) return;
         final syntheticProxy = DetectedProxy(
           host: '', port: '8080', scheme: 'http',
