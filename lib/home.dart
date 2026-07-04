@@ -1263,18 +1263,45 @@ class _HomeState extends State<Home>
                 final expiredId = message['expiredId'] as String? ?? '';
                 final fallbackId = message['fallbackId'] as String? ?? '';
                 appLog('PROXY', 'password expired for proxy $expiredId'
-                    '${fallbackId.isNotEmpty ? " — switched to $fallbackId" : ""}');
+                    '${fallbackId.isNotEmpty ? " — switched to $fallbackId" : " — no working fallback found"}');
                 if (!mounted) return;
-                // Show a snackbar notification
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(fallbackId.isNotEmpty
-                        ? 'Proxy password expired — switched to previous proxy'
-                        : 'Proxy password expired'),
-                    duration: const Duration(seconds: 5),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
+
+                if (fallbackId.isNotEmpty) {
+                  // Switched successfully — show a brief notification
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Proxy password expired — switched to next available proxy'),
+                      duration: Duration(seconds: 5),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                } else {
+                  // No working proxy found — bring Lux to front and alert user
+                  await windowManager.show();
+                  await windowManager.focus();
+                  await windowManager.setAlwaysOnTop(true);
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  await windowManager.setAlwaysOnTop(false);
+                  if (!mounted) return;
+                  await showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (ctx) => AlertDialog(
+                      icon: const Icon(Icons.wifi_off, color: Colors.red, size: 32),
+                      title: const Text('No Internet Access'),
+                      content: const Text(
+                        'Your proxy password expired and no working proxy was found.\n\n'
+                        'Please select a proxy or enter new credentials to restore internet access.',
+                      ),
+                      actions: [
+                        FilledButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: const Text('Go to Proxies'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
               }
           }
         });
