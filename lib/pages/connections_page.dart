@@ -98,6 +98,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
               setState(() {
                 _conns..clear()..addAll(conns);
               });
+              WidgetsBinding.instance.scheduleFrame();
             }
           } catch (_) {}
         },

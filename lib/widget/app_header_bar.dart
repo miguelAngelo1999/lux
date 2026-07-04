@@ -172,6 +172,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
                   .updateIsStarted(value.isStarted);
             }
           });
+          WidgetsBinding.instance.scheduleFrame();
         });
       });
     }

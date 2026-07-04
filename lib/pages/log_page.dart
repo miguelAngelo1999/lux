@@ -97,6 +97,7 @@ class _LogPageState extends State<LogPage> {
                 _logs.removeRange(0, _logs.length - 2000);
               }
             });
+            WidgetsBinding.instance.scheduleFrame();
             // Auto-scroll
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_scrollCtrl.hasClients) {

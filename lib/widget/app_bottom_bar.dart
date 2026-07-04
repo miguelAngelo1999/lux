@@ -52,6 +52,7 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
           if (isWindowHidden) continue;
           final value = TrafficData.fromJson(json.decode(message as String));
           setState(() { trafficData = TrafficState(rawData: value); });
+          WidgetsBinding.instance.scheduleFrame();
         }
       } catch (_) {
         // channel closed or failed — clear cache and retry
