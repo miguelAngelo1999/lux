@@ -1,15 +1,15 @@
 {
   "version": "1.43.0",
   "channel": "stable",
-  "notes": "TEST — updater test",
+  "notes": "Password mode in scan dialog, auto-fallback on proxy expiry, urgent alert when no working proxy found",
   "macOS": {
-    "sha256": "b09fcc1c91f2529fb332f856b337b8db429e2621cb4fa2a73e061fe14263b1e9",
-    "size": 38902331,
-    "url": "https://drive.usercontent.google.com/download?id=1UbDzXlMBqXEwXh21Z68R1bUhL9ZLq4kL&export=download&confirm=t"
+    "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
+    "sha256": "fd8d4a74217699cf0a76ee763936dd8f043b6ca9c31f9c07a45a143beadf486f",
+    "size": 38911472
   },
   "windows": {
-    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "91f330ac616af89642600234276296b0e0526c764bcc6aff4f59137e520b3868",
-    "size": 33263428
+    "url": "",
+    "sha256": "",
+    "size": 0
   }
 }
