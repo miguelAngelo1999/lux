@@ -65,3 +65,5 @@ core_patches/
 cleanup_*.ps1
 stop_services*.ps1
 lux_installed_backup.exeoldchat.md
+scripts/.oauth_token.json
+scripts/oauth_client.json
