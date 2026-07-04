@@ -313,8 +313,12 @@ class CoreManager {
   Future<WebSocketChannel?> getTrafficChannel() async {
     _trafficChannel ??=
         WebSocketChannel.connect(Uri.parse('$baseWsUrl/traffic?token=$token'));
-
     return _trafficChannel;
+  }
+
+  void clearTrafficChannel() {
+    _trafficChannel?.sink.close();
+    _trafficChannel = null;
   }
 
   Future<WebSocketChannel?> getRuntimeStatusChannel() async {

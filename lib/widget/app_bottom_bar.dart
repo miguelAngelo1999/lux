@@ -21,7 +21,6 @@ class AppBottomBar extends StatefulWidget {
 class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
   ProxyMode proxyMode = ProxyMode.tun;
   TrafficState? trafficData;
-  WebSocketChannel? trafficChannel;
   bool isWindowHidden = false;
 
   Future<void> refreshMode() async {
@@ -36,21 +35,29 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
     super.initState();
     refreshMode();
     windowManager.addListener(this);
-    if (trafficChannel == null) {
-      widget.coreManager.getTrafficChannel().then((channel) async {
-        trafficChannel = channel;
-        if (channel == null) return;
+    _connectTraffic();
+  }
+
+  Future<void> _connectTraffic() async {
+    while (mounted) {
+      try {
+        final channel = await widget.coreManager.getTrafficChannel();
+        if (channel == null) {
+          await Future.delayed(const Duration(seconds: 3));
+          continue;
+        }
         await channel.ready;
-        trafficChannel?.stream.listen((message) {
-          if (isWindowHidden) {
-            return;
-          }
-          TrafficData value = TrafficData.fromJson(json.decode(message));
-          setState(() {
-            trafficData = TrafficState(rawData: value);
-          });
-        });
-      });
+        await for (final message in channel.stream) {
+          if (!mounted) return;
+          if (isWindowHidden) continue;
+          final value = TrafficData.fromJson(json.decode(message as String));
+          setState(() { trafficData = TrafficState(rawData: value); });
+        }
+      } catch (_) {
+        // channel closed or failed — clear cache and retry
+      }
+      widget.coreManager.clearTrafficChannel();
+      if (mounted) await Future.delayed(const Duration(seconds: 3));
     }
   }
 
@@ -69,7 +76,6 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
   void dispose() {
     windowManager.removeListener(this);
     super.dispose();
-    trafficChannel?.sink.close();
   }
 
   @override
