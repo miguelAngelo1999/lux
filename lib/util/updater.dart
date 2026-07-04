@@ -124,9 +124,14 @@ Future<void> downloadAndInstall(
     debugPrint('[Updater] downloading $url → ${file.path}');
     appLog('UPDATE', 'download started url=$url dest=${file.path}');
 
+    // Use DIRECT for the DMG download — the system proxy (set by lux_core via
+    // networksetup) handles authentication transparently. Routing through
+    // Lux's own 1090 port adds an extra SSL interception layer that causes
+    // GDrive to return 403. HttpClient with findProxy=null uses the OS proxy.
     final client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
-    client.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
+    // Do NOT set findProxy — let Dart use the system proxy (set by networksetup)
+    // which already has corp proxy credentials. This is how browsers download.
 
     final request = await client.getUrl(Uri.parse(url));
     request.followRedirects = true;
@@ -416,9 +421,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       widget.info,
       onProgress: (p) => setState(() => _progress = p),
     );
-    setState(() { _progress = 1.0; _done = true; });
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (mounted) Navigator.of(context).pop(true);
+    // Only close dialog if we actually got to exit(0) — if download failed,
+    // the snackbar is shown and we stay open so user can retry or dismiss.
+    // downloadAndInstall only returns (without calling exit) on failure.
+    if (mounted) {
+      setState(() { _progress = null; }); // reset so buttons reappear
+    }
   }
 
   @override
