@@ -1,11 +1,11 @@
 {
   "version": "1.42.0",
   "channel": "stable",
-  "notes": "Fix auto-updater: DMG now downloads via system proxy (no 403). External installer relaunches Lux cleanly.",
+  "notes": "Fix auto-updater: downloads via system proxy, external installer, Lux relaunches after update.",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1UbDzXlMBqXEwXh21Z68R1bUhL9ZLq4kL&export=download&confirm=t",
-    "sha256": "2f7cdfdbfd63cf57801fde65b6da814179db8861e72ff536fcef4848a54d8632",
-    "size": 38900134
+    "sha256": "305a0b13226fe9f7240ada327a3ba8eb8ff3969923f2e5df307e19ff59c3eabc",
+    "size": 38901420
   },
   "windows": {
     "url": "",
