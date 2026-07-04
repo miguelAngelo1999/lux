@@ -1,11 +1,11 @@
 {
   "version": "1.42.0",
   "channel": "stable",
-  "notes": "Fix auto-updater: downloads via system proxy, external installer, full sudoers preserved after update.",
+  "notes": "Fix traffic status bar + update flow improvements",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1UbDzXlMBqXEwXh21Z68R1bUhL9ZLq4kL&export=download&confirm=t",
-    "sha256": "604f381c5b396b1e9696ecb699f051d3b89a24c1ac8be342c4707f073f441103",
-    "size": 38901894
+    "sha256": "b09fcc1c91f2529fb332f856b337b8db429e2621cb4fa2a73e061fe14263b1e9",
+    "size": 38902331
   },
   "windows": {
     "url": "",
