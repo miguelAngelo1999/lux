@@ -59,6 +59,7 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
       return _parseAppcast(body2, current);
     }
     client.close();
+    appLog('UPDATE', 'appcast fetched status=${response.statusCode} body=${body.substring(0, body.length.clamp(0, 200))}');
     return _parseAppcast(body, current);
   } catch (e) {
     debugPrint('[Updater] check failed: $e');
@@ -76,6 +77,7 @@ UpdateInfo? _parseAppcast(String body, String current) {
 
     final hasUpdate =
         Version.parse(latest).compareTo(Version.parse(current)) > 0;
+    appLog('UPDATE', 'appcast parsed latest=$latest current=$current hasUpdate=$hasUpdate');
 
     final macos   = (data['macOS']   as Map?)?.cast<String, dynamic>() ?? {};
     final windows = (data['windows'] as Map?)?.cast<String, dynamic>() ?? {};
