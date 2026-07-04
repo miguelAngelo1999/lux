@@ -187,17 +187,22 @@ def main():
     print(f'   Repo:   {GITHUB_REPO}')
     print(f'   Folder: https://drive.google.com/drive/folders/{GDRIVE_FOLDER_ID}\n')
 
-    # Build macOS DMG
-    dmg_path = build_macos(version, args)
+    # Build macOS DMG (skip on Windows)
+    dmg_path = None
+    dmg_sha256 = ''
+    dmg_size = 0
+    dmg_url = ''
 
-    dmg_sha256 = sha256_file(dmg_path)
-    dmg_size   = dmg_path.stat().st_size
-    print(f'\n  SHA-256: {dmg_sha256}')
-    print(f'  Size:    {dmg_size // 1024 // 1024} MB')
-
-    # Strip quarantine so manual downloads also open cleanly
-    if sys.platform == 'darwin':
-        run(f'xattr -d com.apple.quarantine "{dmg_path}" 2>/dev/null || true')
+    if sys.platform != 'win32':
+        dmg_path = build_macos(version, args)
+        dmg_sha256 = sha256_file(dmg_path)
+        dmg_size   = dmg_path.stat().st_size
+        print(f'\n  SHA-256: {dmg_sha256}')
+        print(f'  Size:    {dmg_size // 1024 // 1024} MB')
+        if sys.platform == 'darwin':
+            run(f'xattr -d com.apple.quarantine "{dmg_path}" 2>/dev/null || true')
+    else:
+        print('  ↷ Skipping macOS DMG build (running on Windows)')
 
     if args.dry_run:
         print('\n✅ Dry run complete — no upload.')
@@ -207,8 +212,26 @@ def main():
     print('\n── Uploading to Google Drive ───────────────────────────────────')
     service = gdrive_service()
 
-    dmg_id = upload_file(service, dmg_path, GDRIVE_FOLDER_ID, dmg_path.name)
-    dmg_url = direct_url(dmg_id)
+    if dmg_path is not None:
+        dmg_id  = upload_file(service, dmg_path, GDRIVE_FOLDER_ID, dmg_path.name)
+        dmg_url = direct_url(dmg_id)
+    else:
+        # Windows-only run — preserve existing macOS URL from current appcast
+        print('  ↷ No DMG — preserving existing macOS entry in appcast')
+        try:
+            import urllib.request
+            with urllib.request.urlopen(
+                f'https://drive.google.com/uc?export=download&id=1jf-8thv_VVPIQ3k_n83UhygzEKkydI2p&confirm=t',
+                timeout=10
+            ) as resp:
+                existing = json.loads(resp.read())
+                macos_entry = existing.get('macOS', {})
+                dmg_url    = macos_entry.get('url', '')
+                dmg_sha256 = macos_entry.get('sha256', '')
+                dmg_size   = macos_entry.get('size', 0)
+                print(f'  ↷ Kept macOS url={dmg_url[:60]}...')
+        except Exception as e:
+            print(f'  ⚠ Could not fetch existing appcast: {e}')
 
     windows_url = ''
     windows_sha256 = ''

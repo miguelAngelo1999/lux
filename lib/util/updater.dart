@@ -308,8 +308,16 @@ Future<void> downloadAndInstall(
       // Give the script a moment to start, then exit gracefully
       await Future.delayed(const Duration(seconds: 1));
       exit(0);
-    } else {
-      await Process.run(file.path, ['/SILENT']);
+    } else if (Platform.isWindows) {
+      // On Windows: kill lux via the scheduled task, then run the installer silently.
+      // The installer (InnoSetup) handles killing lux_core and relaunching.
+      appLog('UPDATE', 'stopping lux via LuxApp task before installer');
+      await Process.run('schtasks.exe', ['/end', '/tn', 'LuxApp']);
+      await Future.delayed(const Duration(seconds: 2));
+      // Run installer — it will kill remaining processes and relaunch lux when done
+      await Process.run(file.path, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART']);
+      appLog('UPDATE', 'installer launched — exiting');
+      exit(0);
     }
   } catch (e) {
     appLog('UPDATE', 'download error: $e');
