@@ -1,7 +1,7 @@
 {
-  "version": "1.43.0",
+  "version": "1.42.0",
   "channel": "stable",
-  "notes": "Password mode in scan dialog, auto-fallback on proxy expiry, urgent alert when no working proxy found",
+  "notes": "Detached Windows updater, proxy detection improvements, auto UWP loopback",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
     "sha256": "e20ed3dceb4012d412692cb749d06b677b5ab926bcf777206a80f0c047b5147d",
