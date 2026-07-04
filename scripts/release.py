@@ -52,6 +52,24 @@ OAUTH_CLIENT = SCRIPTS_DIR / 'oauth_client.json'
 TOKEN_CACHE  = SCRIPTS_DIR / '.oauth_token.json'
 SCOPES       = ['https://www.googleapis.com/auth/drive']
 
+def _patch_ssl_and_proxy():
+    """Patch httplib2 and requests to bypass SSL verification and use lux proxy."""
+    import ssl, urllib3, httplib2, re, os as _os
+    ssl._create_default_https_context = ssl._create_unverified_context
+    urllib3.disable_warnings()
+    _os.environ.update({'PYTHONHTTPSVERIFY': '0', 'CURL_CA_BUNDLE': '', 'REQUESTS_CA_BUNDLE': ''})
+    proxy = 'http://127.0.0.1:1090'
+    _oi = httplib2.Http.__init__
+    def _pi(self, *a, **k):
+        k['disable_ssl_certificate_validation'] = True
+        m = re.match(r'http://(?:([^:@]+):([^@]+)@)?([\w.]+):(\d+)', proxy)
+        if m:
+            k.setdefault('proxy_info', httplib2.ProxyInfo(
+                httplib2.socks.PROXY_TYPE_HTTP, m.group(3), int(m.group(4))))
+        _oi(self, *a, **k)
+    httplib2.Http.__init__ = _pi
+    return proxy
+
 def gdrive_service():
     """Authenticate as the user (migangelo1999@gmail.com) via OAuth2."""
     import os
@@ -59,6 +77,12 @@ def gdrive_service():
     from google_auth_oauthlib.flow import InstalledAppFlow
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
+    import requests as _req
+
+    proxy = _patch_ssl_and_proxy()
+    sess = _req.Session()
+    sess.verify = False
+    sess.proxies = {'http': proxy, 'https': proxy}
 
     creds = None
     if TOKEN_CACHE.exists():
@@ -66,7 +90,7 @@ def gdrive_service():
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            creds.refresh(Request(sess))
         else:
             if not OAUTH_CLIENT.exists():
                 print(f'\nERROR: {OAUTH_CLIENT} not found.')
