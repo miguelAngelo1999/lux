@@ -128,6 +128,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     try {
       await widget.coreManager.saveSetting(updated);
       if (mounted) setState(() => _setting = updated);
+      // If mode switched away from TUN/Mixed, jump away from DNS/TUN categories
+      final newIsTun = updated.mode == ProxyMode.tun || updated.mode == ProxyMode.mixed;
+      if (!newIsTun && (_selectedCategory == 2 || _selectedCategory == 3)) {
+        setState(() => _selectedCategory = 1); // jump to Network
+      }
       if (isModeSwitch && mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -237,7 +242,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     (id: 'ssl',       icon: Icons.security,           label: 'SSL & MITM'),
     (id: 'advanced',  icon: Icons.settings_suggest,  label: 'Advanced'),
   ];
-
   int _selectedCategory = 0;
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
@@ -249,6 +253,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
 
     final isSearching = _searchQuery.isNotEmpty;
+    final isTun = _setting!.mode == ProxyMode.tun || _setting!.mode == ProxyMode.mixed;
 
     return Stack(
       children: [
@@ -295,30 +300,43 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                       itemBuilder: (ctx, i) {
                         final cat = _categories[i];
                         final selected = !isSearching && _selectedCategory == i;
-                        return ListTile(
-                          dense: true,
-                          selected: selected,
-                          selectedTileColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6)),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 0),
-                          leading: Icon(cat.icon, size: 16,
-                              color: selected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : null),
-                          title: Text(cat.label,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: selected
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                              )),
-                          onTap: () => setState(() {
-                            _selectedCategory = i;
-                            _searchQuery = '';
-                            _searchCtrl.clear();
-                          }),
+                        final isTunOnly = cat.id == 'dns' || cat.id == 'tun';
+                        final disabled = isTunOnly && !isTun;
+                        return Tooltip(
+                          message: disabled ? 'Only available in TUN / Mixed mode' : '',
+                          child: ListTile(
+                            dense: true,
+                            enabled: !disabled,
+                            selected: selected,
+                            selectedTileColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6)),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 0),
+                            leading: Icon(cat.icon, size: 16,
+                                color: disabled
+                                    ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)
+                                    : selected
+                                        ? Theme.of(context).colorScheme.primary
+                                        : null),
+                            title: Text(cat.label,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                                  color: disabled
+                                      ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)
+                                      : null,
+                                )),
+                            trailing: disabled
+                                ? Icon(Icons.lock_outline, size: 12,
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3))
+                                : null,
+                            onTap: disabled ? null : () => setState(() {
+                              _selectedCategory = i;
+                              _searchQuery = '';
+                              _searchCtrl.clear();
+                            }),
+                          ),
                         );
                       },
                     ),
