@@ -1128,6 +1128,24 @@ class _HomeState extends State<Home>
     _startCoreWatchdog();
   }
 
+  /// Called when connectivity is restored. If autoConnect is enabled and lux
+  /// is not running, silently start it so internet is restored automatically.
+  Future<void> _reconnectIfNeeded() async {
+    if (!mounted || coreManager == null) return;
+    try {
+      final isStarted = await coreManager!.getIsStarted().timeout(
+          const Duration(seconds: 5));
+      if (isStarted) return; // already connected, nothing to do
+      final setting = await coreManager!.getSetting().catchError((_) => const Setting());
+      if (!setting.autoConnect) return;
+      appLog('WATCHDOG', 'connectivity restored + autoConnect on + not started — reconnecting');
+      await coreManager!.start();
+      appLog('WATCHDOG', 'reconnected after connectivity restore');
+    } catch (e) {
+      appLog('WATCHDOG', 'reconnect attempt failed: $e');
+    }
+  }
+
   void _startCoreWatchdog() {
     final proc = coreManager?.coreProcess?.process;
     if (proc == null) return;
@@ -1153,8 +1171,21 @@ class _HomeState extends State<Home>
       await Future.delayed(const Duration(seconds: 15));
       if (!mounted || coreManager == null) return false;
       try {
-        await coreManager!.getIsStarted().timeout(const Duration(seconds: 10));
+        final isStarted = await coreManager!.getIsStarted().timeout(const Duration(seconds: 10));
         _failCount = 0; // reset on success
+        // If lux is up but not connected and autoConnect is on, reconnect silently
+        if (!isStarted) {
+          appLog('WATCHDOG', 'heartbeat: lux_core up but isStarted=false — attempting reconnect');
+          try {
+            final setting = await coreManager!.getSetting().catchError((_) => const Setting());
+            if (setting.autoConnect) {
+              await coreManager!.start();
+              appLog('WATCHDOG', 'heartbeat: reconnected successfully');
+            }
+          } catch (reconnErr) {
+            appLog('WATCHDOG', 'heartbeat: reconnect failed: $reconnErr');
+          }
+        }
         return mounted;
       } catch (e) {
         _failCount++;
@@ -1322,6 +1353,8 @@ class _HomeState extends State<Home>
         appLog('NET', 'connectivity changed: $result — scheduling proxy check in 3s');
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) _checkForNetworkProxy();
+          // If lux was connected before and autoConnect is on, reconnect silently
+          _reconnectIfNeeded();
         });
       } else {
         appLog('NET', 'connectivity lost: $result');
