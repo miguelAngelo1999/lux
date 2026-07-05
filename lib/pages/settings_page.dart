@@ -386,7 +386,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         items: [
           e('Language', 'system english chinese locale',
               _dropdownTile<String>('Language', _currentLanguage(),
-                  ['system', 'en', 'zh-CN'], _languageLabel, _saveLanguage)),
+                  ['system', 'en', 'zh-CN', 'fil'], _languageLabel, _saveLanguage)),
           e('Theme', 'dark light system appearance',
               _dropdownTile<String>('Theme', _currentTheme(),
                   ['system', 'dark', 'light'], _themeLabel, _saveTheme)),
@@ -563,29 +563,36 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     ];
 
     if (isSearching) {
-      // Fuzzy search — match if all characters of query appear in order
-      // (like Spotlight), or as a substring (for normal typed words)
-      bool fuzzyMatch(String text, String query) {
-        if (text.contains(query)) return true; // fast substring match
-        // Character-order fuzzy match
+      // Ranked fuzzy search — score each entry and sort by relevance
+      // Scoring: exact title prefix = 3, title substring = 2, full-text substring = 1, fuzzy = 0
+      int score(String text, String query) {
+        if (text.startsWith(query)) return 3;
+        final titleEnd = text.indexOf(' ');
+        final title = titleEnd > 0 ? text.substring(0, titleEnd) : text;
+        if (title.contains(query)) return 2;
+        if (text.contains(query)) return 1;
+        // Character-order fuzzy
         int qi = 0;
         for (int i = 0; i < text.length && qi < query.length; i++) {
           if (text[i] == query[qi]) qi++;
         }
-        return qi == query.length;
+        return qi == query.length ? 0 : -1;
       }
 
-      final results = <Widget>[];
+      // Collect all matching entries with their score and category
+      final scored = <({int score, String category, Widget widget})>[];
       for (final group in allGroups) {
-        final matched = group.items
-            .where((entry) => fuzzyMatch(entry.text, _searchQuery))
-            .toList();
-        if (matched.isNotEmpty) {
-          results.add(_sectionHeader(group.category));
-          results.addAll(matched.map((e) => e.widget));
+        for (final entry in group.items) {
+          final s = score(entry.text, _searchQuery);
+          if (s >= 0) {
+            scored.add((score: s, category: group.category, widget: entry.widget));
+          }
         }
       }
-      if (results.isEmpty) {
+      // Sort by score descending (highest relevance first)
+      scored.sort((a, b) => b.score.compareTo(a.score));
+
+      if (scored.isEmpty) {
         return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -598,9 +605,34 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
         );
       }
+
+      // Group by category while preserving score order
+      // Show category badge next to each item instead of section headers
       return ListView(
         padding: const EdgeInsets.all(16),
-        children: results,
+        children: scored.map((r) => Stack(
+          children: [
+            r.widget,
+            Positioned(
+              top: 4,
+              right: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  r.category,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        )).toList(),
       );
     }
 
@@ -729,6 +761,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     final appState = Provider.of<AppStateModel>(context, listen: false);
     final locale = appState.locale;
     if (locale.languageCode == 'zh') return 'zh-CN';
+    if (locale.languageCode == 'fil') return 'fil';
     if (locale.languageCode == 'en') return 'en';
     return 'system';
   }
@@ -736,7 +769,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   String _languageLabel(String v) {
     switch (v) {
       case 'en': return 'English';
-      case 'zh-CN': return 'Σ╕¡µûç';
+      case 'zh-CN': return '简体中文';
+      case 'fil': return 'Filipino';
       default: return 'System';
     }
   }

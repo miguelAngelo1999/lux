@@ -87,23 +87,18 @@ Future<void> setAutoLaunch(CoreManager? coreManager) async {
 
 Locale convertLocale(String locale) {
   switch (locale) {
+    case 'en':
     case 'en-US':
-      {
-        return const Locale('en');
-      }
+      return const Locale('en');
     case 'zh-CN':
-      {
-        return const Locale('zh');
-      }
+      return const Locale('zh');
+    case 'fil':
+      return const Locale('fil');
     default:
-      {
-        var curLocale = Intl.getCurrentLocale();
-        if (curLocale.startsWith('zh')) {
-          return const Locale('zh');
-        } else {
-          return const Locale('en');
-        }
-      }
+      final curLocale = Intl.getCurrentLocale();
+      if (curLocale.startsWith('zh')) return const Locale('zh');
+      if (curLocale.startsWith('fil')) return const Locale('fil');
+      return const Locale('en');
   }
 }
 
