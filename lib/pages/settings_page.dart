@@ -13,6 +13,11 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
+// Search index entry: searchable text + the widget to render
+typedef _SettingEntry = ({String text, Widget widget});
+// A category group for the settings index
+typedef _SettingGroup = ({String category, List<_SettingEntry> items});
+
 class SettingsPage extends StatefulWidget {
   final CoreManager coreManager;
   const SettingsPage({super.key, required this.coreManager});
@@ -368,179 +373,216 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     final s = _setting!;
     final isTun = s.mode == ProxyMode.tun || s.mode == ProxyMode.mixed;
 
-    // All items grouped by category for search
-    final allGroups = <({String category, List<Widget> items})>[
+    // All items grouped by category.
+    // Each item carries: (searchable text, widget builder).
+    // searchable text = "title subtitle" lowercased for fuzzy matching.
+
+    _SettingEntry e(String title, String subtitle, Widget w) =>
+        (text: '$title $subtitle'.toLowerCase(), widget: w);
+
+    final allGroups = <_SettingGroup>[
       (
         category: 'General',
         items: [
-          _dropdownTile<String>('Language', _currentLanguage(),
-              ['system', 'en', 'zh-CN'], _languageLabel, _saveLanguage),
-          _dropdownTile<String>('Theme', _currentTheme(),
-              ['system', 'dark', 'light'], _themeLabel, _saveTheme),
-          _switchTile('Auto Launch', 'Start Lux when you log in',
-              s.autoLaunch, (v) => _save(s.copyWith(autoLaunch: v))),
-          _switchTile('Auto Connect', 'Connect proxy when Lux opens',
-              s.autoConnect, (v) => _save(s.copyWith(autoConnect: v))),
-          _switchTile('Sensitive Info Mode',
-              'Hide IP addresses and proxy names in UI',
-              s.sensitiveInfoMode ?? false,
-              (v) => _save(s.copyWith(sensitiveInfoMode: v))),
-          _resetDismissedProxiesTile(),
-          if (Platform.isWindows) _clearSavedProxyTile(),
+          e('Language', 'system english chinese locale',
+              _dropdownTile<String>('Language', _currentLanguage(),
+                  ['system', 'en', 'zh-CN'], _languageLabel, _saveLanguage)),
+          e('Theme', 'dark light system appearance',
+              _dropdownTile<String>('Theme', _currentTheme(),
+                  ['system', 'dark', 'light'], _themeLabel, _saveTheme)),
+          e('Auto Launch', 'Start Lux when you log in startup',
+              _switchTile('Auto Launch', 'Start Lux when you log in',
+                  s.autoLaunch, (v) => _save(s.copyWith(autoLaunch: v)))),
+          e('Auto Connect', 'Connect proxy when Lux opens automatically',
+              _switchTile('Auto Connect', 'Connect proxy when Lux opens',
+                  s.autoConnect, (v) => _save(s.copyWith(autoConnect: v)))),
+          e('Sensitive Info Mode', 'Hide IP addresses proxy names privacy',
+              _switchTile('Sensitive Info Mode',
+                  'Hide IP addresses and proxy names in UI',
+                  s.sensitiveInfoMode ?? false,
+                  (v) => _save(s.copyWith(sensitiveInfoMode: v)))),
+          e('Reset Dismissed Proxies', 'wizard dismissed prompts',
+              _resetDismissedProxiesTile()),
+          if (Platform.isWindows)
+            e('Clear Saved Proxy', 'windows saved credentials',
+                _clearSavedProxyTile()),
         ],
       ),
       (
         category: 'Network',
         items: [
-          _dropdownTile<ProxyMode>('Proxy Mode', s.mode,
-              [ProxyMode.system, ProxyMode.tun, ProxyMode.mixed],
-              getModeLabel, (v) => _save(s.copyWith(mode: v))),
-          _dropdownTile<String>(
-              'Default Interface',
-              s.defaultInterface.isEmpty ? '' : s.defaultInterface,
-              ['', ..._interfaces],
-              (v) => v.isEmpty ? 'Auto' : v,
-              (v) => _save(s.copyWith(defaultInterface: v))),
-          _numberTile('Local Server Port', s.localServerPort,
-              (v) => _save(s.copyWith(localServerPort: v))),
-          _switchTile('Allow LAN', 'Allow other devices to connect via LAN',
-              s.allowLan, (v) => _save(s.copyWith(allowLan: v))),
+          e('Proxy Mode', 'system tun mixed mode traffic routing',
+              _dropdownTile<ProxyMode>('Proxy Mode', s.mode,
+                  [ProxyMode.system, ProxyMode.tun, ProxyMode.mixed],
+                  getModeLabel, (v) => _save(s.copyWith(mode: v)))),
+          e('Default Interface', 'network adapter ethernet wifi interface',
+              _dropdownTile<String>(
+                  'Default Interface',
+                  s.defaultInterface.isEmpty ? '' : s.defaultInterface,
+                  ['', ..._interfaces],
+                  (v) => v.isEmpty ? 'Auto' : v,
+                  (v) => _save(s.copyWith(defaultInterface: v)))),
+          e('Local Server Port', 'port 1090 socks http local proxy server port number',
+              _numberTile('Local Server Port', s.localServerPort,
+                  (v) => _save(s.copyWith(localServerPort: v)))),
+          e('Allow LAN', 'local network other devices share access',
+              _switchTile('Allow LAN', 'Allow other devices to connect via LAN',
+                  s.allowLan, (v) => _save(s.copyWith(allowLan: v)))),
           if (Platform.isWindows)
-            _switchTile('Restore Auto-Detect Proxy on Exit',
-                'Re-enable Windows "Automatically detect settings" when Lux stops',
-                s.restoreAutoDetect ?? false,
-                (v) => _save(s.copyWith(restoreAutoDetect: v))),
-          _dropdownTile<String>('Auto Mode Type',
-              s.autoModeType.isEmpty ? 'fallback' : s.autoModeType,
-              ['fallback', 'url-test'],
-              (v) => v == 'fallback' ? 'Fallback' : 'URL Test (fastest)',
-              (v) => _save(s.copyWith(autoModeType: v))),
-          _switchTile('Enable Auto Mode',
-              'Automatically test proxies and select the best one',
-              s.autoModeEnabled,
-              (v) => _save(s.copyWith(autoModeEnabled: v))),
+            e('Restore Auto-Detect Proxy on Exit',
+                'windows autodetect wpad pac settings restore',
+                _switchTile('Restore Auto-Detect Proxy on Exit',
+                    'Re-enable Windows "Automatically detect settings" when Lux stops',
+                    s.restoreAutoDetect ?? false,
+                    (v) => _save(s.copyWith(restoreAutoDetect: v)))),
+          e('Auto Mode Type', 'fallback url-test fastest latency automatic',
+              _dropdownTile<String>('Auto Mode Type',
+                  s.autoModeType.isEmpty ? 'fallback' : s.autoModeType,
+                  ['fallback', 'url-test'],
+                  (v) => v == 'fallback' ? 'Fallback' : 'URL Test (fastest)',
+                  (v) => _save(s.copyWith(autoModeType: v)))),
+          e('Enable Auto Mode', 'automatically test proxies select best one',
+              _switchTile('Enable Auto Mode',
+                  'Automatically test proxies and select the best one',
+                  s.autoModeEnabled,
+                  (v) => _save(s.copyWith(autoModeEnabled: v)))),
           if (s.autoModeEnabled)
-            _textFieldTile('Test URL', s.autoModeUrl, 'https://google.com',
-                (v) => _save(s.copyWith(autoModeUrl: v))),
+            e('Test URL', 'auto mode connectivity check url ping',
+                _textFieldTile('Test URL', s.autoModeUrl, 'https://google.com',
+                    (v) => _save(s.copyWith(autoModeUrl: v)))),
         ],
       ),
       (
         category: 'DNS',
         items: [
-          if (!isTun)
-            const ListTile(
-              dense: true,
-              leading: Icon(Icons.info_outline, size: 16, color: Colors.grey),
-              title: Text('DNS settings apply in TUN / Mixed mode only',
-                  style: TextStyle(fontSize: 13, color: Colors.grey)),
-            )
-          else ...[
-            _switchTile('Fake IP',
-                'Forward DNS queries to proxy for better performance',
-                s.fakeIp ?? false,
-                (v) => _save(s.copyWith(fakeIp: v))),
-            if (s.fakeIp != true)
-              _dnsListTile('Remote DNS', 'Resolve foreign domains',
-                  _dnsRemote, (v) => _saveDnsList('remote', v)),
-            _dnsListTile('Local DNS', 'Resolve domestic domains',
-                _dnsLocal, (v) => _saveDnsList('local', v)),
-            _dnsListTile('Boost DNS', 'Initial bootstrap resolution',
-                _dnsBoost, (v) => _saveDnsList('boost', v)),
-            _switchTile('Disable DNS Cache',
-                'Always get latest DNS responses',
-                s.disableDnsCache ?? false,
-                (v) => _save(s.copyWith(disableDnsCache: v))),
-            _switchTile('Hijack DNS',
-                'Modify system DNS to route through Lux',
-                s.hijackDns,
-                (v) => _save(s.copyWith(hijackDns: v))),
-          ],
+          e('Fake IP', 'DNS forward proxy performance fakeip',
+              _switchTile('Fake IP',
+                  'Forward DNS queries to proxy for better performance',
+                  s.fakeIp ?? false,
+                  (v) => _save(s.copyWith(fakeIp: v)))),
+          if (s.fakeIp != true)
+            e('Remote DNS', 'Resolve foreign domains 8.8.8.8 1.1.1.1',
+                _dnsListTile('Remote DNS', 'Resolve foreign domains',
+                    _dnsRemote, (v) => _saveDnsList('remote', v))),
+          e('Local DNS', 'Resolve domestic domains 114 dhcp system auto',
+              _dnsListTile('Local DNS', 'Resolve domestic domains',
+                  _dnsLocal, (v) => _saveDnsList('local', v))),
+          e('Boost DNS', 'Initial bootstrap resolution dhcp system auto',
+              _dnsListTile('Boost DNS', 'Initial bootstrap resolution',
+                  _dnsBoost, (v) => _saveDnsList('boost', v))),
+          e('Disable DNS Cache', 'always latest responses flush',
+              _switchTile('Disable DNS Cache',
+                  'Always get latest DNS responses',
+                  s.disableDnsCache ?? false,
+                  (v) => _save(s.copyWith(disableDnsCache: v)))),
+          e('Hijack DNS', 'system dns modify route through lux',
+              _switchTile('Hijack DNS',
+                  'Modify system DNS to route through Lux',
+                  s.hijackDns,
+                  (v) => _save(s.copyWith(hijackDns: v)))),
         ],
       ),
       (
         category: 'TUN / Mixed',
         items: [
-          if (!isTun)
-            const ListTile(
-              dense: true,
-              leading: Icon(Icons.info_outline, size: 16, color: Colors.grey),
-              title: Text('Switch to TUN or Mixed mode to enable these options',
-                  style: TextStyle(fontSize: 13, color: Colors.grey)),
-            )
-          else ...[
-            _switchTile('Block QUIC',
-                'Disable HTTP/3 (fixes YouTube and some sites)',
-                s.blockQuic ?? false,
-                (v) => _save(s.copyWith(blockQuic: v))),
-            _switchTile('Find Process',
-                'Identify which app made each connection (shows in Connections)',
-                s.shouldFindProcess ?? false,
-                (v) => _save(s.copyWith(shouldFindProcess: v))),
-          ],
+          e('Block QUIC', 'HTTP/3 YouTube disable fix',
+              _switchTile('Block QUIC',
+                  'Disable HTTP/3 (fixes YouTube and some sites)',
+                  s.blockQuic ?? false,
+                  (v) => _save(s.copyWith(blockQuic: v)))),
+          e('Find Process', 'Identify app connection process name connections',
+              _switchTile('Find Process',
+                  'Identify which app made each connection (shows in Connections)',
+                  s.shouldFindProcess ?? false,
+                  (v) => _save(s.copyWith(shouldFindProcess: v)))),
         ],
       ),
       (
         category: 'Load Balancing',
         items: [
-          _switchTile('Enable Load Balancing',
-              'Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.',
-              s.loadBalanceEnabled,
-              (v) => _save(s.copyWith(loadBalanceEnabled: v))),
+          e('Enable Load Balancing', 'distribute direct connections multiple interfaces round-robin',
+              _switchTile('Enable Load Balancing',
+                  'Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.',
+                  s.loadBalanceEnabled,
+                  (v) => _save(s.copyWith(loadBalanceEnabled: v)))),
           if (s.loadBalanceEnabled) ...[
-            _dropdownTile<String>(
-                'Strategy',
-                s.loadBalanceStrategy.isEmpty
-                    ? 'least-conn'
-                    : s.loadBalanceStrategy,
-                ['least-conn', 'round-robin', 'weighted', 'failover'],
-                (v) {
-                  switch (v) {
-                    case 'round-robin': return 'Round Robin — rotate evenly';
-                    case 'weighted': return 'Weighted — faster gets more';
-                    case 'failover': return 'Failover — primary + standby';
-                    default: return 'Least Connections (recommended)';
-                  }
-                },
-                (v) => _save(s.copyWith(loadBalanceStrategy: v))),
-            _interfaceMultiSelectTile(
-                'Balance Interfaces',
-                'Select 2 or more interfaces',
-                s.loadBalanceInterfaces,
-                (sel) => _save(s.copyWith(loadBalanceInterfaces: sel))),
-            _loadBalanceStatusTile(),
+            e('Strategy', 'least connections round-robin weighted failover load balance',
+                _dropdownTile<String>(
+                    'Strategy',
+                    s.loadBalanceStrategy.isEmpty ? 'least-conn' : s.loadBalanceStrategy,
+                    ['least-conn', 'round-robin', 'weighted', 'failover'],
+                    (v) {
+                      switch (v) {
+                        case 'round-robin': return 'Round Robin — rotate evenly';
+                        case 'weighted': return 'Weighted — faster gets more';
+                        case 'failover': return 'Failover — primary + standby';
+                        default: return 'Least Connections (recommended)';
+                      }
+                    },
+                    (v) => _save(s.copyWith(loadBalanceStrategy: v)))),
+            e('Balance Interfaces', 'select interfaces ethernet wifi adapter',
+                _interfaceMultiSelectTile(
+                    'Balance Interfaces',
+                    'Select 2 or more interfaces',
+                    s.loadBalanceInterfaces,
+                    (sel) => _save(s.copyWith(loadBalanceInterfaces: sel)))),
+            e('Interface Health', 'load balance status healthy',
+                _loadBalanceStatusTile()),
           ],
         ],
       ),
       (
         category: 'SSL & MITM',
         items: [
-          _sslInspectionSection(),
-          if (Platform.isWindows) _networkToolsSection(),
-          _mitmSection(),
+          e('SSL Inspection', 'certificate corporate proxy intercept trust CA cert',
+              _sslInspectionSection()),
+          if (Platform.isWindows)
+            e('Network Tools', 'windows network fix corporate proxy',
+                _networkToolsSection()),
+          e('Corporate Proxy Fix', 'MITM certificate trust install',
+              _mitmSection()),
         ],
       ),
       (
         category: 'Advanced',
         items: [
-          _checkForUpdatesTile(),
-          _configFileTile(),
-          _resetNetworkTile(),
-          _resetWizardDismissalsTile(),
-          _pacStatusTile(),
-          _importExportTile(),
+          e('Check for Updates', 'update version upgrade latest',
+              _checkForUpdatesTile()),
+          e('Config File', 'open configuration json file path',
+              _configFileTile()),
+          e('Reset Network', 'clear system proxy env vars stuck internet crash',
+              _resetNetworkTile()),
+          e('Reset Wizard', 'dismissed wizard prompts setup restart',
+              _resetWizardDismissalsTile()),
+          e('PAC Rules', 'pac file proxy auto config domains',
+              _pacStatusTile()),
+          e('Backup Restore', 'export import configuration backup',
+              _importExportTile()),
         ],
       ),
     ];
 
     if (isSearching) {
-      // Search mode — show matches from all categories
+      // Fuzzy search — match if all characters of query appear in order
+      // (like Spotlight), or as a substring (for normal typed words)
+      bool fuzzyMatch(String text, String query) {
+        if (text.contains(query)) return true; // fast substring match
+        // Character-order fuzzy match
+        int qi = 0;
+        for (int i = 0; i < text.length && qi < query.length; i++) {
+          if (text[i] == query[qi]) qi++;
+        }
+        return qi == query.length;
+      }
+
       final results = <Widget>[];
       for (final group in allGroups) {
-        // We can't search widget content directly, so we match on category name
-        // and always show the full category when searching its name
-        if (group.category.toLowerCase().contains(_searchQuery)) {
+        final matched = group.items
+            .where((entry) => fuzzyMatch(entry.text, _searchQuery))
+            .toList();
+        if (matched.isNotEmpty) {
           results.add(_sectionHeader(group.category));
-          results.addAll(group.items);
+          results.addAll(matched.map((e) => e.widget));
         }
       }
       if (results.isEmpty) {
@@ -576,7 +618,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 ),
           ),
         ),
-        ...group.items,
+        ...group.items.map((e) => e.widget),
       ],
     );
   }
