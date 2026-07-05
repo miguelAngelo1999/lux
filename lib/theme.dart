@@ -135,6 +135,23 @@ abstract final class AppTheme {
     visualDensity: FlexColorScheme.comfortablePlatformDensity,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     cupertinoOverrideTheme: const CupertinoThemeData(applyThemeToAll: true),
+  ).copyWith(
+    // Lighter font weights — the default bold strokes look too heavy on macOS
+    iconTheme: const IconThemeData(weight: 300),
+    textTheme: const TextTheme(
+      bodyLarge:    TextStyle(fontWeight: FontWeight.w400),
+      bodyMedium:   TextStyle(fontWeight: FontWeight.w400),
+      bodySmall:    TextStyle(fontWeight: FontWeight.w400),
+      labelLarge:   TextStyle(fontWeight: FontWeight.w400),
+      labelMedium:  TextStyle(fontWeight: FontWeight.w400),
+      labelSmall:   TextStyle(fontWeight: FontWeight.w400),
+      titleLarge:   TextStyle(fontWeight: FontWeight.w500),
+      titleMedium:  TextStyle(fontWeight: FontWeight.w500),
+      titleSmall:   TextStyle(fontWeight: FontWeight.w500),
+      headlineLarge:  TextStyle(fontWeight: FontWeight.w500),
+      headlineMedium: TextStyle(fontWeight: FontWeight.w500),
+      headlineSmall:  TextStyle(fontWeight: FontWeight.w500),
+    ),
   );
 
   // The FlexColorScheme defined dark mode ThemeData.
@@ -253,5 +270,21 @@ abstract final class AppTheme {
     visualDensity: FlexColorScheme.comfortablePlatformDensity,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     cupertinoOverrideTheme: const CupertinoThemeData(applyThemeToAll: true),
+  ).copyWith(
+    iconTheme: const IconThemeData(weight: 300),
+    textTheme: const TextTheme(
+      bodyLarge:    TextStyle(fontWeight: FontWeight.w400),
+      bodyMedium:   TextStyle(fontWeight: FontWeight.w400),
+      bodySmall:    TextStyle(fontWeight: FontWeight.w400),
+      labelLarge:   TextStyle(fontWeight: FontWeight.w400),
+      labelMedium:  TextStyle(fontWeight: FontWeight.w400),
+      labelSmall:   TextStyle(fontWeight: FontWeight.w400),
+      titleLarge:   TextStyle(fontWeight: FontWeight.w500),
+      titleMedium:  TextStyle(fontWeight: FontWeight.w500),
+      titleSmall:   TextStyle(fontWeight: FontWeight.w500),
+      headlineLarge:  TextStyle(fontWeight: FontWeight.w500),
+      headlineMedium: TextStyle(fontWeight: FontWeight.w500),
+      headlineSmall:  TextStyle(fontWeight: FontWeight.w500),
+    ),
   );
 }

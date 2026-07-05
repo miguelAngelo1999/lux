@@ -49,10 +49,7 @@ class _App extends State<App> {
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
           ],
-          supportedLocales: [
-            Locale('en'),
-            Locale('zh'),
-          ],
+          supportedLocales: AppLocalizations.supportedLocales,
         ),
       ),
     );
