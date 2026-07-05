@@ -201,12 +201,16 @@ class _HomeState extends State<Home>
   /// Runs once in the background — no dialog, no user interaction needed.
   Future<void> _ensureUwpLoopback() async {
     try {
-      // UWP loopback exemption
-      await Process.run('powershell.exe', [
+      // UWP loopback exemption — use a single batched PowerShell call
+      // instead of spawning CheckNetIsolation.exe hundreds of times.
+      // Limit to 60s timeout to avoid hanging indefinitely.
+      appLog('UWP', 'applying loopback exemption...');
+      final result = await Process.run('powershell.exe', [
         '-noprofile', '-NonInteractive', '-WindowStyle', 'Hidden', '-command',
-        r'Get-AppxPackage | ForEach-Object { CheckNetIsolation.exe LoopbackExempt -a -n=$($_.PackageFamilyName) 2>$null }',
-      ]);
-      debugPrint('[UWP] loopback exemption applied');
+        r'$pkgs = Get-AppxPackage | Select-Object -ExpandProperty PackageFamilyName; '
+        r'foreach ($pkg in $pkgs) { CheckNetIsolation.exe LoopbackExempt -a "-n=$pkg" 2>$null }',
+      ]).timeout(const Duration(seconds: 60));
+      appLog('UWP', 'loopback exemption done exit=${result.exitCode}');
 
       // NODE_TLS_REJECT_UNAUTHORIZED — only set if not already present
       final existing = await Process.run('powershell.exe', [
@@ -238,6 +242,7 @@ class _HomeState extends State<Home>
         }
       }
     } catch (e) {
+      appLog('UWP', 'background setup failed: $e');
       debugPrint('[UWP] background setup failed: $e');
     }
   }
