@@ -1,15 +1,15 @@
 {
   "version": "1.42.0",
   "channel": "stable",
-  "notes": "Detached Windows updater, proxy detection improvements, auto UWP loopback",
+  "notes": "Proxy detection fixed, auto UWP loopback, cert store fixes, detached Windows updater, silent system config at startup",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
     "sha256": "e20ed3dceb4012d412692cb749d06b677b5ab926bcf777206a80f0c047b5147d",
     "size": 38911472
   },
   "windows": {
-    "url": "",
-    "sha256": "",
-    "size": 0
+    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
+    "sha256": "df793d9e43b38e9059b7320f5914eafb516cd96dda84094fc9bf418e286370fb",
+    "size": 33271171
   }
 }
