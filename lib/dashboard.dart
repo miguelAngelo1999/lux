@@ -147,24 +147,68 @@ class _DashboardState extends State<Dashboard> with WindowListener {
 
     return Scaffold(
       appBar: appBar,
-      body: Row(
+      body: Column(
         children: [
-          // Left navigation rail
-          NavigationRail(
-            selectedIndex: _selectedTab,
-            onDestinationSelected: (i) => setState(() => _selectedTab = i),
-            labelType: NavigationRailLabelType.all,
-            minWidth: 64,
-            destinations: _tabs
-                .map((t) => NavigationRailDestination(
-                      icon: Icon(t.icon, size: 20),
-                      label: Text(t.label,
-                          style: const TextStyle(fontSize: 10)),
-                    ))
-                .toList(),
+          // ── Top storyboard tab bar ──────────────────────────────────────
+          Container(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Theme.of(context).dividerColor,
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: List.generate(_tabs.length, (i) {
+                final tab = _tabs[i];
+                final selected = _selectedTab == i;
+                return InkWell(
+                  onTap: () => setState(() => _selectedTab = i),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: selected
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          tab.icon,
+                          size: 16,
+                          color: selected
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          tab.label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: selected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: selected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
           ),
-          const VerticalDivider(width: 1, thickness: 1),
-          // Main content
+          // ── Page content ────────────────────────────────────────────────
           Expanded(child: _buildPage()),
         ],
       ),
