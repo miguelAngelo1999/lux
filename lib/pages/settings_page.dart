@@ -777,8 +777,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   Future<void> _saveLanguage(String v) async {
     final appState = Provider.of<AppStateModel>(context, listen: false);
-    appState.updateLocale(convertLocale(v));
-    // Persist via the backend setting API
+    setState(() => _isSaving = true);
     try {
       final current = await widget.coreManager.dio.get(
           'http://${widget.coreManager.baseUrl}/setting');
@@ -786,8 +785,19 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       raw['language'] = v;
       await widget.coreManager.dio.put(
           'http://${widget.coreManager.baseUrl}/setting', data: raw);
+      // Only update UI after successful save
+      appState.updateLocale(convertLocale(v));
     } catch (e) {
-      debugPrint('Failed to save language: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save language: $e')),
+        );
+        // Revert — nothing to revert since UI not changed yet
+        setState(() {}); // re-render to show previous value in dropdown
+        debugPrint('Failed to save language: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -810,7 +820,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   Future<void> _saveTheme(String v) async {
     final appState = Provider.of<AppStateModel>(context, listen: false);
-    appState.updateTheme(convertTheme(v));
+    setState(() => _isSaving = true);
     try {
       final current = await widget.coreManager.dio.get(
           'http://${widget.coreManager.baseUrl}/setting');
@@ -818,8 +828,17 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       raw['theme'] = v;
       await widget.coreManager.dio.put(
           'http://${widget.coreManager.baseUrl}/setting', data: raw);
+      // Only update UI after successful save
+      appState.updateTheme(convertTheme(v));
     } catch (e) {
-      debugPrint('Failed to save theme: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save theme: $e')),
+        );
+        setState(() {}); // re-render to show previous value
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
