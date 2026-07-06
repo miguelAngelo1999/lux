@@ -100,7 +100,6 @@ const _allApps = [
     domains: [
       'prod.us-east-1.telemetry.desktop.kiro.dev',
       'prod.download.desktop.kiro.dev',
-      '*.kiro.dev',
       'bedrock-runtime.us-east-1.amazonaws.com',
     ],
     reason: 'AWS-based language server uses Go strict certificate validation',
