@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:lux/util/t_text.dart';
 
 class RulesPage extends StatefulWidget {
   final CoreManager coreManager;
@@ -220,8 +221,8 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                       labelText: 'Protocol (optional)', isDense: true),
                   items: const [
                     DropdownMenuItem(value: null,  child: Text('Both (TCP + UDP)')),
-                    DropdownMenuItem(value: 'tcp', child: Text('TCP only')),
-                    DropdownMenuItem(value: 'udp', child: Text('UDP only')),
+                    DropdownMenuItem(value: 'tcp', child: TText('TCP only')),
+                    DropdownMenuItem(value: 'udp', child: TText('UDP only')),
                   ],
                   onChanged: (v) => setDialogState(() => protocol = v),
                 ),
@@ -231,11 +232,11 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
+              child: TText('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save'),
+              child: TText('Save'),
             ),
           ],
         ),
@@ -382,7 +383,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                       FilledButton.icon(
                         onPressed: () => _showAddEdit(),
                         icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Add first rule'),
+                        label: TText('Add first rule'),
                       ),
                     ],
                   ),

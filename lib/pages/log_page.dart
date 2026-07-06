@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:lux/util/t_text.dart';
 
 class LogEntry {
   final String level;
@@ -236,7 +237,7 @@ class _LogPageState extends State<LogPage> {
                       const SizedBox(height: 4),
                       SelectableText(_error!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                       const SizedBox(height: 8),
-                      TextButton(onPressed: () { setState(() => _error = null); _connect(); }, child: const Text('Retry')),
+                      TextButton(onPressed: () { setState(() => _error = null); _connect(); }, child: TText('Retry')),
                     ],
                   ),
                 )

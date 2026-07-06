@@ -3,6 +3,7 @@ import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/util/elevation_helper.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:lux/util/t_text.dart';
 
 /// A compact credential editor that appears as a floating panel near the menubar.
 /// Shows profile selector + username + password fields.
@@ -258,7 +259,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                                   const EdgeInsets.symmetric(vertical: 8),
                               textStyle: const TextStyle(fontSize: 12),
                             ),
-                            child: const Text('Cancel'),
+                            child: TText('Cancel'),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -278,7 +279,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                                         strokeWidth: 2,
                                         color: Colors.white),
                                   )
-                                : const Text('Save'),
+                                : TText('Save'),
                           ),
                         ),
                       ],

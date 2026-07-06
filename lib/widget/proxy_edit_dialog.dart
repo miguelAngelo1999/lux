@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/util/elevation_helper.dart';
+import 'package:lux/util/t_text.dart';
 
 /// Dialog for creating or editing a proxy configuration.
 /// Supports HTTP, SOCKS5, and Shadowsocks proxy types.
@@ -46,7 +47,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
     if (_passwordMode == 'one-time' || _passwordMode == 'timed') {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This password mode does not allow revealing the password')),
+        const SnackBar(content: TText('This password mode does not allow revealing the password')),
       );
       return false;
     }
@@ -146,9 +147,9 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           value: _type,
                           decoration: const InputDecoration(labelText: 'Type'),
                           items: const [
-                            DropdownMenuItem(value: 'http', child: Text('HTTP')),
-                            DropdownMenuItem(value: 'socks5', child: Text('SOCKS5')),
-                            DropdownMenuItem(value: 'ss', child: Text('Shadowsocks')),
+                            DropdownMenuItem(value: 'http', child: TText('HTTP')),
+                            DropdownMenuItem(value: 'socks5', child: TText('SOCKS5')),
+                            DropdownMenuItem(value: 'ss', child: TText('Shadowsocks')),
                           ],
                           onChanged: isEditing ? null : (v) => setState(() => _type = v!),
                         ),
@@ -219,7 +220,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           value: _passwordMode,
                           decoration: const InputDecoration(labelText: 'Password Mode'),
                           items: const [
-                            DropdownMenuItem(value: 'persistent', child: Text('Persistent')),
+                            DropdownMenuItem(value: 'persistent', child: TText('Persistent')),
                             DropdownMenuItem(value: 'one-time', child: Text('One-time (clears on switch)')),
                             DropdownMenuItem(value: 'timed', child: Text('Timed (auto-expires)')),
                           ],
@@ -264,7 +265,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                   children: [
                     TextButton(
                       onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: TText('Cancel'),
                     ),
                     const SizedBox(width: 8),
                     FilledButton(

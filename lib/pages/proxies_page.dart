@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
+import 'package:lux/util/t_text.dart';
 
 class ProxiesPage extends StatefulWidget {
   final CoreManager coreManager;
@@ -257,7 +258,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       if (!mounted) return;
       if (detected == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No network proxy detected on this network')),
+          const SnackBar(content: TText('No network proxy detected on this network')),
         );
         return;
       }
@@ -496,7 +497,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
+              child: TText('Cancel'),
             ),
             FilledButton(
               onPressed: () async {
@@ -522,7 +523,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Proxy added')));
+                    const SnackBar(content: TText('Proxy added')));
 
                   // Re-probe with credentials if provided
                   String proxyAddr;
@@ -566,7 +567,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     SnackBar(content: Text('Failed: $e')));
                 }
               },
-              child: const Text('Add to Lux'),
+              child: TText('Add to Lux'),
             ),
           ],
         ),
@@ -598,7 +599,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Skip'),
+            child: TText('Skip'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
@@ -624,7 +625,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   SnackBar(content: Text('Install failed: $e')));
               }
             },
-            child: const Text('Trust & Install'),
+            child: TText('Trust & Install'),
           ),
         ],
       ),
