@@ -473,9 +473,11 @@ class _HomeState extends State<Home>
       if (!mounted) return;
 
       if (detected == null) {
-        // SSL bump detected but no proxy found — show dialog with empty server field.
-        // User must enter the proxy address manually.
+        // SSL bump detected but no proxy found.
+        // Don't show the empty-server dialog — the retry call will get the real address.
+        // Only show if this is a forced/retry call (meaning we've already waited for core to be ready).
         if (!hasBump) return;
+        if (!force) return; // Wait for the retry to get the actual server address
         final syntheticProxy = DetectedProxy(
           host: '', port: '8080', scheme: 'http',
           source: 'ssl-bump', needsAuth: true,
