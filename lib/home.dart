@@ -390,10 +390,11 @@ class _HomeState extends State<Home>
   // Guard against running check while wizard is already showing
   bool _wizardShowing = false;
 
-  Future<void> _checkForNetworkProxy() async {
+  Future<void> _checkForNetworkProxy({bool force = false}) async {
     // Don't re-run within 60 seconds (prevents connectivity-change retriggering)
+    // force=true bypasses debounce for explicit startup/retry calls
     final now = DateTime.now();
-    if (_lastProxyCheck != null && now.difference(_lastProxyCheck!).inSeconds < 60) return;
+    if (!force && _lastProxyCheck != null && now.difference(_lastProxyCheck!).inSeconds < 60) return;
     _lastProxyCheck = now;
     // Don't stack wizards
     if (_wizardShowing) return;
@@ -1222,9 +1223,15 @@ class _HomeState extends State<Home>
     setState(() {
       isCoreReady.value = true;
     });
-    // After core starts, probe for a network proxy in the background
-    // and ensure SSL bump certs are installed if needed.
-    Future.delayed(const Duration(milliseconds: 500), () => _checkForNetworkProxy());
+    // After core starts, probe for a network proxy in the background.
+    // Wait 3s for lux_core to fully initialize its HTTP routes.
+    // If the first check fails (null result / timeout), retry at 20s.
+    Future.delayed(const Duration(seconds: 3), () async {
+      await _checkForNetworkProxy(force: true);
+      // Retry once after 20s in case lux_core was still starting up first time
+      await Future.delayed(const Duration(seconds: 20));
+      if (mounted) await _checkForNetworkProxy(force: true);
+    });
     // Detect corporate vs home network and switch rules accordingly
     Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
     // On Windows: silently apply UWP loopback exemption in the background.
