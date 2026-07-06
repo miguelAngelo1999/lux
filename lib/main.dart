@@ -52,13 +52,19 @@ void main(List<String> args) async {
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       // Explicitly re-apply title bar style after window is ready.
-      // WindowOptions.windowButtonVisibility alone is sometimes ignored
-      // on macOS — calling setTitleBarStyle here ensures traffic lights appear.
       if (Platform.isMacOS) {
         await windowManager.setTitleBarStyle(
           TitleBarStyle.hidden,
           windowButtonVisibility: true,
         );
+      }
+      // Guard: if window was left at quick-edit size (e.g. after a crash),
+      // reset to normal 800x650 so UI isn't squashed on restart.
+      if (Platform.isWindows) {
+        final sz = await windowManager.getSize();
+        if (sz.width < 500 || sz.height < 400) {
+          await windowManager.setSize(const Size(800, 650));
+        }
       }
       windowManager.center();
       var isLaunchFromStartUp =
