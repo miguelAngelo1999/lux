@@ -80,14 +80,8 @@ const _allApps = [
     icon: Icons.air,
     windowsPaths: [r'C:\Users\*\AppData\Local\Programs\Windsurf\Windsurf.exe'],
     macosPaths: ['/Applications/Windsurf.app'],
-    domains: [
-      'server.self-serve.windsurf.com',
-      'inference.codeium.com',
-      'api.codeium.com',
-      '*.codeium.com',
-    ],
-    reason: 'Codeium Go language server uses strict TLS validation',
-    hasCertIssues: true,
+    domains: [],
+    reason: 'Codeium extension — NODE_EXTRA_CA_CERTS handles proxy cert trust',
   ),
   _AppEntry(
     name: 'Kiro',
@@ -97,13 +91,8 @@ const _allApps = [
       '/Applications/Kiro.app',
       '/Applications/Kiro CLI.app',
     ],
-    domains: [
-      'prod.us-east-1.telemetry.desktop.kiro.dev',
-      'prod.download.desktop.kiro.dev',
-      'bedrock-runtime.us-east-1.amazonaws.com',
-    ],
-    reason: 'AWS-based language server uses Go strict certificate validation',
-    hasCertIssues: true,
+    domains: [],
+    reason: 'Kiro IDE — NODE_EXTRA_CA_CERTS handles proxy cert trust',
   ),
 
   // ── Apps that work fine with just NODE_EXTRA_CA_CERTS ─────────────────────
