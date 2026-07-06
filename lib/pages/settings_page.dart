@@ -12,6 +12,7 @@ import 'package:lux/util/utils.dart' hide checkForUpdate;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:lux/util/t_text.dart';
 
 // Search index entry: searchable text + the widget to render
 typedef _SettingEntry = ({String text, Widget widget});
@@ -188,7 +189,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         title: const Row(children: [
           Icon(Icons.admin_panel_settings, size: 20),
           SizedBox(width: 8),
-          Text('Elevation required'),
+          TText('Elevation required'),
         ]),
         content: Text(hasTask
             ? 'TUN/Mixed mode requires admin privileges.\n\n'
@@ -199,11 +200,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: TText('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Restart & Apply'),
+            child: TText('Restart & Apply'),
           ),
         ],
       ),
@@ -386,7 +387,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         items: [
           e('Language', 'system english chinese locale',
               _dropdownTile<String>('Language', _currentLanguage(),
-                  ['system', 'en', 'zh-CN', 'fil'], _languageLabel, _saveLanguage)),
+                  ['system', 'en', 'zh-CN', 'fil', 'es', 'fr', 'pt', 'ar', 'de', 'ja', 'ko'], _languageLabel, _saveLanguage)),
           e('Theme', 'dark light system appearance',
               _dropdownTile<String>('Theme', _currentTheme(),
                   ['system', 'dark', 'light'], _themeLabel, _saveTheme)),
@@ -643,7 +644,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: Text(
+          child: TText(
             group.category,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
@@ -695,8 +696,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       void Function(List<String>) onSave) {
     return ListTile(
       dense: true,
-      title: Text(title, style: const TextStyle(fontSize: 14)),
-      subtitle: Text(
+      title: TText(title, style: const TextStyle(fontSize: 14)),
+      subtitle: TText(
         servers.isEmpty ? subtitle : servers.join(', '),
         style: const TextStyle(fontSize: 11),
         maxLines: 2,
@@ -759,19 +760,26 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   String _currentLanguage() {
     final appState = Provider.of<AppStateModel>(context, listen: false);
-    final locale = appState.locale;
-    if (locale.languageCode == 'zh') return 'zh-CN';
-    if (locale.languageCode == 'fil') return 'fil';
-    if (locale.languageCode == 'en') return 'en';
+    final code = appState.locale.languageCode;
+    if (code == 'zh') return 'zh-CN';
+    const known = ['fil', 'es', 'fr', 'pt', 'ar', 'de', 'ja', 'ko', 'en'];
+    if (known.contains(code)) return code;
     return 'system';
   }
 
   String _languageLabel(String v) {
     switch (v) {
-      case 'en': return 'English';
+      case 'en':    return 'English';
       case 'zh-CN': return '简体中文';
-      case 'fil': return 'Filipino';
-      default: return 'System';
+      case 'fil':   return 'Filipino';
+      case 'es':    return 'Español';
+      case 'fr':    return 'Français';
+      case 'pt':    return 'Português';
+      case 'ar':    return 'العربية';
+      case 'de':    return 'Deutsch';
+      case 'ja':    return '日本語';
+      case 'ko':    return '한국어';
+      default:      return 'System';
     }
   }
 
@@ -874,7 +882,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       final source = File('$homeDir/config.json');
       if (!source.existsSync()) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('config.json not found')));
+          const SnackBar(content: TText('config.json not found')));
         return;
       }
 
@@ -922,7 +930,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         final typed = await showDialog<String>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Import Config'),
+            title: TText('Import Config'),
             content: TextField(
               controller: controller,
               decoration: const InputDecoration(
@@ -931,8 +939,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Cancel')),
-              FilledButton(onPressed: () => Navigator.of(ctx).pop(controller.text.trim()), child: const Text('Open')),
+              TextButton(onPressed: () => Navigator.of(ctx).pop(null), child: TText('Cancel')),
+              FilledButton(onPressed: () => Navigator.of(ctx).pop(controller.text.trim()), child: TText('Open')),
             ],
           ),
         );
@@ -952,26 +960,26 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         parsed = jsonDecode(content) as Map<String, dynamic>;
       } catch (_) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid JSON'), backgroundColor: Colors.red));
+          const SnackBar(content: TText('Invalid JSON'), backgroundColor: Colors.red));
         return;
       }
       if (!parsed.containsKey('setting') && !parsed.containsKey('proxy')) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Not a valid Lux config'), backgroundColor: Colors.red));
+          const SnackBar(content: TText('Not a valid Lux config'), backgroundColor: Colors.red));
         return;
       }
       if (!mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Import Config'),
-          content: const Text('Replaces current config. Restart to apply. Continue?'),
+          title: TText('Import Config'),
+          content: TText('Replaces current config. Restart to apply. Continue?'),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: TText('Cancel')),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: Colors.orange),
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Import'),
+              child: TText('Import'),
             ),
           ],
         ),
@@ -982,7 +990,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       await dest.copy('$homeDir/config.json.bak');
       await source.copy(dest.path);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Imported. Restart Lux to apply.')));
+        const SnackBar(content: TText('Imported. Restart Lux to apply.')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Import failed: $e'), backgroundColor: Colors.red));
@@ -1062,7 +1070,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (!mounted) return;
       if (info == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not reach update server')));
+          const SnackBar(content: TText('Could not reach update server')));
         return;
       }
       if (!info.hasUpdate) {
@@ -1091,7 +1099,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 final confirmed = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: const Text('Reset Network Settings?'),
+                    title: TText('Reset Network Settings?'),
                     content: const Text(
                         'This clears the system proxy, HTTP_PROXY env vars, and git proxy. '
                         'Use this if internet is broken after Lux crashed.\n\n'
@@ -1099,12 +1107,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel')),
+                          child: TText('Cancel')),
                       FilledButton(
                           style: FilledButton.styleFrom(
                               backgroundColor: Colors.orange),
                           onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Reset')),
+                          child: TText('Reset')),
                     ],
                   ),
                 );
@@ -1112,7 +1120,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 await NetworkReset.reset();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Network settings reset. Reconnect Lux to use proxy.')),
+                    const SnackBar(content: TText('Network settings reset. Reconnect Lux to use proxy.')),
                   );
                 }
               },
@@ -1136,7 +1144,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Wizard steps reset — they will show again on next network connection.'),
+                      content: TText('Wizard steps reset — they will show again on next network connection.'),
                     ),
                   );
                 }
@@ -1176,19 +1184,19 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reset Configuration'),
+        title: TText('Reset Configuration'),
         content: const Text(
           'This will reset all settings to defaults. The app will restart. Continue?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: TText('Cancel'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Reset'),
+            child: TText('Reset'),
           ),
         ],
       ),
@@ -1200,7 +1208,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           'http://${widget.coreManager.baseUrl}/setting/reset');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Config reset. Restart the app.')),
+          const SnackBar(content: TText('Config reset. Restart the app.')),
         );
       }
     } catch (e) {
@@ -1280,7 +1288,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (pemBytes == null || pemBytes.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No certificate available to install')),
+            const SnackBar(content: TText('No certificate available to install')),
           );
         }
         return;
@@ -1377,12 +1385,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel'),
+                child: TText('Cancel'),
               ),
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
                 onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('I trust this — install'),
+                child: TText('I trust this — install'),
               ),
             ],
           ),
@@ -1899,7 +1907,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         SizedBox(width: 16, height: 16,
             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
         SizedBox(width: 12),
-        Text('Installing CA certificate…'),
+        TText('Installing CA certificate…'),
       ]),
       duration: Duration(seconds: 30),
     ));
@@ -1909,7 +1917,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         if (mounted) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('CA not available — enable Corporate Proxy Fix first')));
+              const SnackBar(content: TText('CA not available — enable Corporate Proxy Fix first')));
         }
         return;
       }
@@ -2047,9 +2055,9 @@ Write-Output "ok"
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancel')),
+              child: TText('Cancel')),
           FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-              child: const Text('Add')),
+              child: TText('Add')),
         ],
       ),
     );
@@ -2076,7 +2084,7 @@ Write-Output "ok"
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Proxy detection dialogs will show again on next launch'),
+                content: TText('Proxy detection dialogs will show again on next launch'),
                 duration: Duration(seconds: 3),
               ),
             );
@@ -2103,7 +2111,7 @@ Write-Output "ok"
               '/v', 'OriginalProxyServer', '/f'
             ]);
             if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Saved proxy address cleared'),
+              const SnackBar(content: TText('Saved proxy address cleared'),
                   duration: Duration(seconds: 2)));
           } catch (e) {
             if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -2117,7 +2125,7 @@ Write-Output "ok"
 
   Widget _sectionHeader(String title) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(title,
+        child: TText(title,
             style: Theme.of(context)
                 .textTheme
                 .titleSmall
@@ -2127,8 +2135,8 @@ Write-Output "ok"
   Widget _switchTile(
       String title, String subtitle, bool value, void Function(bool) onChanged) {
     return SwitchListTile(
-      title: Text(title, style: const TextStyle(fontSize: 14)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      title: TText(title, style: const TextStyle(fontSize: 14)),
+      subtitle: TText(subtitle, style: const TextStyle(fontSize: 12)),
       value: value,
       dense: true,
       onChanged: _isSaving ? null : onChanged,
@@ -2139,11 +2147,11 @@ Write-Output "ok"
       String Function(T) label, void Function(T) onChanged) {
     return ListTile(
       dense: true,
-      title: Text(title, style: const TextStyle(fontSize: 14)),
+      title: TText(title, style: const TextStyle(fontSize: 14)),
       trailing: DropdownButton<T>(
         value: value,
         items: options
-            .map((o) => DropdownMenuItem(value: o, child: Text(label(o), style: const TextStyle(fontSize: 13))))
+            .map((o) => DropdownMenuItem(value: o, child: TText(label(o), style: const TextStyle(fontSize: 13))))
             .toList(),
         onChanged: _isSaving ? null : (v) { if (v != null) onChanged(v); },
         underline: const SizedBox(),
@@ -2154,7 +2162,7 @@ Write-Output "ok"
   Widget _numberTile(String title, int value, void Function(int) onChanged) {
     return ListTile(
       dense: true,
-      title: Text(title, style: const TextStyle(fontSize: 14)),
+      title: TText(title, style: const TextStyle(fontSize: 14)),
       trailing: SizedBox(
         width: 80,
         child: TextFormField(
@@ -2180,8 +2188,8 @@ Write-Output "ok"
       List<String> selected, void Function(List<String>) onChanged) {
     return ListTile(
       dense: true,
-      title: Text(title, style: const TextStyle(fontSize: 14)),
-      subtitle: Text(
+      title: TText(title, style: const TextStyle(fontSize: 14)),
+      subtitle: TText(
         selected.isEmpty ? 'None selected' : selected.join(', '),
         style: const TextStyle(fontSize: 12),
         overflow: TextOverflow.ellipsis,
@@ -2346,7 +2354,7 @@ Write-Output "ok"
       void Function(String) onChanged) {
     return ListTile(
       dense: true,
-      title: Text(title, style: const TextStyle(fontSize: 14)),
+      title: TText(title, style: const TextStyle(fontSize: 14)),
       subtitle: TextFormField(
         initialValue: value,
         style: const TextStyle(fontSize: 13),
@@ -2555,13 +2563,13 @@ class _DnsPickerDialogState extends State<_DnsPickerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
+          child: TText('Cancel'),
         ),
         FilledButton(
           onPressed: _selected.isEmpty
               ? null
               : () => Navigator.of(context).pop(_selected.toList()),
-          child: const Text('Save'),
+          child: TText('Save'),
         ),
       ],
     );
@@ -2664,13 +2672,13 @@ class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
+          child: TText('Cancel'),
         ),
         FilledButton(
           onPressed: _selected.length < 2
               ? null
               : () => Navigator.of(context).pop(_selected.toList()),
-          child: const Text('Save'),
+          child: TText('Save'),
         ),
       ],
     );

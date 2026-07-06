@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lux/pages/connections_page.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/pages/log_page.dart';
 import 'package:lux/pages/proxies_page.dart';
 import 'package:lux/pages/rules_page.dart';
@@ -189,7 +190,7 @@ class _DashboardState extends State<Dashboard> with WindowListener {
                               : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                         const SizedBox(width: 6),
-                        Text(
+                        TText(
                           tab.label,
                           style: TextStyle(
                             fontSize: 13,

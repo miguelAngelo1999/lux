@@ -10,6 +10,7 @@ import 'package:lux/core/core_config.dart';
 import 'package:lux/error.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/notifier.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/util/utils.dart';
 import 'package:lux/widget/error/release_mode_error_widget.dart';
 import 'package:window_manager/window_manager.dart';
@@ -17,6 +18,7 @@ import 'package:window_manager/window_manager.dart';
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await notifier.ensureInitialized();
+  await TranslationCache.load();
 
   PlatformDispatcher.instance.onError = (error, stack) {
     if (error is DioException) {

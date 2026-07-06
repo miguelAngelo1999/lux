@@ -91,13 +91,35 @@ Locale convertLocale(String locale) {
     case 'en-US':
       return const Locale('en');
     case 'zh-CN':
+    case 'zh':
       return const Locale('zh');
     case 'fil':
       return const Locale('fil');
+    case 'es':
+      return const Locale('es');
+    case 'fr':
+      return const Locale('fr');
+    case 'pt':
+      return const Locale('pt');
+    case 'ar':
+      return const Locale('ar');
+    case 'de':
+      return const Locale('de');
+    case 'ja':
+      return const Locale('ja');
+    case 'ko':
+      return const Locale('ko');
     default:
       final curLocale = Intl.getCurrentLocale();
       if (curLocale.startsWith('zh')) return const Locale('zh');
       if (curLocale.startsWith('fil')) return const Locale('fil');
+      if (curLocale.startsWith('es')) return const Locale('es');
+      if (curLocale.startsWith('fr')) return const Locale('fr');
+      if (curLocale.startsWith('pt')) return const Locale('pt');
+      if (curLocale.startsWith('ar')) return const Locale('ar');
+      if (curLocale.startsWith('de')) return const Locale('de');
+      if (curLocale.startsWith('ja')) return const Locale('ja');
+      if (curLocale.startsWith('ko')) return const Locale('ko');
       return const Locale('en');
   }
 }
