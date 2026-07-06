@@ -605,6 +605,11 @@ class _HomeState extends State<Home>
             final added = proxyList.proxies.lastWhere(
                 (p) => p.server == server, orElse: () => proxyList.proxies.last);
             await coreManager!.selectProxy(added.id);
+            // Auto-connect if not already running
+            final isStarted = await coreManager!.getIsStarted().catchError((_) => false);
+            if (!isStarted) {
+              await coreManager!.start().catchError((_) {});
+            }
             _proxyListRefresh?.call();
           } catch (_) {}
         }
