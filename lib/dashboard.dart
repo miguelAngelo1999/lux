@@ -52,7 +52,14 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     _runUpdateCheck();
     // Register refresh callback so external callers (e.g. startup wizard) can
     // trigger a proxy list refresh after adding a proxy.
-    widget.onRegisterProxyRefresh?.call(() => _refreshProxies?.call());
+    widget.onRegisterProxyRefresh?.call(() {
+      if (_selectedTab == 0) {
+        _refreshProxies?.call();
+      } else {
+        // Not on proxies tab — switch to it so user sees the new proxy
+        setState(() => _selectedTab = 0);
+      }
+    });
   }
 
   Future<void> _runUpdateCheck() async {

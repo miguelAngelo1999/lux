@@ -389,6 +389,8 @@ class _HomeState extends State<Home>
   DateTime? _lastProxyCheck;
   // Guard against running check while wizard is already showing
   bool _wizardShowing = false;
+  // Guard against showing the proxy dialog twice simultaneously
+  bool _proxyDialogShowing = false;
 
   Future<void> _checkForNetworkProxy({bool force = false}) async {
     // Don't re-run within 60 seconds (prevents connectivity-change retriggering)
@@ -483,12 +485,12 @@ class _HomeState extends State<Home>
           source: 'ssl-bump', needsAuth: true,
         );
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _showProxyAndCertDialog(syntheticProxy, finalSsl);
+          if (mounted && !_proxyDialogShowing) _showProxyAndCertDialog(syntheticProxy, finalSsl);
         });
       } else {
         _detectedProxyAddr = detected.address;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _showProxyAndCertDialog(detected, finalSsl);
+          if (mounted && !_proxyDialogShowing) _showProxyAndCertDialog(detected, finalSsl);
         });
       }
     } catch (e) {
@@ -501,6 +503,8 @@ class _HomeState extends State<Home>
   Future<void> _showProxyAndCertDialog(
       DetectedProxy detected, SslBumpStatus ssl) async {
     if (detected.host.isNotEmpty && _dismissedProxies.contains(detected.address)) return;
+    if (_proxyDialogShowing) return; // already showing — don't stack dialogs
+    _proxyDialogShowing = true;
 
     // Bring app to foreground to ensure user sees the prompt
     await windowManager.show();
@@ -541,15 +545,21 @@ class _HomeState extends State<Home>
           if (pass.isNotEmpty) 'password': pass,
         });
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Proxy added — checking SSL…')));
-        String proxyAddr;
-        if (user.isNotEmpty) {
-          proxyAddr = '${Uri.encodeComponent(user)}:${Uri.encodeComponent(pass)}@$server:$port';
+        // Skip SSL re-probe if it was already detected in the dialog
+        final SslBumpStatus freshSsl;
+        if (ssl.detected && ssl.hasCert) {
+          freshSsl = ssl; // reuse already-detected SSL info — no need to re-probe
         } else {
-          proxyAddr = '$server:$port';
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Proxy added — checking SSL…')));
+          String proxyAddr;
+          if (user.isNotEmpty) {
+            proxyAddr = '${Uri.encodeComponent(user)}:${Uri.encodeComponent(pass)}@$server:$port';
+          } else {
+            proxyAddr = '$server:$port';
+          }
+          freshSsl = await coreManager!.getSslBumpStatus(proxyAddr: proxyAddr, fresh: true);
         }
-        final freshSsl = await coreManager!.getSslBumpStatus(proxyAddr: proxyAddr, fresh: true);
         if (!mounted) return;
         if (freshSsl.detected && freshSsl.hasCert) {
           final fp = freshSsl.certInfo?.sha256Fingerprint ?? '';
@@ -900,6 +910,7 @@ class _HomeState extends State<Home>
     nameCtrl.dispose(); serverCtrl.dispose(); portCtrl.dispose();
     userCtrl.dispose(); passCtrl.dispose();
     userFocus.dispose(); passFocus.dispose();
+    _proxyDialogShowing = false; // allow new dialogs after this one closes
   }
 
 
