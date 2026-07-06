@@ -47,9 +47,20 @@ class _App extends State<App> {
           localizationsDelegates: [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
+          // Force our locale — fil is supported by GlobalMaterialLocalizations
+          // but if any delegate doesn't support it, this ensures our delegate still works
+          localeResolutionCallback: (locale, supportedLocales) {
+            for (final supported in supportedLocales) {
+              if (supported.languageCode == appState.locale.languageCode) {
+                return supported;
+              }
+            }
+            return supportedLocales.first;
+          },
         ),
       ),
     );
