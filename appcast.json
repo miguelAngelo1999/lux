@@ -1,7 +1,7 @@
 {
   "version": "1.42.0",
   "channel": "stable",
-  "notes": "Proxy detect retry on startup, MITM only for Antigravity/DaVinci, kiro.dev fix",
+  "notes": "Proxy detect with server address on startup; MITM only Antigravity/DaVinci; kiro.dev fix",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
     "sha256": "e20ed3dceb4012d412692cb749d06b677b5ab926bcf777206a80f0c047b5147d",
@@ -9,7 +9,7 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "4344d4bfc1abb7bcf3897688b45f5492bd3dfe45bb9e3c42f6fe33ef220ddf8b",
-    "size": 33290775
+    "sha256": "3abb3610dae8a3b4f07b1a068863908c695532db8789eb62cb8a6e4b79fe2296",
+    "size": 33295186
   }
 }
