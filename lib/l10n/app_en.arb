@@ -1,4 +1,5 @@
 {
+  "trayProxiesLabel": "Switch Proxy",
   "trayDashboardLabel": "Open Dashboard",
   "exit": "Exit",
   "noConnectionMsg": "No available network. Disconnected",

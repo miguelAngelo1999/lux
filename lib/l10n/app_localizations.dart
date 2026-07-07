@@ -100,6 +100,12 @@ abstract class AppLocalizations {
     Locale('zh')
   ];
 
+  /// No description provided for @trayProxiesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Proxy'**
+  String get trayProxiesLabel;
+
   /// No description provided for @trayDashboardLabel.
   ///
   /// In en, this message translates to:

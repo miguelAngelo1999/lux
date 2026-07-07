@@ -9,6 +9,9 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get trayProxiesLabel => 'Switch Proxy';
+
+  @override
   String get trayDashboardLabel => 'Open Dashboard';
 
   @override

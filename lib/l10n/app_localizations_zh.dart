@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get trayProxiesLabel => '切换代理';
+
+  @override
   String get trayDashboardLabel => '管理面板';
 
   @override
