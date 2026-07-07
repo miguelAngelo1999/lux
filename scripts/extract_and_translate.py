@@ -101,9 +101,12 @@ def extract_strings_from_file(filepath):
         r"""label\s*:\s*['"]([^'"$\n\\]{2,40})['"]""",
         # _switchTile('Title', ...) — first arg is the tile title
         r"""_switchTile\s*\(\s*['"]([^'"$\n\\]{3,80})['"]""",
+        # _switchTile('Title', 'Subtitle', ...) — second arg is subtitle
+        r"""_switchTile\s*\(\s*['"][^'"]*['"]\s*,\s*['"]([^'"$\n\\]{3,120})['"]""",
+        # Any string inside subtitle: Text('...') or subtitle: const Text('...')
+        r"""subtitle\s*:\s*(?:const\s+)?(?:TText|Text)\s*\(\s*['"]([^'"$\n\\]{3,120})['"]""",
         # _dropdownTile('Title', ...) — first arg is the tile title  
-        r"""_dropdownTile\s*<[^>]*>\s*\(\s*['"]([^'"$\n\\]{3,80})['"]""",
-        # _numberTile('Title', ...) — first arg is the tile title
+        r"""_dropdownTile\s*<[^>]*>\s*\(\s*['"]([^'"$\n\\]{3,80})['"]""",        # _numberTile('Title', ...) — first arg is the tile title
         r"""_numberTile\s*\(\s*['"]([^'"$\n\\]{3,80})['"]""",
         # _textFieldTile('Title', ...) — first arg
         r"""_textFieldTile\s*\(\s*['"]([^'"$\n\\]{3,80})['"]""",

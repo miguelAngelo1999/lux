@@ -244,7 +244,19 @@
       "Active": "Active",
       "Inactive": "Inactive",
       "Proxy": "Proxy",
-      "Interface": "Interface"
+      "Interface": "Interface",
+      "Allow other devices to connect via LAN": "Allow other devices to connect via LAN",
+      "Always get latest DNS responses": "Always get latest DNS responses",
+      "Automatically test proxies and select the best one": "Automatically test proxies and select the best one",
+      "Connect proxy when Lux opens": "Connect proxy when Lux opens",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "Disable HTTP/3 (fixes YouTube and some sites)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.",
+      "Forward DNS queries to proxy for better performance": "Forward DNS queries to proxy for better performance",
+      "Hide IP addresses and proxy names in UI": "Hide IP addresses and proxy names in UI",
+      "Identify which app made each connection (shows in Connections)": "Identify which app made each connection (shows in Connections)",
+      "Modify system DNS to route through Lux": "Modify system DNS to route through Lux",
+      "Re-enable Windows": "Re-enable Windows",
+      "Start Lux when you log in": "Start Lux when you log in"
     },
     "fil": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -480,7 +492,19 @@
       "Inactive": "Hindi aktibo",
       "Proxy": "Proxy",
       "Interface": "Interface",
-      "No internet connection": "Walang koneksyon sa internet"
+      "No internet connection": "Walang koneksyon sa internet",
+      "Allow other devices to connect via LAN": "Payagan ang ibang mga device na kumonekta sa pamamagitan ng LAN",
+      "Always get latest DNS responses": "Palaging makakuha ng pinakabagong mga tugon sa DNS",
+      "Automatically test proxies and select the best one": "Awtomatikong subukan ang mga proxy at piliin ang pinakamahusay",
+      "Connect proxy when Lux opens": "Ikonekta ang proxy kapag nagbukas ang Lux",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "Huwag paganahin ang HTTP/3 (nag-aayos ng YouTube at ilang site)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "Ipamahagi ang DIRECT na koneksyon sa maraming interface. Kailangan ng 2+ interface.",
+      "Forward DNS queries to proxy for better performance": "Ipasa ang mga query sa DNS sa proxy para sa mas mahusay na pagganap",
+      "Hide IP addresses and proxy names in UI": "Itago ang mga IP address at pangalan ng proxy sa UI",
+      "Identify which app made each connection (shows in Connections)": "Tukuyin kung aling app ang gumawa ng bawat koneksyon (ipinapakita sa Mga Koneksyon)",
+      "Modify system DNS to route through Lux": "Baguhin ang system DNS upang i-ruta sa Lux",
+      "Re-enable Windows": "Muling paganahin ang Windows",
+      "Start Lux when you log in": "Simulan ang Lux kapag nag-log in ka"
     },
     "zh": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -716,7 +740,19 @@
       "Inactive": "不活跃",
       "Proxy": "代理",
       "Interface": "接口",
-      "No internet connection": "无网络连接"
+      "No internet connection": "无网络连接",
+      "Allow other devices to connect via LAN": "允许其他设备通过 LAN 连接",
+      "Always get latest DNS responses": "始终获得最新的 DNS 响应",
+      "Automatically test proxies and select the best one": "自动测试代理并选择最佳代理",
+      "Connect proxy when Lux opens": "Lux 打开时连接代理",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "禁用 HTTP/3（修复 YouTube 和某些网站）",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "跨多个接口分配直接连接。需要 2 个以上接口。",
+      "Forward DNS queries to proxy for better performance": "将 DNS 查询转发到代理以获得更好的性能",
+      "Hide IP addresses and proxy names in UI": "在 UI 中隐藏 IP 地址和代理名称",
+      "Identify which app made each connection (shows in Connections)": "识别哪个应用程序建立了每个连接（在连接中显示）",
+      "Modify system DNS to route through Lux": "修改系统DNS以通过Lux路由",
+      "Re-enable Windows": "重新启用 Windows",
+      "Start Lux when you log in": "登录后启动 Lux"
     },
     "es": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -952,7 +988,19 @@
       "Inactive": "Inactivo",
       "Proxy": "apoderado",
       "Interface": "Interfaz",
-      "No internet connection": "Sin conexión a internet"
+      "No internet connection": "Sin conexión a internet",
+      "Allow other devices to connect via LAN": "Permitir que otros dispositivos se conecten a través de LAN",
+      "Always get latest DNS responses": "Obtenga siempre las últimas respuestas DNS",
+      "Automatically test proxies and select the best one": "Pruebe automáticamente los servidores proxy y seleccione el mejor",
+      "Connect proxy when Lux opens": "Conecte el proxy cuando se abra Lux",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "Deshabilitar HTTP/3 (corrige YouTube y algunos sitios)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "Distribuya conexiones DIRECTAS a través de múltiples interfaces. Necesita más de 2 interfaces.",
+      "Forward DNS queries to proxy for better performance": "Reenvíe consultas de DNS al proxy para obtener un mejor rendimiento",
+      "Hide IP addresses and proxy names in UI": "Ocultar direcciones IP y nombres de proxy en la interfaz de usuario",
+      "Identify which app made each connection (shows in Connections)": "Identifique qué aplicación realizó cada conexión (se muestra en Conexiones)",
+      "Modify system DNS to route through Lux": "Modificar el DNS del sistema para enrutar a través de Lux",
+      "Re-enable Windows": "Vuelva a habilitar Windows",
+      "Start Lux when you log in": "Inicie Lux cuando inicie sesión"
     },
     "fr": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1188,7 +1236,19 @@
       "Inactive": "Inactif",
       "Proxy": "Procuration",
       "Interface": "Interface",
-      "No internet connection": "Pas de connexion internet"
+      "No internet connection": "Pas de connexion internet",
+      "Allow other devices to connect via LAN": "Autoriser d'autres appareils à se connecter via LAN",
+      "Always get latest DNS responses": "Obtenez toujours les dernières réponses DNS",
+      "Automatically test proxies and select the best one": "Testez automatiquement les proxys et sélectionnez le meilleur",
+      "Connect proxy when Lux opens": "Connectez le proxy à l'ouverture de Lux",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "Désactivez HTTP/3 (corrige YouTube et certains sites)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "Distribuez les connexions DIRECTES sur plusieurs interfaces. Nécessite plus de 2 interfaces.",
+      "Forward DNS queries to proxy for better performance": "Transférer les requêtes DNS vers un proxy pour de meilleures performances",
+      "Hide IP addresses and proxy names in UI": "Masquer les adresses IP et les noms de proxy dans l'interface utilisateur",
+      "Identify which app made each connection (shows in Connections)": "Identifiez quelle application a établi chaque connexion (s'affiche dans Connexions)",
+      "Modify system DNS to route through Lux": "Modifier le DNS du système pour acheminer via Lux",
+      "Re-enable Windows": "Réactiver Windows",
+      "Start Lux when you log in": "Démarrez Lux lorsque vous vous connectez"
     },
     "pt": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1424,7 +1484,19 @@
       "Inactive": "Inativo",
       "Proxy": "Procurador",
       "Interface": "Interface",
-      "No internet connection": "Sem conexão à internet"
+      "No internet connection": "Sem conexão à internet",
+      "Allow other devices to connect via LAN": "Permitir que outros dispositivos se conectem via LAN",
+      "Always get latest DNS responses": "Obtenha sempre as respostas DNS mais recentes",
+      "Automatically test proxies and select the best one": "Teste proxies automaticamente e selecione o melhor",
+      "Connect proxy when Lux opens": "Conecte o proxy quando o Lux abrir",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "Desativar HTTP/3 (corrige o YouTube e alguns sites)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "Distribua conexões DIRETAS em várias interfaces. Precisa de mais de 2 interfaces.",
+      "Forward DNS queries to proxy for better performance": "Encaminhe consultas DNS para proxy para melhor desempenho",
+      "Hide IP addresses and proxy names in UI": "Ocultar endereços IP e nomes de proxy na IU",
+      "Identify which app made each connection (shows in Connections)": "Identifique qual aplicativo fez cada conexão (mostra em Conexões)",
+      "Modify system DNS to route through Lux": "Modifique o DNS do sistema para rotear através do Lux",
+      "Re-enable Windows": "Reativar o Windows",
+      "Start Lux when you log in": "Inicie o Lux ao fazer login"
     },
     "ar": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1660,7 +1732,19 @@
       "Inactive": "غير نشط",
       "Proxy": "وكيل",
       "Interface": "واجهة",
-      "No internet connection": "لا يوجد اتصال بالإنترنت"
+      "No internet connection": "لا يوجد اتصال بالإنترنت",
+      "Allow other devices to connect via LAN": "السماح للأجهزة الأخرى بالاتصال عبر الشبكة المحلية (LAN).",
+      "Always get latest DNS responses": "احصل دائمًا على أحدث استجابات DNS",
+      "Automatically test proxies and select the best one": "اختبار الوكلاء تلقائيًا واختيار الأفضل",
+      "Connect proxy when Lux opens": "قم بتوصيل الوكيل عند فتح Lux",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "تعطيل HTTP/3 (إصلاحات YouTube وبعض المواقع)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "توزيع الاتصالات المباشرة عبر واجهات متعددة. يحتاج إلى 2+ واجهات.",
+      "Forward DNS queries to proxy for better performance": "إعادة توجيه استعلامات DNS إلى الوكيل للحصول على أداء أفضل",
+      "Hide IP addresses and proxy names in UI": "إخفاء عناوين IP وأسماء الوكيل في واجهة المستخدم",
+      "Identify which app made each connection (shows in Connections)": "تحديد التطبيق الذي أجرى كل اتصال (يظهر في الاتصالات)",
+      "Modify system DNS to route through Lux": "قم بتعديل نظام DNS للتوجيه عبر Lux",
+      "Re-enable Windows": "إعادة تمكين ويندوز",
+      "Start Lux when you log in": "ابدأ تشغيل Lux عند تسجيل الدخول"
     },
     "de": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1896,7 +1980,19 @@
       "Inactive": "Inaktiv",
       "Proxy": "Stellvertreter",
       "Interface": "Schnittstelle",
-      "No internet connection": "Keine Internetverbindung"
+      "No internet connection": "Keine Internetverbindung",
+      "Allow other devices to connect via LAN": "Ermöglichen Sie anderen Geräten die Verbindung über LAN",
+      "Always get latest DNS responses": "Erhalten Sie immer die neuesten DNS-Antworten",
+      "Automatically test proxies and select the best one": "Testen Sie Proxys automatisch und wählen Sie den besten aus",
+      "Connect proxy when Lux opens": "Proxy verbinden, wenn Lux geöffnet wird",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "HTTP/3 deaktivieren (behebt YouTube und einige Websites)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "Verteilen Sie DIREKTE Verbindungen auf mehrere Schnittstellen. Benötigt 2+ Schnittstellen.",
+      "Forward DNS queries to proxy for better performance": "Leiten Sie DNS-Abfragen für eine bessere Leistung an den Proxy weiter",
+      "Hide IP addresses and proxy names in UI": "Verstecken Sie IP-Adressen und Proxy-Namen in der Benutzeroberfläche",
+      "Identify which app made each connection (shows in Connections)": "Identifizieren Sie, welche App die einzelnen Verbindungen hergestellt hat (wird unter „Verbindungen“ angezeigt).",
+      "Modify system DNS to route through Lux": "Ändern Sie das System-DNS, um über Lux zu leiten",
+      "Re-enable Windows": "Aktivieren Sie Windows erneut",
+      "Start Lux when you log in": "Starten Sie Lux, wenn Sie sich anmelden"
     },
     "ja": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -2132,7 +2228,19 @@
       "Inactive": "非アクティブ",
       "Proxy": "プロキシ",
       "Interface": "インターフェース",
-      "No internet connection": "インターネット接続なし"
+      "No internet connection": "インターネット接続なし",
+      "Allow other devices to connect via LAN": "他のデバイスが LAN 経由で接続できるようにする",
+      "Always get latest DNS responses": "常に最新の DNS 応答を取得する",
+      "Automatically test proxies and select the best one": "プロキシを自動的にテストし、最適なプロキシを選択します",
+      "Connect proxy when Lux opens": "Lux を開いたときにプロキシを接続する",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "HTTP/3 を無効にする (YouTube と一部のサイトを修正)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "DIRECT 接続を複数のインターフェイスに分散します。 2 つ以上のインターフェイスが必要です。",
+      "Forward DNS queries to proxy for better performance": "パフォーマンスを向上させるために、DNS クエリをプロキシに転送します",
+      "Hide IP addresses and proxy names in UI": "UI で IP アドレスとプロキシ名を非表示にする",
+      "Identify which app made each connection (shows in Connections)": "各接続を行ったアプリを特定します (「接続」に表示)",
+      "Modify system DNS to route through Lux": "Lux を経由するようにシステム DNS を変更する",
+      "Re-enable Windows": "Windowsを再度有効にする",
+      "Start Lux when you log in": "ログイン時にLuxを起動します"
     },
     "ko": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -2368,7 +2476,19 @@
       "Inactive": "비활성",
       "Proxy": "프록시",
       "Interface": "인터페이스",
-      "No internet connection": "인터넷 연결 없음"
+      "No internet connection": "인터넷 연결 없음",
+      "Allow other devices to connect via LAN": "다른 장치가 LAN을 통해 연결하도록 허용",
+      "Always get latest DNS responses": "항상 최신 DNS 응답 받기",
+      "Automatically test proxies and select the best one": "자동으로 프록시를 테스트하고 가장 적합한 프록시를 선택합니다.",
+      "Connect proxy when Lux opens": "Lux가 열리면 프록시 연결",
+      "Disable HTTP/3 (fixes YouTube and some sites)": "HTTP/3 비활성화(YouTube 및 일부 사이트 수정)",
+      "Distribute DIRECT connections across multiple interfaces. Needs 2+ interfaces.": "여러 인터페이스에 직접 연결을 배포합니다. 2개 이상의 인터페이스가 필요합니다.",
+      "Forward DNS queries to proxy for better performance": "성능 향상을 위해 DNS 쿼리를 프록시로 전달",
+      "Hide IP addresses and proxy names in UI": "UI에서 IP 주소 및 프록시 이름 숨기기",
+      "Identify which app made each connection (shows in Connections)": "각 연결을 수행한 앱 식별(연결에 표시)",
+      "Modify system DNS to route through Lux": "Lux를 통해 라우팅하도록 시스템 DNS 수정",
+      "Re-enable Windows": "Windows를 다시 활성화합니다.",
+      "Start Lux when you log in": "로그인 시 Lux 시작"
     }
   }
 }
