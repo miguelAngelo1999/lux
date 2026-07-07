@@ -1158,15 +1158,42 @@ class _HomeState extends State<Home>
       final setting = await coreManager!.getSetting().catchError((_) => const Setting());
       if (!setting.autoConnect) return;
       appLog('WATCHDOG', 'connectivity restored + autoConnect on + not started — reconnecting');
-      await coreManager!.start();
-      appLog('WATCHDOG', 'reconnected after connectivity restore');
+      // Retry up to 3 times with backoff — lux_core may not be fully ready yet
+      for (int attempt = 0; attempt < 3; attempt++) {
+        try {
+          await coreManager!.start();
+          appLog('WATCHDOG', 'reconnected after connectivity restore (attempt ${attempt + 1})');
+          return;
+        } catch (e) {
+          appLog('WATCHDOG', 'reconnect attempt ${attempt + 1} failed: $e');
+          if (attempt < 2) {
+            await Future.delayed(Duration(seconds: 3 * (attempt + 1)));
+          }
+        }
+      }
+      appLog('WATCHDOG', 'all reconnect attempts failed after connectivity restore');
     } catch (e) {
-      appLog('WATCHDOG', 'reconnect attempt failed: $e');
+      appLog('WATCHDOG', 'reconnect check failed: $e');
     }
   }
 
-  void _startCoreWatchdog() {
-    final proc = coreManager?.coreProcess?.process;
+  /// Probe actual traffic through lux's local proxy port.
+  /// Returns true if a real HTTP request succeeds, false if broken.
+  Future<bool> _probeTraffic() async {
+    if (coreManager == null) return false;
+    try {
+      // Use detectportal.firefox.com — lightweight, always accessible
+      final result = await coreManager!.dio.get(
+        'http://detectportal.firefox.com/canonical.html',
+      ).timeout(const Duration(seconds: 10));
+      return result.statusCode != null && result.statusCode! < 500;
+    } catch (e) {
+      appLog('WATCHDOG', 'traffic probe error: $e');
+      return false;
+    }
+  }
+
+  void _startCoreWatchdog() {    final proc = coreManager?.coreProcess?.process;
     if (proc == null) return;
     appLog('WATCHDOG', 'started — monitoring lux_core process');
     // Watch for unexpected exit
@@ -1186,6 +1213,7 @@ class _HomeState extends State<Home>
   void _startHeartbeat() {
     if (coreManager == null) return;
     int _failCount = 0;
+    int _trafficFailCount = 0;
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 15));
       if (!mounted || coreManager == null) return false;
@@ -1198,14 +1226,46 @@ class _HomeState extends State<Home>
           try {
             final setting = await coreManager!.getSetting().catchError((_) => const Setting());
             if (setting.autoConnect) {
-              await coreManager!.start();
-              appLog('WATCHDOG', 'heartbeat: reconnected successfully');
+              // Retry start() up to 3 times with backoff (handles 500 errors)
+              for (int attempt = 0; attempt < 3; attempt++) {
+                try {
+                  await coreManager!.start();
+                  appLog('WATCHDOG', 'heartbeat: reconnected successfully (attempt ${attempt + 1})');
+                  _trafficFailCount = 0;
+                  break;
+                } catch (startErr) {
+                  appLog('WATCHDOG', 'heartbeat: start attempt ${attempt + 1} failed: $startErr');
+                  if (attempt < 2) {
+                    await Future.delayed(Duration(seconds: 3 * (attempt + 1)));
+                  }
+                }
+              }
             }
           } catch (reconnErr) {
             appLog('WATCHDOG', 'heartbeat: reconnect failed: $reconnErr');
           }
-        }
-        return mounted;
+        } else {
+          // isStarted=true — probe actual traffic flow every ~60s (every 4 heartbeats)
+          // Catches: isStarted=true but upstream proxy silently dropped, 403 loops, etc.
+          _trafficFailCount++;
+          if (_trafficFailCount >= 4) {
+            _trafficFailCount = 0;
+            final alive = await _probeTraffic();
+            if (!alive) {
+              appLog('WATCHDOG', 'heartbeat: isStarted=true but traffic probe FAILED — force reconnect');
+              try {
+                await coreManager!.stop();
+                await Future.delayed(const Duration(seconds: 2));
+                await coreManager!.start();
+                appLog('WATCHDOG', 'heartbeat: force reconnect succeeded after traffic probe failure');
+              } catch (e) {
+                appLog('WATCHDOG', 'heartbeat: force reconnect failed: $e');
+              }
+            } else {
+              appLog('WATCHDOG', 'heartbeat: traffic probe OK');
+            }
+          }
+        }        return mounted;
       } catch (e) {
         _failCount++;
         appLog('WATCHDOG', 'lux_core heartbeat FAILED attempt=$_failCount err=$e');
