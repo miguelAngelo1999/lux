@@ -203,6 +203,24 @@ class CoreManager {
     return false;
   }
 
+  /// Probes actual traffic flow through lux's proxy tunnel.
+  /// Returns (ok, latencyMs, error). ok=true means internet works end-to-end.
+  Future<({bool ok, int latency, String error})> getHealth() async {
+    try {
+      final res = await dio.get('$baseHttpUrl/health',
+          options: Options(
+            sendTimeout: const Duration(seconds: 12),
+            receiveTimeout: const Duration(seconds: 12),
+          ));
+      final ok = res.data['ok'] as bool? ?? false;
+      final latency = res.data['latency'] as int? ?? 0;
+      final error = res.data['error'] as String? ?? '';
+      return (ok: ok, latency: latency, error: error);
+    } catch (e) {
+      return (ok: false, latency: 0, error: e.toString());
+    }
+  }
+
   Future<String> getCurProxyInfo() async {
     final managerRes = await dio.get('$baseHttpUrl/proxies/cur-proxy');
     var name = managerRes.data['name'];
