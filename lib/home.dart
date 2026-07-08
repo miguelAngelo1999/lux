@@ -1210,7 +1210,9 @@ class _HomeState extends State<Home>
         'open /Applications/Lux.app\n',
       );
       await Process.run('chmod', ['+x', scriptPath]);
-      await Process.run('bash', ['-c', 'nohup bash "$1" >/dev/null 2>&1 &', '--', scriptPath]);
+      // Start detached — Process.start without await so it runs independently
+      await Process.start('bash', [scriptPath],
+          mode: ProcessStartMode.detached);
       await Future.delayed(const Duration(milliseconds: 500));
       exit(0);
     } catch (e) {
