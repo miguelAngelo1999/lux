@@ -1154,31 +1154,70 @@ class _HomeState extends State<Home>
     try {
       final isStarted = await coreManager!.getIsStarted().timeout(
           const Duration(seconds: 5));
-      if (isStarted) return; // already connected, nothing to do
+      if (isStarted) return;
       final setting = await coreManager!.getSetting().catchError((_) => const Setting());
       if (!setting.autoConnect) return;
       appLog('WATCHDOG', 'connectivity restored + autoConnect on + not started — reconnecting');
-      // Retry up to 3 times with backoff — lux_core may not be fully ready yet
-      for (int attempt = 0; attempt < 3; attempt++) {
+
+      // Try start() up to 3 times with backoff — handles transient 500s
+      for (int attempt = 1; attempt <= 3; attempt++) {
         try {
           await coreManager!.start();
-          appLog('WATCHDOG', 'reconnected after connectivity restore (attempt ${attempt + 1})');
+          appLog('WATCHDOG', 'reconnected after connectivity restore (attempt $attempt)');
           return;
         } catch (e) {
-          appLog('WATCHDOG', 'reconnect attempt ${attempt + 1} failed: $e');
-          if (attempt < 2) {
-            await Future.delayed(Duration(seconds: 3 * (attempt + 1)));
-          }
+          appLog('WATCHDOG', 'reconnect attempt $attempt failed: $e');
+          if (attempt < 3) await Future.delayed(Duration(seconds: attempt * 5));
         }
       }
-      appLog('WATCHDOG', 'all reconnect attempts failed after connectivity restore');
+
+      // 3 failures — try lux_core process restart (kills and respawns lux_core_real)
+      appLog('WATCHDOG', 'start() failed 3x — restarting lux_core process');
+      try {
+        await coreManager!.restart();
+        await Future.delayed(const Duration(seconds: 3));
+        await coreManager!.start();
+        appLog('WATCHDOG', 'reconnected after lux_core restart');
+        return;
+      } catch (e) {
+        appLog('WATCHDOG', 'lux_core restart also failed: $e');
+      }
+
+      // lux_core is in an unrecoverable state — full Lux.app relaunch
+      appLog('WATCHDOG', 'lux_core unrecoverable — relaunching Lux.app');
+      await _relaunchApp();
     } catch (e) {
       appLog('WATCHDOG', 'reconnect check failed: $e');
     }
   }
 
-  /// Probe actual traffic through lux's local proxy port.
-  /// Returns true if a real HTTP request succeeds, false if broken.
+  /// Writes a tiny detached shell script that waits for this process to exit,
+  /// then relaunches Lux.app. Mirrors the updater pattern.
+  /// After writing the script, exits Lux — the script outlives us.
+  Future<void> _relaunchApp() async {
+    if (!Platform.isMacOS) return;
+    try {
+      appLog('WATCHDOG', 'writing relaunch script and exiting');
+      // Kill lux_core_real first so the new instance gets a clean slate
+      await NetworkReset.reset();
+      final script = File('/tmp/lux_relaunch.sh');
+      await script.writeAsString(
+        '#!/bin/bash\n'
+        'sleep 3\n'
+        'sudo pkill -9 -x lux_core_real 2>/dev/null || true\n'
+        'sleep 1\n'
+        'open /Applications/Lux.app\n',
+      );
+      await Process.run('chmod', ['+x', script.path]);
+      // Launch detached — will outlive this process
+      await Process.run('bash', ['-c', 'nohup bash /tmp/lux_relaunch.sh >/dev/null 2>&1 &']);
+      await Future.delayed(const Duration(milliseconds: 500));
+      exit(0);
+    } catch (e) {
+      appLog('WATCHDOG', 'relaunch script failed: $e');
+    }
+  }
+
   void _startCoreWatchdog() {
     final proc = coreManager?.coreProcess?.process;
     if (proc == null) return;
@@ -1197,7 +1236,7 @@ class _HomeState extends State<Home>
 
   /// Simple heartbeat: every 30s call GET /health on lux_core.
   /// /health probes generate_204 through lux's own proxy tunnel end-to-end.
-  /// If unhealthy, force stop+start. If API unreachable, restart core.
+  /// Escalation: soft reconnect → lux_core restart → full Lux.app relaunch.
   void _startHeartbeat() {
     if (coreManager == null) return;
     int failCount = 0;
@@ -1207,47 +1246,57 @@ class _HomeState extends State<Home>
       try {
         final health = await coreManager!.getHealth();
         if (health.ok) {
+          if (failCount > 0) appLog('WATCHDOG', 'health restored (latency: ${health.latency}ms)');
           failCount = 0;
           return mounted;
         }
-        // Health check returned but traffic is broken
         failCount++;
         appLog('WATCHDOG', 'health FAILED ($failCount): ${health.error}');
-        if (failCount >= 2) {
-          // Two consecutive failures — force reconnect
-          appLog('WATCHDOG', 'force reconnect after $failCount health failures');
+        if (failCount == 2) {
+          // Two consecutive failures — soft reconnect (stop+start)
+          appLog('WATCHDOG', 'soft reconnect after $failCount health failures');
           try {
             await coreManager!.stop();
             await Future.delayed(const Duration(seconds: 2));
             await coreManager!.start();
-            appLog('WATCHDOG', 'force reconnect succeeded');
+            appLog('WATCHDOG', 'soft reconnect succeeded');
             failCount = 0;
           } catch (e) {
-            appLog('WATCHDOG', 'force reconnect failed: $e');
+            appLog('WATCHDOG', 'soft reconnect failed: $e');
           }
+        } else if (failCount == 4) {
+          // Four failures — restart lux_core process
+          appLog('WATCHDOG', 'lux_core restart after $failCount health failures');
+          try {
+            await coreManager!.restart();
+            appLog('WATCHDOG', 'lux_core restarted');
+            failCount = 0;
+          } catch (e) {
+            appLog('WATCHDOG', 'lux_core restart failed: $e');
+          }
+        } else if (failCount >= 6) {
+          // Six failures (~3 min) — lux_core unrecoverable, relaunch entire app
+          appLog('WATCHDOG', 'relaunching Lux.app after $failCount persistent failures');
+          await _relaunchApp();
         }
         return mounted;
       } catch (e) {
         // API itself unreachable — lux_core crashed or hung
         failCount++;
         appLog('WATCHDOG', 'lux_core unreachable ($failCount): $e');
-        if (failCount >= 3) {
+        if (failCount == 3) {
           await NetworkReset.reset();
           try {
             await coreManager!.restart();
-            appLog('WATCHDOG', 'lux_core restarted');
+            appLog('WATCHDOG', 'lux_core restarted after API timeout');
             failCount = 0;
           } catch (restartErr) {
             appLog('WATCHDOG', 'restart failed: $restartErr');
-            if (failCount >= 5) {
-              if (mounted) {
-                setState(() {
-                  coreError = Exception('lux_core failed — please restart Lux.');
-                });
-              }
-              return false;
-            }
           }
+        } else if (failCount >= 5) {
+          // API completely unreachable for 2.5+ min — relaunch
+          appLog('WATCHDOG', 'API unreachable ${failCount}x — relaunching Lux.app');
+          await _relaunchApp();
         }
         return mounted;
       }
