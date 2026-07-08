@@ -1,11 +1,11 @@
 {
-  "version": "1.42.0",
+  "version": "1.43.0",
   "channel": "stable",
-  "notes": "No double dialog; proxy shows immediately on add; no redundant SSL re-probe",
+  "notes": "Auto-reconnect watchdog, self-relaunch on crash, 9-language auto-translation, load balancer health fix, stale TUN cleanup",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
-    "sha256": "e20ed3dceb4012d412692cb749d06b677b5ab926bcf777206a80f0c047b5147d",
-    "size": 38911472
+    "sha256": "6fba19aed732c05f89bb04ad720c72aeb20914ea851c3a2786fadcd7218b2be2",
+    "size": 38997999
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
