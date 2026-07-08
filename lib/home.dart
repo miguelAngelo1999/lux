@@ -1198,9 +1198,10 @@ class _HomeState extends State<Home>
     if (!Platform.isMacOS) return;
     try {
       appLog('WATCHDOG', 'writing relaunch script and exiting');
-      // Kill lux_core_real first so the new instance gets a clean slate
       await NetworkReset.reset();
-      final script = File('/tmp/lux_relaunch.sh');
+      // Write relaunch script to lux home dir (not /tmp — more reliable, persisted)
+      final scriptPath = '$homeDir/lux_relaunch.sh';
+      final script = File(scriptPath);
       await script.writeAsString(
         '#!/bin/bash\n'
         'sleep 3\n'
@@ -1208,9 +1209,8 @@ class _HomeState extends State<Home>
         'sleep 1\n'
         'open /Applications/Lux.app\n',
       );
-      await Process.run('chmod', ['+x', script.path]);
-      // Launch detached — will outlive this process
-      await Process.run('bash', ['-c', 'nohup bash /tmp/lux_relaunch.sh >/dev/null 2>&1 &']);
+      await Process.run('chmod', ['+x', scriptPath]);
+      await Process.run('bash', ['-c', 'nohup bash "$1" >/dev/null 2>&1 &', '--', scriptPath]);
       await Future.delayed(const Duration(milliseconds: 500));
       exit(0);
     } catch (e) {
