@@ -32,6 +32,8 @@ mkdir -p dist
 STAGING=$(mktemp -d /tmp/lux_dmg_XXXXXX)
 cp -R build/macos/Build/Products/Release/Lux.app "$STAGING/Lux.app"
 cp dist/"Fix Gatekeeper.command" "$STAGING/Fix Gatekeeper.command"
+# Add /Applications symlink so users can drag Lux.app into it
+ln -s /Applications "$STAGING/Applications"
 
 # Create a writable DMG from the staging folder
 DMG_TMP="/tmp/lux_tmp.dmg"
