@@ -1051,7 +1051,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       leading: const Icon(Icons.system_update_alt, size: 20),
       title: const Text('Check for Updates', style: TextStyle(fontSize: 14)),
-      subtitle: const Text('Current: 1.43.0',
+      subtitle: const Text('Current: 1.44.0',
           style: TextStyle(fontSize: 12)),
       trailing: _checking
           ? const SizedBox(width: 20, height: 20,

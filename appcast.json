@@ -1,11 +1,11 @@
 {
-  "version": "1.43.0",
+  "version": "1.44.0",
   "channel": "stable",
-  "notes": "Auto-reconnect watchdog, self-relaunch on crash, 9-language auto-translation, load balancer health fix, stale TUN cleanup",
+  "notes": "DaVinci cert fix, wizard auto-captures SSL cert, self-relaunch on crash, 9-language UI, watchdog never gives up",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
-    "sha256": "956494de33fdebf96beacca7acd100166daecaa66ceb65af4236119616fa0ecb",
-    "size": 39417318
+    "sha256": "4e096e64707c9a40f2281ca83a9962ea81b4dccb57b6a57136083f49c7292480",
+    "size": 39419627
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
