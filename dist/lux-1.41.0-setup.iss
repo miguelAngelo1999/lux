@@ -57,13 +57,16 @@ var ResultCode: Integer;
 begin
   if CurStep = ssInstall then
   begin
-    // Stop lux — try multiple methods in case one doesn't work
-    // Method 1: graceful via scheduled task (works when lux runs elevated)
-    Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // Method 2: force kill (works when lux is NOT elevated, e.g. first install)
-    Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(3000);
+    // Kill lux using PowerShell which runs in user context
+    // schtasks /end terminates elevated processes that belong to the user
+    Exec('powershell.exe',
+      '-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command ' +
+      '"schtasks /end /tn LuxApp 2>$null; ' +
+      'Start-Sleep 2; ' +
+      'Get-Process lux,lux_core -ErrorAction SilentlyContinue | Stop-Process -Force 2>$null; ' +
+      'Start-Sleep 2"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(1000);
   end;
   if CurStep = ssPostInstall then
   begin
@@ -81,9 +84,10 @@ begin
     Exec('powershell.exe',
       '-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "' + PsCmd + '"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(500);
-    // Launch lux directly (don't wait — just fire and forget)
-    Exec(LuxExe, '', '', SW_SHOW, ewNoWait, ResultCode);
+    // Launch lux via scheduled task (ensures proper elevation + single instance)
+    // The bat script's schtasks /end already stopped any running instance.
+    // Use schtasks /run to launch cleanly — NOT direct Exec which bypasses single-instance.
+    Exec('schtasks.exe', '/run /tn LuxApp', '', SW_HIDE, ewNoWait, ResultCode);
   end;
 end;
 
