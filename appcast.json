@@ -1,7 +1,7 @@
 {
-  "version": "1.44.0",
+  "version": "1.44.1",
   "channel": "stable",
-  "notes": "v1.44.0: Fixed installer kill, proxy detection, stale process cleanup",
+  "notes": "v1.44.1: Fixed installer kill, proxy detection via Windows native API, stale process cleanup",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
     "sha256": "e20ed3dceb4012d412692cb749d06b677b5ab926bcf777206a80f0c047b5147d",
@@ -9,7 +9,7 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "608fec7f9452d4e6453cb509cebb3495701352381e681da25c2733f7ebeece0f",
-    "size": 33331253
+    "sha256": "d086e4bfde14f20e3572695f549f49232f9ea281c5f9a6d912a7c3b432ef8a5c",
+    "size": 33331082
   }
 }
