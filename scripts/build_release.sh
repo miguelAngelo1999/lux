@@ -7,7 +7,7 @@ export DART_IO_ALLOW_BAD_CERTIFICATES=true
 export GIT_SSL_NO_VERIFY=1
 export GONOSUMCHECK="*" GONOSUMDB="*" GOINSECURE="*" GOPROXY="off"
 
-VERSION="1.43.0"
+VERSION="1.44.0"
 
 echo "=== Building lux_core ==="
 cd /Users/virgoh/itun2socks
@@ -62,7 +62,7 @@ import json, os
 path = '/Users/virgoh/lux/appcast.json'
 d = json.load(open(path))
 d['version'] = '${VERSION}'
-d['notes'] = 'Auto-reconnect watchdog, self-relaunch on crash, 9-language auto-translation, load balancer health fix, stale TUN cleanup'
+d['notes'] = 'DaVinci cert fix, wizard auto-captures SSL cert, self-relaunch on crash, 9-language UI, watchdog never gives up'
 d['macOS']['sha256'] = '${DMG_SHA}'
 d['macOS']['size'] = ${DMG_SIZE}
 # URL will be updated manually after upload to Drive

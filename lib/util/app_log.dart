@@ -17,7 +17,7 @@ Future<void> initAppLog(String homeDir) async {
     if (!logsDir.existsSync()) logsDir.createSync(recursive: true);
     _logFile = File(p.join(logsDir.path, 'flutter_app.log'));
     _initialised = true;
-    appLog('APP', 'Lux Flutter started — version 1.43.0');
+    appLog('APP', 'Lux Flutter started — version 1.44.0');
   } catch (e) {
     debugPrint('[AppLog] init failed: $e');
   }
