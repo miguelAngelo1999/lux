@@ -438,6 +438,8 @@ $store.Close()
 
       // Video editors
       candidates.addAll([
+        '$programData\\Blackmagic Design\\DaVinci Resolve\\Certificates\\Blackmagic.pem',
+        '$programData\\Blackmagic Design\\DaVinci Resolve\\Certificates\\Blackmagic_CL.pem',
         '$programData\\Blackmagic Design\\DaVinci Resolve\\curl-ca-bundle.crt',
         '$programData\\Blackmagic Design\\DaVinci Resolve\\cacert.pem',
         '$programData\\Blackmagic Design\\DaVinci Resolve\\ssl\\cert.pem',
@@ -472,6 +474,10 @@ $store.Close()
 
       // Video editors
       candidates.addAll([
+        // DaVinci's actual cert bundles (found in Certificates/ subfolder)
+        '/Library/Application Support/Blackmagic Design/DaVinci Resolve/Certificates/Blackmagic.pem',
+        '/Library/Application Support/Blackmagic Design/DaVinci Resolve/Certificates/Blackmagic_CL.pem',
+        // Legacy paths some versions may use
         '/Library/Application Support/Blackmagic Design/DaVinci Resolve/curl-ca-bundle.crt',
         '/Library/Application Support/Blackmagic Design/DaVinci Resolve/cacert.pem',
       ]);
