@@ -1,7 +1,7 @@
 {
   "version": "1.44.0",
   "channel": "stable",
-  "notes": "v1.44.0: Fixed proxy detection (PAC/WPAD/explicit), stale process cleanup, window size fix, auto-connect",
+  "notes": "v1.44.0: Fixed proxy detection, no double-launch after update, stale port cleanup",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
     "sha256": "e20ed3dceb4012d412692cb749d06b677b5ab926bcf777206a80f0c047b5147d",
@@ -9,7 +9,7 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "840a492311c0bbba1b358e3e126175af660894589ed1fe1575d985d477fa0234",
-    "size": 33331223
+    "sha256": "5561edcbaf711f1cd8dcc605e67ed4d4c366b336b5739efcb31f74ad39f6901a",
+    "size": 33331227
   }
 }
