@@ -25,18 +25,26 @@ echo "Flutter built"
 
 echo "=== Creating DMG ==="
 xattr -cr build/macos/Build/Products/Release/Lux.app
-rm -f dist/*.dmg
+rm -f dist/*.dmg 2>/dev/null || true
 mkdir -p dist
-create-dmg \
-  --overwrite \
-  --no-code-sign \
-  --dmg-title "Lux $VERSION" \
-  build/macos/Build/Products/Release/Lux.app \
-  dist/
-# Rename to standard format
-for f in dist/*.dmg; do
-  mv "$f" "dist/Lux-${VERSION}-macOS-universal.dmg"
-done
+
+# Build a staging folder with app + Gatekeeper fix script
+STAGING=$(mktemp -d /tmp/lux_dmg_XXXXXX)
+cp -R build/macos/Build/Products/Release/Lux.app "$STAGING/Lux.app"
+cp dist/"Fix Gatekeeper.command" "$STAGING/Fix Gatekeeper.command"
+
+# Create a writable DMG from the staging folder
+DMG_TMP="/tmp/lux_tmp.dmg"
+DMG_OUT="dist/Lux-${VERSION}-macOS-universal.dmg"
+STAGING_SIZE=$(du -sm "$STAGING" | cut -f1)
+DMG_SIZE_MB=$((STAGING_SIZE + 20))
+
+hdiutil create -srcfolder "$STAGING" -volname "Lux $VERSION" \
+  -fs HFS+ -format UDZO -imagekey zlib-level=9 \
+  -size ${DMG_SIZE_MB}m "$DMG_OUT"
+
+rm -rf "$STAGING"
+echo "DMG created: $DMG_OUT"
 
 DMG="dist/Lux-${VERSION}-macOS-universal.dmg"
 DMG_SHA=$(shasum -a 256 "$DMG" | cut -d' ' -f1)

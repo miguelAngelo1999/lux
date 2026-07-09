@@ -4,8 +4,8 @@
   "notes": "Auto-reconnect watchdog, self-relaunch on crash, 9-language auto-translation, load balancer health fix, stale TUN cleanup",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
-    "sha256": "6fba19aed732c05f89bb04ad720c72aeb20914ea851c3a2786fadcd7218b2be2",
-    "size": 38997999
+    "sha256": "8d167b3f20ad3223dde0e548488711f87ab175564c2798d48843056bb9deb229",
+    "size": 39423317
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
