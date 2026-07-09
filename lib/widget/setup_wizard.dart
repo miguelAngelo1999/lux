@@ -338,8 +338,29 @@ class _SetupWizardState extends State<SetupWizard> {
   Future<void> _doInstallCert() async {
     setState(() => _busy = true); _clearStatus();
     try {
-      final pem = await widget.coreManager.getSslBumpCert();
-      if (pem == null || pem.isEmpty) { _setStatus('No cert available', ok: false); return; }
+      var pem = await widget.coreManager.getSslBumpCert();
+      if (pem == null || pem.isEmpty) {
+        // Cert not yet captured — try a fresh probe through lux's local proxy
+        // (lux is now connected, so the probe goes through the upstream proxy
+        //  and captures the cert)
+        _setStatus('Capturing certificate…');
+        try {
+          final setting = await widget.coreManager.getSetting()
+              .catchError((_) => const Setting());
+          final port = setting.localServerPort;
+          await widget.coreManager.getSslBumpStatus(
+            proxyAddr: '127.0.0.1:$port',
+            fresh: true,
+          );
+          // Small delay for lux_core to cache the cert
+          await Future.delayed(const Duration(milliseconds: 800));
+          pem = await widget.coreManager.getSslBumpCert();
+        } catch (_) {}
+      }
+      if (pem == null || pem.isEmpty) {
+        _setStatus('No cert available — connect to the proxy first, then retry', ok: false);
+        return;
+      }
       final result = await CertInstaller.install(pem);
       if (result.success) { setState(() => _certInstalled = true); _setStatus('Installed successfully'); }
       else _setStatus('Partial — check Settings → SSL Inspection', ok: false);
