@@ -1,15 +1,15 @@
 {
   "version": "1.44.0",
   "channel": "stable",
-  "notes": "DaVinci cert fix, wizard auto-captures SSL cert, self-relaunch on crash, 9-language UI, watchdog never gives up",
+  "notes": "v1.44.0: Fixed proxy detection (PAC/WPAD/explicit), stale process cleanup, window size fix, auto-connect",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
-    "sha256": "4e096e64707c9a40f2281ca83a9962ea81b4dccb57b6a57136083f49c7292480",
-    "size": 39419627
+    "sha256": "e20ed3dceb4012d412692cb749d06b677b5ab926bcf777206a80f0c047b5147d",
+    "size": 38911472
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "5924cf94f5d537945a4e067e35463387669ca8e0eaca3b221e8447d30d08daba",
-    "size": 33295164
+    "sha256": "840a492311c0bbba1b358e3e126175af660894589ed1fe1575d985d477fa0234",
+    "size": 33331223
   }
 }
