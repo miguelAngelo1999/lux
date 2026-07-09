@@ -135,7 +135,8 @@ class CoreManager {
     final stopwatch = Stopwatch();
     stopwatch.start();
     // On Windows, lux_core may need to wait for UAC elevation — use a longer timeout
-    final timeoutMs = Platform.isWindows ? 120000 : 30000;
+    // On macOS, stale utun cleanup + monitor restart can take extra time
+    final timeoutMs = Platform.isWindows ? 120000 : 60000;
 
     while (stopwatch.elapsedMilliseconds < timeoutMs) {
       try {
