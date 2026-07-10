@@ -118,6 +118,7 @@ Future<void> downloadAndInstall(
   BuildContext context,
   UpdateInfo info, {
   void Function(double progress)? onProgress,
+  void Function(String status)? onStatusChange,
 }) async {
   final url = Platform.isMacOS ? info.macOSUrl : info.windowsUrl;
   if (url.isEmpty) {
@@ -209,6 +210,7 @@ Future<void> downloadAndInstall(
     }
 
     if (Platform.isMacOS) {
+      onStatusChange?.call('Mounting DMG…');
       // Remove quarantine attribute added by macOS to internet-downloaded files.
       await Process.run('xattr', ['-d', 'com.apple.quarantine', file.path]);
       appLog('UPDATE', 'quarantine removed, mounting DMG and installing');
@@ -281,6 +283,7 @@ Future<void> downloadAndInstall(
       await installerScript.writeAsString(_buildInstallerScript(appPath, mountPoint));
       await Process.run('chmod', ['+x', installerScript.path]);
 
+      onStatusChange?.call('Installing… Lux will restart');
       appLog('UPDATE', 'launching external installer and exiting');
 
       // Launch installer detached — it will outlive this process.
@@ -481,6 +484,7 @@ class _UpdateDialog extends StatefulWidget {
 class _UpdateDialogState extends State<_UpdateDialog> {
   double? _progress; // null = not downloading, 0-1 = progress
   bool _done = false;
+  String _statusText = '';
 
   Future<void> _download() async {
     setState(() => _progress = 0);
@@ -488,6 +492,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       context,
       widget.info,
       onProgress: (p) => setState(() => _progress = p),
+      onStatusChange: (s) { if (mounted) setState(() => _statusText = s); },
     );
     // Only close dialog if we actually got to exit(0) — if download failed,
     // the snackbar is shown and we stay open so user can retry or dismiss.
@@ -537,8 +542,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               LinearProgressIndicator(value: _done ? 1.0 : _progress),
               const SizedBox(height: 4),
               Text(
-                _done
-                    ? 'Done — open the installer to complete'
+                _statusText.isNotEmpty
+                    ? _statusText
                     : 'Downloading… ${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),

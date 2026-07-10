@@ -1159,7 +1159,10 @@ class _HomeState extends State<Home>
       if (!setting.autoConnect) return;
       appLog('WATCHDOG', 'connectivity restored + autoConnect on + not started — reconnecting');
 
-      // Try start() up to 3 times with backoff — handles transient 500s
+      // Try start() up to 3 times with backoff — handles transient 500s.
+      // After each failure, re-check isStarted: lux_core may have auto-started
+      // itself during the WiFi handover, in which case 500 "already started" is
+      // NOT a real failure — treat it as success.
       for (int attempt = 1; attempt <= 3; attempt++) {
         try {
           await coreManager!.start();
@@ -1167,6 +1170,16 @@ class _HomeState extends State<Home>
           return;
         } catch (e) {
           appLog('WATCHDOG', 'reconnect attempt $attempt failed: $e');
+          // Check if lux_core started itself during this attempt (race condition
+          // on WiFi switch: core auto-starts, our /start call gets 500 "already started")
+          try {
+            final alreadyUp = await coreManager!.getIsStarted().timeout(
+                const Duration(seconds: 5));
+            if (alreadyUp) {
+              appLog('WATCHDOG', 'lux_core already running after attempt $attempt — treating as success');
+              return;
+            }
+          } catch (_) {}
           if (attempt < 3) await Future.delayed(Duration(seconds: attempt * 5));
         }
       }
@@ -1204,10 +1217,27 @@ class _HomeState extends State<Home>
       final script = File(scriptPath);
       await script.writeAsString(
         '#!/bin/bash\n'
-        'sleep 3\n'
+        'exec >> /tmp/lux_relaunch.log 2>&1\n'
+        'echo "relaunch script started at \$(date)"\n'
+        '\n'
+        '# Wait for Lux.app to fully exit (it calls exit(0) right after launching us)\n'
+        'for i in \$(seq 1 15); do\n'
+        '  if ! pgrep -x Lux > /dev/null 2>&1; then\n'
+        '    echo "Lux exited after \$i seconds"\n'
+        '    break\n'
+        '  fi\n'
+        '  sleep 1\n'
+        'done\n'
+        '\n'
+        '# Now kill lux_core_real (Lux is gone so no one will restart it)\n'
         'sudo pkill -9 -x lux_core_real 2>/dev/null || true\n'
         'sleep 1\n'
-        'open /Applications/Lux.app\n',
+        '\n'
+        '# Relaunch as the logged-in user (not as root)\n'
+        'LOGGED_USER=\$(stat -f "%Su" /dev/console 2>/dev/null || echo "\$USER")\n'
+        'echo "relaunching Lux.app as \$LOGGED_USER"\n'
+        'sudo -u "\$LOGGED_USER" open /Applications/Lux.app\n'
+        'echo "relaunch done at \$(date)"\n',
       );
       await Process.run('chmod', ['+x', scriptPath]);
       // Start detached — Process.start without await so it runs independently
