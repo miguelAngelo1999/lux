@@ -1,11 +1,11 @@
 {
-  "version": "1.44.1",
+  "version": "1.44.2",
   "channel": "stable",
-  "notes": "v1.44.1: Fixed installer kill, proxy detection via Windows native API, stale process cleanup",
+  "notes": "v1.44.2: Updater phase feedback, relaunch fix, WiFi switch stability",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
-    "sha256": "e20ed3dceb4012d412692cb749d06b677b5ab926bcf777206a80f0c047b5147d",
-    "size": 38911472
+    "sha256": "0a515abade258bbde4db7987a00d3f43d9bf266566a16c8a2c5a36bce0d8d1d9",
+    "size": 38998229
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
