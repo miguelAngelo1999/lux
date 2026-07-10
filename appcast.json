@@ -1,15 +1,15 @@
 {
-  "version": "1.44.2",
+  "version": "1.44.1",
   "channel": "stable",
   "notes": "v1.44.2: Updater fixes, WiFi switch stability, relaunch improvements",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1Obfh1SbvLJ0Y4hVod-AIlpJUwd6Vw3-Z&export=download&confirm=t",
-    "sha256": "0a515abade258bbde4db7987a00d3f43d9bf266566a16c8a2c5a36bce0d8d1d9",
-    "size": 38998229
+    "url": "https://drive.usercontent.google.com/download?id=1ihl3loS6g_XpMTT-uoe9BKhkTOuZM7Jk&export=download&confirm=t",
+    "sha256": "fc88537dd8d0ad0cf68752e89ea0e0053963de3c47b6b9cfdf1c5ecd56172354",
+    "size": 39000995
   },
   "windows": {
-    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "d086e4bfde14f20e3572695f549f49232f9ea281c5f9a6d912a7c3b432ef8a5c",
-    "size": 33331082
+    "url": "",
+    "sha256": "",
+    "size": 0
   }
 }
