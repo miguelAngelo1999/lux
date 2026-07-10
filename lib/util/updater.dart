@@ -480,11 +480,20 @@ DEST="/Applications/Lux.app"
 BIN="\$DEST/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core"
 REAL="\${BIN}_real"
 
-# Install
-echo "Removing old app..."
+# Install — atomic copy to prevent partial install if interrupted
+# Copy to .new first, then swap — if cp is killed midway, old app survives
+echo "Copying new app from \$SRC to \$DEST.new..."
+rm -rf "\$DEST.new"
+cp -R "\$SRC" "\$DEST.new"
+if [ \$? -ne 0 ]; then
+  echo "ERROR: cp failed — aborting, keeping old app"
+  rm -rf "\$DEST.new"
+  exit 1
+fi
+echo "Copy complete — swapping in new app..."
 rm -rf "\$DEST"
-echo "Copying new app from \$SRC..."
-cp -R "\$SRC" "\$DEST"
+mv "\$DEST.new" "\$DEST"
+echo "Swap complete"
 
 # Set up elevation wrapper
 if [ -f "\$BIN" ] && ! grep -q "exec sudo" "\$BIN" 2>/dev/null; then
