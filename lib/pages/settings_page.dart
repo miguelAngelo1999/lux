@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:lux/util/cert_installer.dart';
 import 'package:lux/util/network_reset.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
@@ -1051,8 +1052,13 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       leading: const Icon(Icons.system_update_alt, size: 20),
       title: const Text('Check for Updates', style: TextStyle(fontSize: 14)),
-      subtitle: const Text('Current: 1.44.0',
-          style: TextStyle(fontSize: 12)),
+      subtitle: FutureBuilder<PackageInfo>(
+        future: PackageInfo.fromPlatform(),
+        builder: (ctx, snap) => Text(
+          'Current: ${snap.data?.version ?? '…'}',
+          style: const TextStyle(fontSize: 12),
+        ),
+      ),
       trailing: _checking
           ? const SizedBox(width: 20, height: 20,
               child: CircularProgressIndicator(strokeWidth: 2))
