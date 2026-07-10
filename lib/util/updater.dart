@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -167,16 +168,70 @@ Future<void> downloadAndInstall(
       return;
     }
 
+    // Ensure the temp directory exists before opening the file for writing.
+    // getTemporaryDirectory() returns a path that may not exist yet on macOS.
+    if (!await file.parent.exists()) {
+      await file.parent.create(recursive: true);
+    }
+
     final total = response.contentLength;
     int received = 0;
+    int lastLoggedPct = -1;
     final sink = file.openWrite();
-    await response.listen((chunk) {
-      sink.add(chunk);
-      received += chunk.length;
-      if (total > 0 && onProgress != null) {
-        onProgress(received / total);
-      }
-    }).asFuture();
+
+    // Use a Completer so we can detect hangs — if no bytes arrive for 60s, abort.
+    final completer = Completer<void>();
+    Timer? stallTimer;
+
+    void resetStallTimer() {
+      stallTimer?.cancel();
+      stallTimer = Timer(const Duration(seconds: 60), () {
+        if (!completer.isCompleted) {
+          appLog('UPDATE', 'download stalled — no data for 60s, aborting');
+          completer.completeError('Download stalled');
+        }
+      });
+    }
+
+    resetStallTimer(); // start the stall watchdog
+
+    final sub = response.listen(
+      (chunk) {
+        sink.add(chunk);
+        received += chunk.length;
+        resetStallTimer(); // got data — reset the watchdog
+        if (total > 0 && onProgress != null) {
+          onProgress(received / total);
+        }
+        // Log every 10% to help diagnose future hangs
+        if (total > 0) {
+          final pct = (received * 100 ~/ total);
+          if (pct >= lastLoggedPct + 10) {
+            lastLoggedPct = pct;
+            appLog('UPDATE', 'download progress $pct% (${received}/${total}B)');
+          }
+        }
+      },
+      onDone: () {
+        stallTimer?.cancel();
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (e) {
+        stallTimer?.cancel();
+        if (!completer.isCompleted) completer.completeError(e);
+      },
+      cancelOnError: true,
+    );
+
+    try {
+      await completer.future;
+    } catch (e) {
+      await sub.cancel();
+      await sink.close();
+      appLog('UPDATE', 'download stream error: $e');
+      rethrow;
+    }
+
     await sink.flush();
     await sink.close();
     client.close();
