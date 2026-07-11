@@ -1,11 +1,11 @@
 {
-  "version": "1.44.4",
+  "version": "1.44.5",
   "channel": "stable",
-  "notes": "v1.44.4: stability improvements",
+  "notes": "v1.44.5: fix rules page toggle bug and clean up UI",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1GsFNylDEt9lW2UTKutNPtPSuY-1DrXyN&export=download&confirm=t",
-    "sha256": "0f94b85443a5d9d95ec70d1bf6f3ef171e313a5dcc3d7a94615a635fb343e70e",
-    "size": 39004774
+    "url": "https://drive.usercontent.google.com/download?id=1_6TBBBHv20PFWwjixqAq5vhEi8LhbE5w&export=download&confirm=t",
+    "sha256": "3383f30484eb861c356af90e76caecd5e1dcdf97ac816484f760cf19da32684a",
+    "size": 39004415
   },
   "windows": {
     "url": "",
