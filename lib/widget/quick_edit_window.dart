@@ -164,7 +164,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                       value: _selectedId.isEmpty ? null : _selectedId,
                       decoration: _inputDecoration('Profile', isDark),
                       isDense: true,
-                      hint: const Text('Select profile', style: TextStyle(fontSize: 13)),
+                      hint: TText('Select profile', style: TextStyle(fontSize: 13)),
                       selectedItemBuilder: (ctx) => _proxies.map((p) {
                         // Show name + active indicator when dropdown is closed
                         final isActive = p.id == _selectedId;

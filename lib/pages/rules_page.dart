@@ -347,7 +347,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
               FilledButton.icon(
                 onPressed: () => _showAddEdit(),
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Rule', style: TextStyle(fontSize: 12)),
+                label: TText('Add Rule', style: TextStyle(fontSize: 12)),
                 style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
               ),
@@ -362,10 +362,10 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           child: const Row(
             children: [
               SizedBox(width: 12),
-              SizedBox(width: 100, child: Text('Type', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              Expanded(child: Text('Payload', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 80, child: Text('Policy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 44, child: Text('Proto', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              SizedBox(width: 100, child: TText('Type', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              Expanded(child: TText('Payload', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              SizedBox(width: 80, child: TText('Policy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              SizedBox(width: 44, child: TText('Proto', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               SizedBox(width: 80),
             ],
           ),
@@ -377,7 +377,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('No customized rules',
+                      TText('No customized rules',
                           style: TextStyle(color: Colors.grey)),
                       const SizedBox(height: 8),
                       FilledButton.icon(

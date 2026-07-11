@@ -233,7 +233,7 @@ class _LogPageState extends State<LogPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Connection error:', style: TextStyle(color: Colors.red, fontSize: 12)),
+                      TText('Connection error:', style: TextStyle(color: Colors.red, fontSize: 12)),
                       const SizedBox(height: 4),
                       SelectableText(_error!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                       const SizedBox(height: 8),

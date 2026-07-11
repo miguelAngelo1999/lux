@@ -858,19 +858,19 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Widget _importExportTile() {
     return ListTile(
       dense: true,
-      title: const Text('Backup & Restore', style: TextStyle(fontSize: 14)),
-      subtitle: const Text('Export or import your full configuration', style: TextStyle(fontSize: 12)),
+      title: TText('Backup & Restore', style: TextStyle(fontSize: 14)),
+      subtitle: TText('Export or import your full configuration', style: TextStyle(fontSize: 12)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextButton(
             onPressed: _isSaving ? null : _exportConfig,
-            child: const Text('Export', style: TextStyle(fontSize: 12)),
+            child: TText('Export', style: TextStyle(fontSize: 12)),
           ),
           const SizedBox(width: 4),
           TextButton(
             onPressed: _isSaving ? null : _importConfig,
-            child: const Text('Import', style: TextStyle(fontSize: 12)),
+            child: TText('Import', style: TextStyle(fontSize: 12)),
           ),
         ],
       ),
@@ -1013,7 +1013,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         return ListTile(
           dense: true,
           title: Row(children: [
-            const Text('PAC Rules', style: TextStyle(fontSize: 14)),
+            TText('PAC Rules', style: TextStyle(fontSize: 14)),
             const SizedBox(width: 8),
             if (active)
               Container(
@@ -1033,7 +1033,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   'DIRECT CIDRs: ${cidrs.take(2).join(", ")}${cidrs.length > 2 ? "..." : ""}',
                   style: const TextStyle(fontSize: 11),
                 )
-              : const Text('No PAC file detected on this network',
+              : TText('No PAC file detected on this network',
                   style: TextStyle(fontSize: 12, color: Colors.grey)),
           trailing: active
               ? IconButton(
@@ -1051,7 +1051,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       leading: const Icon(Icons.system_update_alt, size: 20),
-      title: const Text('Check for Updates', style: TextStyle(fontSize: 14)),
+      title: TText('Check for Updates', style: TextStyle(fontSize: 14)),
       subtitle: FutureBuilder<PackageInfo>(
         future: PackageInfo.fromPlatform(),
         builder: (ctx, snap) => Text(
@@ -1093,7 +1093,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Widget _resetNetworkTile() {
     return ListTile(
       dense: true,
-      title: const Text('Reset Network', style: TextStyle(fontSize: 14)),
+      title: TText('Reset Network', style: TextStyle(fontSize: 14)),
       subtitle: const Text(
           'Clear system proxy + env vars if internet is stuck after crash',
           style: TextStyle(fontSize: 12)),
@@ -1130,7 +1130,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   );
                 }
               },
-        child: const Text('Reset', style: TextStyle(fontSize: 12)),
+        child: TText('Reset', style: TextStyle(fontSize: 12)),
       ),
     );
   }
@@ -1138,7 +1138,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Widget _resetWizardDismissalsTile() {
     return ListTile(
       dense: true,
-      title: const Text('Reset Setup Wizard', style: TextStyle(fontSize: 14)),
+      title: TText('Reset Setup Wizard', style: TextStyle(fontSize: 14)),
       subtitle: const Text(
           'Re-enable all "Don\'t ask again" wizard steps for re-configuration',
           style: TextStyle(fontSize: 12)),
@@ -1155,7 +1155,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   );
                 }
               },
-        child: const Text('Reset', style: TextStyle(fontSize: 12)),
+        child: TText('Reset', style: TextStyle(fontSize: 12)),
       ),
     );
   }
@@ -1163,8 +1163,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Widget _configFileTile() {
     return ListTile(
       dense: true,
-      title: const Text('Config File', style: TextStyle(fontSize: 14)),
-      subtitle: const Text('Open or reset your configuration', style: TextStyle(fontSize: 12)),
+      title: TText('Config File', style: TextStyle(fontSize: 14)),
+      subtitle: TText('Open or reset your configuration', style: TextStyle(fontSize: 12)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1173,13 +1173,13 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               final homeDir = await getHomeDir();
               launchUrl(Uri.file(homeDir));
             },
-            child: const Text('Open Dir', style: TextStyle(fontSize: 12)),
+            child: TText('Open Dir', style: TextStyle(fontSize: 12)),
           ),
           const SizedBox(width: 8),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             onPressed: _isSaving ? null : () => _confirmResetConfig(),
-            child: const Text('Reset', style: TextStyle(fontSize: 12)),
+            child: TText('Reset', style: TextStyle(fontSize: 12)),
           ),
         ],
       ),
@@ -1336,7 +1336,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               children: [
                 Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
                 SizedBox(width: 8),
-                Flexible(child: Text('Trust this certificate?', style: TextStyle(fontSize: 16))),
+                Flexible(child: TText('Trust this certificate?', style: TextStyle(fontSize: 16))),
               ],
             ),
             content: SizedBox(
@@ -1471,7 +1471,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Intercepting CA',
+          TText('Intercepting CA',
               style: TextStyle(fontSize: 10, color: Colors.amber.shade400, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           if (display.isNotEmpty)
@@ -1497,11 +1497,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         children: [
           SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
           SizedBox(width: 6),
-          Text('Checking…', style: TextStyle(fontSize: 12)),
+          TText('Checking…', style: TextStyle(fontSize: 12)),
         ],
       );
     } else if (status == null) {
-      statusChip = const Text('Not checked yet', style: TextStyle(fontSize: 12, color: Colors.grey));
+      statusChip = TText('Not checked yet', style: TextStyle(fontSize: 12, color: Colors.grey));
     } else if (status.error != null && status.error!.isNotEmpty) {
       statusChip = Row(
         mainAxisSize: MainAxisSize.min,
@@ -1524,7 +1524,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         children: [
           Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade700),
           const SizedBox(width: 4),
-          Text('SSL inspection detected',
+          TText('SSL inspection detected',
               style: TextStyle(fontSize: 12, color: Colors.amber.shade700, fontWeight: FontWeight.w600)),
         ],
       );
@@ -1534,7 +1534,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         children: [
           Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
           SizedBox(width: 4),
-          Text('No interception detected', style: TextStyle(fontSize: 12, color: Colors.green)),
+          TText('No interception detected', style: TextStyle(fontSize: 12, color: Colors.green)),
         ],
       );
     }
@@ -1551,7 +1551,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Detect SSL Bumping', style: TextStyle(fontSize: 14)),
+                    TText('Detect SSL Bumping', style: TextStyle(fontSize: 14)),
                     const SizedBox(height: 2),
                     const Text(
                       'Check if your proxy intercepts HTTPS traffic and install its CA certificate so curl, git, npm, and Python trust it.',
@@ -1563,7 +1563,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               const SizedBox(width: 8),
               TextButton.icon(
                 icon: const Icon(Icons.search, size: 16),
-                label: const Text('Check', style: TextStyle(fontSize: 12)),
+                label: TText('Check', style: TextStyle(fontSize: 12)),
                 onPressed: _sslChecking ? null : _checkSslBump,
               ),
             ],
@@ -1848,7 +1848,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             // Enable toggle
             ListTile(
               dense: true,
-              title: const Text('Enable Corporate Proxy Fix', style: TextStyle(fontSize: 14)),
+              title: TText('Enable Corporate Proxy Fix', style: TextStyle(fontSize: 14)),
               subtitle: Text(
                 enabled ? 'Active — intercepting configured domains' : 'Disabled',
                 style: TextStyle(fontSize: 12,
@@ -1877,7 +1877,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 child: Row(children: [
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('Local CA Certificate',
+                      TText('Local CA Certificate',
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                       Text(fingerprint.substring(0, 29) + '…',
                           style: const TextStyle(fontSize: 11, fontFamily: 'monospace',
@@ -1988,12 +1988,12 @@ Write-Output "ok"
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
               child: Row(children: [
-                const Text('Inspection Domains',
+                TText('Inspection Domains',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                 const Spacer(),
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 15),
-                  label: const Text('Add', style: TextStyle(fontSize: 12)),
+                  label: TText('Add', style: TextStyle(fontSize: 12)),
                   onPressed: () => _addMitmPattern(),
                 ),
               ]),
@@ -2001,7 +2001,7 @@ Write-Output "ok"
             if (entries.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text('No domains configured. Add domains like *.blackmagicdesign.com',
+                child: TText('No domains configured. Add domains like *.blackmagicdesign.com',
                     style: TextStyle(fontSize: 12, color: Colors.grey)),
               )
             else
@@ -2046,7 +2046,7 @@ Write-Output "ok"
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Inspection Domain', style: TextStyle(fontSize: 15)),
+        title: TText('Add Inspection Domain', style: TextStyle(fontSize: 15)),
         content: TextField(
           controller: ctrl,
           autofocus: true,
@@ -2081,8 +2081,8 @@ Write-Output "ok"
   Widget _resetDismissedProxiesTile() {
     return ListTile(
       dense: true,
-      title: const Text('Proxy Detection', style: TextStyle(fontSize: 14)),
-      subtitle: const Text('Re-show startup proxy detection dialogs',
+      title: TText('Proxy Detection', style: TextStyle(fontSize: 14)),
+      subtitle: TText('Re-show startup proxy detection dialogs',
           style: TextStyle(fontSize: 12)),
       trailing: TextButton(
         onPressed: () async {
@@ -2096,7 +2096,7 @@ Write-Output "ok"
             );
           }
         },
-        child: const Text('Reset', style: TextStyle(fontSize: 12)),
+        child: TText('Reset', style: TextStyle(fontSize: 12)),
       ),
     );
   }
@@ -2104,7 +2104,7 @@ Write-Output "ok"
   Widget _clearSavedProxyTile() {
     return ListTile(
       dense: true,
-      title: const Text('Saved Proxy Address', style: TextStyle(fontSize: 14)),
+      title: TText('Saved Proxy Address', style: TextStyle(fontSize: 14)),
       subtitle: const Text(
           'Clear the proxy address saved from before Lux was installed. '
           'Use this if the wrong proxy is being pre-filled at startup.',
@@ -2124,7 +2124,7 @@ Write-Output "ok"
               SnackBar(content: Text('Failed: $e')));
           }
         },
-        child: const Text('Clear', style: TextStyle(fontSize: 12)),
+        child: TText('Clear', style: TextStyle(fontSize: 12)),
       ),
     );
   }
@@ -2257,7 +2257,7 @@ Write-Output "ok"
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                const Text('Interface Health',
+                TText('Interface Health',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                 const Spacer(),
                 if (strategy.isNotEmpty)
@@ -2322,10 +2322,10 @@ Write-Output "ok"
                       );
                     }),
                     if (isNext)
-                      const Text('← next',
+                      TText('← next',
                           style: TextStyle(fontSize: 10, color: Colors.green)),
                     if (!isHealthy)
-                      const Text('unreachable',
+                      TText('unreachable',
                           style: TextStyle(fontSize: 10, color: Colors.red)),
                   ]),
                 );
@@ -2612,13 +2612,13 @@ class _InterfacePickerDialogState extends State<_InterfacePickerDialog> {
   Widget build(BuildContext context) {
     final ifaces = _usableInterfaces;
     return AlertDialog(
-      title: const Text('Balance Interfaces', style: TextStyle(fontSize: 16)),
+      title: TText('Balance Interfaces', style: TextStyle(fontSize: 16)),
       content: SizedBox(
         width: 320,
         child: ifaces.isEmpty
             ? const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
-                child: Text('No physical interfaces found.',
+                child: TText('No physical interfaces found.',
                     style: TextStyle(fontSize: 13, color: Colors.grey)),
               )
             : Column(

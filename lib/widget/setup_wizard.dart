@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/util/cert_installer.dart';
+import 'package:lux/util/t_text.dart';
 
 // ── App detection & MITM domain registry ─────────────────────────────────────
 // Each entry: paths to check for installation + domains the app uses
@@ -499,7 +500,7 @@ class _SetupWizardState extends State<SetupWizard> {
                 ),
               ),
               const SizedBox(width: 6),
-              Text("Don't ask again for this step",
+              TText("Don't ask again for this step",
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
             ]),
           ),
@@ -548,7 +549,7 @@ class _SetupWizardState extends State<SetupWizard> {
       ],
       if (_certInstalled) ...[const SizedBox(height:8),
         const Row(children:[Icon(Icons.check_circle,size:14,color:Colors.green),
-          SizedBox(width:6), Text('Certificate installed',style:TextStyle(fontSize:12,color:Colors.green))])],
+          SizedBox(width:6), TText('Certificate installed',style:TextStyle(fontSize:12,color:Colors.green))])],
       _statusWidget(),
     ]);
   }
@@ -556,7 +557,7 @@ class _SetupWizardState extends State<SetupWizard> {
   Widget _buildEnvStep() {
     if (Platform.isMacOS) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('System configuration is handled automatically on macOS.',
+        TText('System configuration is handled automatically on macOS.',
             style: TextStyle(fontSize: 13)),
         const SizedBox(height: 10),
         Container(padding: const EdgeInsets.all(10),
@@ -564,16 +565,16 @@ class _SetupWizardState extends State<SetupWizard> {
               border: Border.all(color: Colors.green.shade300), borderRadius: BorderRadius.circular(6)),
           child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children:[Icon(Icons.check_circle,size:14,color:Colors.green),SizedBox(width:6),
-              Text('HTTP_PROXY / HTTPS_PROXY set via launchctl', style: TextStyle(fontSize:12))]),
+              TText('HTTP_PROXY / HTTPS_PROXY set via launchctl', style: TextStyle(fontSize:12))]),
             SizedBox(height:4),
             Row(children:[Icon(Icons.check_circle,size:14,color:Colors.green),SizedBox(width:6),
-              Text('CURL_CA_BUNDLE set in /etc/zshenv', style: TextStyle(fontSize:12))]),
+              TText('CURL_CA_BUNDLE set in /etc/zshenv', style: TextStyle(fontSize:12))]),
             SizedBox(height:4),
             Row(children:[Icon(Icons.check_circle,size:14,color:Colors.green),SizedBox(width:6),
-              Text('git & npm proxy configured automatically', style: TextStyle(fontSize:12))]),
+              TText('git & npm proxy configured automatically', style: TextStyle(fontSize:12))]),
           ])),
         const SizedBox(height:8),
-        const Text('These are applied automatically when Lux connects.',
+        TText('These are applied automatically when Lux connects.',
             style: TextStyle(fontSize: 12, color: Colors.grey)),
         _statusWidget(),
       ]);
@@ -596,7 +597,7 @@ class _SetupWizardState extends State<SetupWizard> {
           decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(6)),
           child: const Row(children:[Icon(Icons.info_outline,size:14),SizedBox(width:8),
-            Expanded(child:Text('UWP app loopback exemption will also be enabled, allowing Windows Store apps to use this connection.',
+            Expanded(child:TText('UWP app loopback exemption will also be enabled, allowing Windows Store apps to use this connection.',
                 style:TextStyle(fontSize:12)))])),
       ],
       _statusWidget(),
@@ -615,7 +616,7 @@ class _SetupWizardState extends State<SetupWizard> {
             child: CircularProgressIndicator()))
       else if (_installedApps.isEmpty)
         const Padding(padding: EdgeInsets.all(12),
-          child: Text('No compatible apps detected on this computer.',
+          child: TText('No compatible apps detected on this computer.',
               style: TextStyle(color: Colors.grey)))
       else
         ..._installedApps.asMap().entries.map((e) {

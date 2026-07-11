@@ -22,18 +22,29 @@ def add_import(content, import_line):
 
 def replace_text_with_ttext(content):
     """Replace Text('literal') and Text("literal") with TText(...)
+    Handles both bare Text('x') and Text('x', style: ...) forms.
     Only replaces plain string literals — skips interpolation and variables."""
-    
-    # Replace: Text('literal string') — single quotes
+
+    # Replace: Text('literal string', ...) — single quotes with optional trailing args
     content = re.sub(
         r'\bText\(\'([^\'$\n\\{}()]{2,120})\'\)',
         lambda m: f"TText('{m.group(1)}')",
         content
     )
-    # Replace: Text("literal string") — double quotes
+    content = re.sub(
+        r'\bText\(\'([^\'$\n\\{}()]{2,120})\',',
+        lambda m: f"TText('{m.group(1)}',",
+        content
+    )
+    # Replace: Text("literal string", ...) — double quotes with optional trailing args
     content = re.sub(
         r'\bText\("([^"$\n\\{}()]{2,120})"\)',
         lambda m: f'TText("{m.group(1)}")',
+        content
+    )
+    content = re.sub(
+        r'\bText\("([^"$\n\\{}()]{2,120})",',
+        lambda m: f'TText("{m.group(1)}",',
         content
     )
     # Replace: const Text('literal') -> TText('literal')  (TText is not const)

@@ -309,7 +309,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           title: const Row(children: [
             Icon(Icons.wifi_find, size: 20),
             SizedBox(width: 8),
-            Text('Network Proxy Detected', style: TextStyle(fontSize: 16)),
+            TText('Network Proxy Detected', style: TextStyle(fontSize: 16)),
           ]),
           content: SizedBox(
             width: 400,
@@ -361,7 +361,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                       child: const Row(children: [
                         Icon(Icons.security, size: 14, color: Colors.orange),
                         SizedBox(width: 6),
-                        Flexible(child: Text('SSL Interception Detected',
+                        Flexible(child: TText('SSL Interception Detected',
                             style: TextStyle(fontSize: 12,
                                 fontWeight: FontWeight.w600, color: Colors.orange))),
                       ]),
@@ -387,7 +387,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     const Row(children: [
                       Icon(Icons.shield_outlined, size: 13, color: Colors.green),
                       SizedBox(width: 4),
-                      Text('No SSL interception detected',
+                      TText('No SSL interception detected',
                           style: TextStyle(fontSize: 12, color: Colors.green)),
                     ]),
                   ],
@@ -455,7 +455,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     const Row(children: [
                       Icon(Icons.lock_outline, size: 12, color: Colors.orange),
                       SizedBox(width: 4),
-                      Text('407 auth required',
+                      TText('407 auth required',
                           style: TextStyle(fontSize: 11, color: Colors.orange)),
                     ]),
                   ],
@@ -469,7 +469,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     style: const TextStyle(fontSize: 13),
                     items: const [
                       DropdownMenuItem(value: 'persistent',
-                          child: Text('Persistent', style: TextStyle(fontSize: 13))),
+                          child: TText('Persistent', style: TextStyle(fontSize: 13))),
                       DropdownMenuItem(value: 'one-time',
                           child: Text('One-time (clears on switch)', style: TextStyle(fontSize: 13))),
                       DropdownMenuItem(value: 'timed',
@@ -587,7 +587,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         title: const Row(children: [
           Icon(Icons.security, color: Colors.orange, size: 20),
           SizedBox(width: 8),
-          Text('Proxy intercepts HTTPS', style: TextStyle(fontSize: 15)),
+          TText('Proxy intercepts HTTPS', style: TextStyle(fontSize: 15)),
         ]),
         content: const SizedBox(
           width: 380,
