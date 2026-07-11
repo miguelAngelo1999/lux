@@ -2489,6 +2489,16 @@
       "Modify system DNS to route through Lux": "Lux를 통해 라우팅하도록 시스템 DNS 수정",
       "Re-enable Windows": "Windows를 다시 활성화합니다.",
       "Start Lux when you log in": "로그인 시 Lux 시작"
+    },
+    "zh-CN": {
+      "General": "通用",
+      "Network": "网络",
+      "DNS": "DNS",
+      "TUN / Mixed": "TUN/混合",
+      "Load Balancing": "负载均衡",
+      "SSL & MITM": "SSL 与 MITM",
+      "Advanced": "高级",
+      "Search settings…": "搜索设置…"
     }
   }
 }

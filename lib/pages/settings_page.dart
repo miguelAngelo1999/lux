@@ -279,7 +279,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                       onChanged: (v) => setState(() => _searchQuery = v.toLowerCase().trim()),
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: 'Search settings…',
+                        hintText: tl(context, 'Search settings…'),
                         hintStyle: const TextStyle(fontSize: 12),
                         isDense: true,
                         prefixIcon: const Icon(Icons.search, size: 16),
@@ -326,7 +326,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                                     : selected
                                         ? Theme.of(context).colorScheme.primary
                                         : null),
-                            title: Text(cat.label,
+                            title: TText(cat.label,
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
