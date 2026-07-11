@@ -1,11 +1,11 @@
 {
   "version": "1.44.2",
   "channel": "stable",
-  "notes": "v1.44.2: Updater fixes, WiFi switch stability, relaunch improvements",
+  "notes": "v1.44.2: Full translation coverage for all pages",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1yfha4p5rgeUI8bvv6WiYGfqrPLXsEQVG&export=download&confirm=t",
-    "sha256": "40106942ce3f5b11ed2bca7035f2a12f8f902ee1aff41d78cad10b5bbb1b1bda",
-    "size": 39000970
+    "sha256": "261f91a6f358e334060d2d0136999cb7039017885638a515db677b4aec46a698",
+    "size": 39004038
   },
   "windows": {
     "url": "",
