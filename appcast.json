@@ -1,11 +1,11 @@
 {
-  "version": "1.44.2",
+  "version": "1.44.3",
   "channel": "stable",
-  "notes": "v1.44.2: Full translation coverage for all pages",
+  "notes": "v1.44.3: Fix Touch ID for updater, fix startup password prompt after update",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1yfha4p5rgeUI8bvv6WiYGfqrPLXsEQVG&export=download&confirm=t",
-    "sha256": "261f91a6f358e334060d2d0136999cb7039017885638a515db677b4aec46a698",
-    "size": 39004038
+    "url": "https://drive.usercontent.google.com/download?id=1Bs4Yi_P4hozLDsyHZPGlOR6rjHYVVbBl&export=download&confirm=t",
+    "sha256": "432af1ee78531b8856f0a4d5e245e93b01c0e976a7ee53e1396d8d96794e9294",
+    "size": 39003877
   },
   "windows": {
     "url": "",
