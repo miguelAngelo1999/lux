@@ -1,11 +1,11 @@
 {
-  "version": "1.44.11",
+  "version": "1.44.12",
   "channel": "stable",
-  "notes": "v1.44.11: DMG now includes Fix Gatekeeper install script",
+  "notes": "v1.44.12: fix install script launch after copy to Applications",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=13Xo0cjmKxsCyDcfYv73ScxMUI0nHVpz5&export=download&confirm=t",
-    "sha256": "0dc96dd26ba59d0697a3b33f4f346a78592cf73d6071ba0b41d18325e4a3c561",
-    "size": 38337048
+    "url": "https://drive.usercontent.google.com/download?id=1YSTo3Ko8-HXxKfvl-anTvxkFWbVXg9Ix&export=download&confirm=t",
+    "sha256": "00394487c071f1000248739b06faac486c59b7a592c2c8448733060a253e88f0",
+    "size": 38337220
   },
   "windows": {
     "url": "",
