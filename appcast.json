@@ -1,11 +1,11 @@
 {
-  "version": "1.44.5",
+  "version": "1.44.7",
   "channel": "stable",
-  "notes": "v1.44.5: fix rules page toggle bug and clean up UI",
+  "notes": "v1.44.7: fix network detector switching to bypass_all on VPN drop",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1_6TBBBHv20PFWwjixqAq5vhEi8LhbE5w&export=download&confirm=t",
-    "sha256": "3383f30484eb861c356af90e76caecd5e1dcdf97ac816484f760cf19da32684a",
-    "size": 39004415
+    "url": "https://drive.usercontent.google.com/download?id=19vANz5Y_s7iOL1-VevwCTA-it7vmzsKz&export=download&confirm=t",
+    "sha256": "9dff34f9fc44471e4d8d41c11e14d376b62d78d0250d3caa98ee38e2849dc66a",
+    "size": 39007513
   },
   "windows": {
     "url": "",
