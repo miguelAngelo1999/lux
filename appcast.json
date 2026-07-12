@@ -1,11 +1,11 @@
 {
-  "version": "1.44.8",
+  "version": "1.44.10",
   "channel": "stable",
-  "notes": "v1.44.8: network detector: 60s recovery polling when proxy unreachable",
+  "notes": "v1.44.10: install script auto-copies to Applications + network detector 60s recovery",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1ZKy9TO5A7qyUPYU4Ya-hR5esxVvyBIIg&export=download&confirm=t",
-    "sha256": "b1c17d33567e596ef204fc8d04121392585c9fddaa4062f5d50211e6d6a76b3c",
-    "size": 39004898
+    "url": "https://drive.usercontent.google.com/download?id=1bQDhLt6o--ejf47IBYSX2LBBbAqa5HP4&export=download&confirm=t",
+    "sha256": "2cac4a93a1648076abdad72385c40f5e70b7a9462fa08d7ef11787b9e41273ff",
+    "size": 39011629
   },
   "windows": {
     "url": "",
