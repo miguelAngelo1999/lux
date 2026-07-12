@@ -1,11 +1,11 @@
 {
-  "version": "1.44.15",
+  "version": "1.44.16",
   "channel": "stable",
-  "notes": "v1.44.15: show friendly error on macOS 11 Big Sur instead of crashing",
+  "notes": "v1.44.16: fix crash on macOS 11 Big Sur - prevent NIB from ordering window before Flutter is ready",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1dX9P6QR1uJiS3zOkOJcd7exELJf4U1nX&export=download&confirm=t",
-    "sha256": "8a09d4b3d226d9f80cdf31610c05e87e335e4b2623113b14d58eb5e7d26b2a04",
-    "size": 38347910
+    "url": "https://drive.usercontent.google.com/download?id=1Mpewqhqp-GeTxIHCW-BnqxBOCaNqd1R2&export=download&confirm=t",
+    "sha256": "a52ac29fdc25855da232517ade91d9b7579f359aeb1ab90033f2e864594e8ea0",
+    "size": 38336919
   },
   "windows": {
     "url": "",
