@@ -1,11 +1,11 @@
 {
-  "version": "1.44.10",
+  "version": "1.44.11",
   "channel": "stable",
-  "notes": "v1.44.10: install script auto-copies to Applications + network detector 60s recovery",
+  "notes": "v1.44.11: DMG now includes Fix Gatekeeper install script",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1bQDhLt6o--ejf47IBYSX2LBBbAqa5HP4&export=download&confirm=t",
-    "sha256": "2cac4a93a1648076abdad72385c40f5e70b7a9462fa08d7ef11787b9e41273ff",
-    "size": 39011629
+    "url": "https://drive.usercontent.google.com/download?id=13Xo0cjmKxsCyDcfYv73ScxMUI0nHVpz5&export=download&confirm=t",
+    "sha256": "0dc96dd26ba59d0697a3b33f4f346a78592cf73d6071ba0b41d18325e4a3c561",
+    "size": 38337048
   },
   "windows": {
     "url": "",
