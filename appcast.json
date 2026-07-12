@@ -1,11 +1,11 @@
 {
-  "version": "1.44.7",
+  "version": "1.44.8",
   "channel": "stable",
-  "notes": "v1.44.7: fix network detector switching to bypass_all on VPN drop",
+  "notes": "v1.44.8: network detector: 60s recovery polling when proxy unreachable",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=19vANz5Y_s7iOL1-VevwCTA-it7vmzsKz&export=download&confirm=t",
-    "sha256": "9dff34f9fc44471e4d8d41c11e14d376b62d78d0250d3caa98ee38e2849dc66a",
-    "size": 39007513
+    "url": "https://drive.usercontent.google.com/download?id=1ZKy9TO5A7qyUPYU4Ya-hR5esxVvyBIIg&export=download&confirm=t",
+    "sha256": "b1c17d33567e596ef204fc8d04121392585c9fddaa4062f5d50211e6d6a76b3c",
+    "size": 39004898
   },
   "windows": {
     "url": "",
