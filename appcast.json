@@ -1,11 +1,11 @@
 {
-  "version": "1.44.12",
+  "version": "1.44.13",
   "channel": "stable",
-  "notes": "v1.44.12: fix install script launch after copy to Applications",
+  "notes": "v1.44.13: fix crash on macOS 11 Big Sur at launch",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1YSTo3Ko8-HXxKfvl-anTvxkFWbVXg9Ix&export=download&confirm=t",
-    "sha256": "00394487c071f1000248739b06faac486c59b7a592c2c8448733060a253e88f0",
-    "size": 38337220
+    "url": "https://drive.usercontent.google.com/download?id=11MeLg4S6hTO0OAElx9g5CmapSU2auQ-B&export=download&confirm=t",
+    "sha256": "eb7b5e1f46a621cefce81edf09f41ee38ee4f2d52afac3a7b50fd67913939e2d",
+    "size": 38337299
   },
   "windows": {
     "url": "",
