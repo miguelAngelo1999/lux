@@ -1,11 +1,11 @@
 {
-  "version": "1.44.13",
+  "version": "1.44.14",
   "channel": "stable",
-  "notes": "v1.44.13: fix crash on macOS 11 Big Sur at launch",
+  "notes": "v1.44.14: fix crash on macOS 11 Big Sur - move hiddenWindowAtLaunch to awakeFromNib",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=11MeLg4S6hTO0OAElx9g5CmapSU2auQ-B&export=download&confirm=t",
-    "sha256": "eb7b5e1f46a621cefce81edf09f41ee38ee4f2d52afac3a7b50fd67913939e2d",
-    "size": 38337299
+    "url": "https://drive.usercontent.google.com/download?id=1iHEkm0fSgNb7XDzblnY_5Cpe-La1q88P&export=download&confirm=t",
+    "sha256": "9952f54b8a8f567bcd3ada2f8de3cb2b44df97ea10c2db02d4f735e5b4c8e829",
+    "size": 38336985
   },
   "windows": {
     "url": "",
