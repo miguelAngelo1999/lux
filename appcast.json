@@ -1,11 +1,11 @@
 {
-  "version": "1.44.20",
+  "version": "1.44.21",
   "channel": "stable",
-  "notes": "v1.44.20: fix updater and cert installer PathNotFound \u2014 write scripts to /tmp",
+  "notes": "v1.44.21: stable DMG URL \u2014 always update same GDrive file ID",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "7806d32b02e86765fa17c720cb3a5c81ea24e8e98d6a734f3523eb5e0ca24b3c",
-    "size": 44931061
+    "sha256": "a8f81dcc2d74b86526889012b1520d0df3515486a2993addd7fced33f78ce127",
+    "size": 44931063
   },
   "windows": {
     "url": "",
