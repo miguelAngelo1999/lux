@@ -1,11 +1,11 @@
 {
-  "version": "1.44.17",
+  "version": "1.44.18",
   "channel": "stable",
-  "notes": "v1.44.17: notify user when proxy password fails (407) with Update Password dialog",
+  "notes": "v1.44.18: Windows: fix clean shutdown, relaunch on crash, rebuild lux_core.exe with 407 auth alert",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1pPI_MVuf1UL7DsY-cam_qwD9iXqY5jGL&export=download&confirm=t",
-    "sha256": "f2a4f779aeb16b75b9e553fe17e29e3b3423a4b0b631e0c7c9f6b5025a945bf4",
-    "size": 38338309
+    "url": "https://drive.usercontent.google.com/download?id=1jH4WGevWGIwl3-8ITasl26_j-xJDzpXt&export=download&confirm=t",
+    "sha256": "ee21abc51a73f0b92c9f65b0d1c82b69fa2ecdfdc93bcf9fd3bfbbb5de72d1f7",
+    "size": 44931414
   },
   "windows": {
     "url": "",
