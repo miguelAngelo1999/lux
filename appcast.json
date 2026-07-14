@@ -1,11 +1,11 @@
 {
-  "version": "1.44.19",
+  "version": "1.44.20",
   "channel": "stable",
-  "notes": "v1.44.19: fix wizard: cert install PathNotFound + skip hides window",
+  "notes": "v1.44.20: fix updater and cert installer PathNotFound \u2014 write scripts to /tmp",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1sA_bJ1HF5cR39qXhINbIEK37wIdoQZcn&export=download&confirm=t",
-    "sha256": "fa01887bd131909fcaf2a7ccc643c58c96f27f50768aeccd55a26bf513909180",
-    "size": 44931160
+    "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
+    "sha256": "7806d32b02e86765fa17c720cb3a5c81ea24e8e98d6a734f3523eb5e0ca24b3c",
+    "size": 44931061
   },
   "windows": {
     "url": "",
