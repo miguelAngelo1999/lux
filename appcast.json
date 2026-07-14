@@ -1,11 +1,11 @@
 {
-  "version": "1.44.18",
+  "version": "1.44.19",
   "channel": "stable",
-  "notes": "v1.44.18: Windows: fix clean shutdown, relaunch on crash, rebuild lux_core.exe with 407 auth alert",
+  "notes": "v1.44.19: fix wizard: cert install PathNotFound + skip hides window",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1jH4WGevWGIwl3-8ITasl26_j-xJDzpXt&export=download&confirm=t",
-    "sha256": "ee21abc51a73f0b92c9f65b0d1c82b69fa2ecdfdc93bcf9fd3bfbbb5de72d1f7",
-    "size": 44931414
+    "url": "https://drive.usercontent.google.com/download?id=1sA_bJ1HF5cR39qXhINbIEK37wIdoQZcn&export=download&confirm=t",
+    "sha256": "fa01887bd131909fcaf2a7ccc643c58c96f27f50768aeccd55a26bf513909180",
+    "size": 44931160
   },
   "windows": {
     "url": "",
