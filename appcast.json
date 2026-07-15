@@ -1,11 +1,11 @@
 {
-  "version": "1.44.28",
+  "version": "1.44.29",
   "channel": "stable",
-  "notes": "v1.44.28: fix install script relaunch \u2014 try open without sudo first",
+  "notes": "v1.44.29: fix install script: use launchctl asuser for reliable GUI relaunch",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "c076e55c6daf4ece40245877ade9bcdb8822ccefbf28cd9b91c628c6f6cc1696",
-    "size": 44931492
+    "sha256": "1065714fcb67c9ed66e5a89ee231ef56e4689937210cc44a5a86cd58fd42904a",
+    "size": 44931510
   },
   "windows": {
     "url": "",
