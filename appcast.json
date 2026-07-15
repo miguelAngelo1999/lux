@@ -1,11 +1,11 @@
 {
-  "version": "1.44.21",
+  "version": "1.44.22",
   "channel": "stable",
-  "notes": "v1.44.21: stable DMG URL \u2014 always update same GDrive file ID",
+  "notes": "v1.44.22: fix install script open command + stable DMG URL",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a8f81dcc2d74b86526889012b1520d0df3515486a2993addd7fced33f78ce127",
-    "size": 44931063
+    "sha256": "c6bfbe727d7a2156dd6ed024a6ba00caae0ff24b127dd28516c4b87337d92208",
+    "size": 44931070
   },
   "windows": {
     "url": "",
