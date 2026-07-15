@@ -1,11 +1,11 @@
 {
-  "version": "1.44.22",
+  "version": "1.44.23",
   "channel": "stable",
-  "notes": "v1.44.22: fix install script open command + stable DMG URL",
+  "notes": "v1.44.23: fix install script: sudo kill lux_core_real before reinstall",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "c6bfbe727d7a2156dd6ed024a6ba00caae0ff24b127dd28516c4b87337d92208",
-    "size": 44931070
+    "sha256": "a466afd9d97b8802ef1847d47129423ab3bea82319e8f58ab9a35132bd4584ef",
+    "size": 44930941
   },
   "windows": {
     "url": "",
