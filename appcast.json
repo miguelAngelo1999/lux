@@ -1,11 +1,11 @@
 {
-  "version": "1.44.31",
+  "version": "1.44.32",
   "channel": "stable",
-  "notes": "v1.44.31: fix sudoers full rules on update and relaunch via launchctl",
+  "notes": "v1.44.32: fix no-password sudo for proxy scripts using fixed helper dir",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "dd7ac9280f17d37be5b7ba92e15f0e200fa5bbb371ca6701ec016b384f07dcf8",
-    "size": 44935724
+    "sha256": "805cd8f27f31e676db6a1bb88b9d755d503e985879c8dbfaef7fbbc603689e7d",
+    "size": 44944629
   },
   "windows": {
     "url": "",
