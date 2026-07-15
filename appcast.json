@@ -1,11 +1,11 @@
 {
-  "version": "1.44.24",
+  "version": "1.44.25",
   "channel": "stable",
-  "notes": "v1.44.24: fix bypass_all false trigger: require 3 consecutive proxy failures before switching",
+  "notes": "v1.44.25: auto-recover from bypass_all when proxy comes back",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a7221e083f53a3afc6c0bfd52602a589b06ce705767294c90becda507c5898c8",
-    "size": 44931516
+    "sha256": "d7cd974da2f291b379cb1d3d45fc025eeb22091a7f5e2e067c253e700a0016be",
+    "size": 44931430
   },
   "windows": {
     "url": "",
