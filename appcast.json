@@ -1,11 +1,11 @@
 {
-  "version": "1.44.23",
+  "version": "1.44.24",
   "channel": "stable",
-  "notes": "v1.44.23: fix install script: sudo kill lux_core_real before reinstall",
+  "notes": "v1.44.24: fix bypass_all false trigger: require 3 consecutive proxy failures before switching",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a466afd9d97b8802ef1847d47129423ab3bea82319e8f58ab9a35132bd4584ef",
-    "size": 44930941
+    "sha256": "a7221e083f53a3afc6c0bfd52602a589b06ce705767294c90becda507c5898c8",
+    "size": 44931516
   },
   "windows": {
     "url": "",
