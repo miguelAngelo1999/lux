@@ -1,11 +1,11 @@
 {
-  "version": "1.44.30",
+  "version": "1.44.31",
   "channel": "stable",
-  "notes": "v1.44.30: fix updater relaunch and gatekeeper osascript for fish shell",
+  "notes": "v1.44.31: fix sudoers full rules on update and relaunch via launchctl",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "71d2ed072dd6f2644340dafbd4042f34c8a07c673e49e8a4381d5cb84011158a",
-    "size": 44933589
+    "sha256": "dd7ac9280f17d37be5b7ba92e15f0e200fa5bbb371ca6701ec016b384f07dcf8",
+    "size": 44935724
   },
   "windows": {
     "url": "",
