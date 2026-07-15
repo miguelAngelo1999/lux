@@ -1,11 +1,11 @@
 {
-  "version": "1.44.29",
+  "version": "1.44.30",
   "channel": "stable",
-  "notes": "v1.44.29: fix install script: use launchctl asuser for reliable GUI relaunch",
+  "notes": "v1.44.30: fix updater relaunch and gatekeeper osascript for fish shell",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "1065714fcb67c9ed66e5a89ee231ef56e4689937210cc44a5a86cd58fd42904a",
-    "size": 44931510
+    "sha256": "71d2ed072dd6f2644340dafbd4042f34c8a07c673e49e8a4381d5cb84011158a",
+    "size": 44933589
   },
   "windows": {
     "url": "",
