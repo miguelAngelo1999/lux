@@ -1,11 +1,11 @@
 {
-  "version": "1.44.25",
+  "version": "1.44.26",
   "channel": "stable",
-  "notes": "v1.44.25: auto-recover from bypass_all when proxy comes back",
+  "notes": "v1.44.26: fix install script for fish shell users \u2014 force bash exec",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "d7cd974da2f291b379cb1d3d45fc025eeb22091a7f5e2e067c253e700a0016be",
-    "size": 44931430
+    "sha256": "9ba62cdbf64a4b10f3f9ff2ae49273630ffe44c4cfbcb858899d4b9b959b65e9",
+    "size": 44931394
   },
   "windows": {
     "url": "",
