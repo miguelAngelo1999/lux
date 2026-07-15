@@ -1,11 +1,11 @@
 {
-  "version": "1.44.27",
+  "version": "1.44.28",
   "channel": "stable",
-  "notes": "v1.44.27: fix install script fish compatibility with BASH_VERSION polyglot",
+  "notes": "v1.44.28: fix install script relaunch \u2014 try open without sudo first",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "44b1bdfbe53817c1685572d0beb72f5627518360a7d66c40611c39ef9121f8c2",
-    "size": 44931350
+    "sha256": "c076e55c6daf4ece40245877ade9bcdb8822ccefbf28cd9b91c628c6f6cc1696",
+    "size": 44931492
   },
   "windows": {
     "url": "",
