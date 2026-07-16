@@ -1,11 +1,11 @@
 {
-  "version": "1.44.33",
+  "version": "1.44.34",
   "channel": "stable",
-  "notes": "v1.44.33: fix updater relaunch on failure and use ditto for copy",
+  "notes": "v1.44.34: fix stale DMG cache and stale volume mounts causing wrong version install",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a5a16f9b98510dc477758ed93dda2eabe37f09374612f54bf75d1ed9fb56182e",
-    "size": 44945119
+    "sha256": "37dd00c2446104f61503e7d4de44a9a9bb16f0bad6f391e428b3ba9fcbd7bcba",
+    "size": 44954117
   },
   "windows": {
     "url": "",
