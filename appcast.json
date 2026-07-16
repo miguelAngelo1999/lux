@@ -1,11 +1,11 @@
 {
-  "version": "1.44.37",
+  "version": "1.44.38",
   "channel": "stable",
-  "notes": "v1.44.37: fix relaunch window activation after update",
+  "notes": "v1.44.38: fix background launch - dont await windowManager.setPreventClose blocking core startup",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "0cf57e48b986aab92c59a2e3dafc43efcc331f984a4ae990d8b4fb3d0133b4d7",
-    "size": 44956105
+    "sha256": "512b3a9b40cc4ada109a6bdb561447f0e828e5b6d0e34dbc45162375d6084f9f",
+    "size": 44955981
   },
   "windows": {
     "url": "",
