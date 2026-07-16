@@ -1,11 +1,11 @@
 {
-  "version": "1.44.34",
+  "version": "1.44.35",
   "channel": "stable",
-  "notes": "v1.44.34: fix stale DMG cache and stale volume mounts causing wrong version install",
+  "notes": "v1.44.35: fix updater password prompt and relaunch activation",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "37dd00c2446104f61503e7d4de44a9a9bb16f0bad6f391e428b3ba9fcbd7bcba",
-    "size": 44954117
+    "sha256": "a85706e5050ea91da968d9fb13f2dc6e49973358e2281d3df5637c66ac966e2c",
+    "size": 44954736
   },
   "windows": {
     "url": "",
