@@ -1,11 +1,11 @@
 {
-  "version": "1.44.32",
+  "version": "1.44.33",
   "channel": "stable",
-  "notes": "v1.44.32: fix no-password sudo for proxy scripts using fixed helper dir",
+  "notes": "v1.44.33: fix updater relaunch on failure and use ditto for copy",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "805cd8f27f31e676db6a1bb88b9d755d503e985879c8dbfaef7fbbc603689e7d",
-    "size": 44944629
+    "sha256": "a5a16f9b98510dc477758ed93dda2eabe37f09374612f54bf75d1ed9fb56182e",
+    "size": 44945119
   },
   "windows": {
     "url": "",
