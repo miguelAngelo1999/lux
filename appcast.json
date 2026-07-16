@@ -1,11 +1,11 @@
 {
-  "version": "1.44.35",
+  "version": "1.44.36",
   "channel": "stable",
-  "notes": "v1.44.35: fix updater password prompt and relaunch activation",
+  "notes": "v1.44.36: fix elevation prompt on relaunch - sudoers check was using wrong sudo test",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a85706e5050ea91da968d9fb13f2dc6e49973358e2281d3df5637c66ac966e2c",
-    "size": 44954736
+    "sha256": "eb8dcdf27390c8933b3493463fbb00d77ac1bfb8f3ee31853ff5d5f6b9a5adc4",
+    "size": 44955951
   },
   "windows": {
     "url": "",
