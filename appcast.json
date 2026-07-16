@@ -1,11 +1,11 @@
 {
-  "version": "1.44.36",
+  "version": "1.44.37",
   "channel": "stable",
-  "notes": "v1.44.36: fix elevation prompt on relaunch - sudoers check was using wrong sudo test",
+  "notes": "v1.44.37: fix relaunch window activation after update",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "eb8dcdf27390c8933b3493463fbb00d77ac1bfb8f3ee31853ff5d5f6b9a5adc4",
-    "size": 44955951
+    "sha256": "0cf57e48b986aab92c59a2e3dafc43efcc331f984a4ae990d8b4fb3d0133b4d7",
+    "size": 44956105
   },
   "windows": {
     "url": "",
