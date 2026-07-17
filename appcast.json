@@ -1,11 +1,11 @@
 {
-  "version": "1.44.42",
+  "version": "1.44.43",
   "channel": "stable",
-  "notes": "v1.44.42: fix update checker cache - add cache-busting to appcast request",
+  "notes": "v1.44.43: add auto-connect logging to diagnose background start",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "96c8af6c0e60ff27a16d892969cb90637eda97598e72685f5ecf489913d7b048",
-    "size": 44955504
+    "sha256": "a2598a664d04435eac4e818d868acdcb1d7ff0863007e7a3d8bf0d6ad4bdce52",
+    "size": 44957362
   },
   "windows": {
     "url": "",
