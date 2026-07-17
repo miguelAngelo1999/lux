@@ -1,11 +1,11 @@
 {
-  "version": "1.44.41",
+  "version": "1.44.42",
   "channel": "stable",
-  "notes": "v1.44.41: fix background auto-connect - isCoreReady.value was deferred by setState in hidden window",
+  "notes": "v1.44.42: fix update checker cache - add cache-busting to appcast request",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "546209b221e2b146d603baaa0dc24cc0c27d3a1d2bf1aec9849cc5f15021866c",
-    "size": 44956343
+    "sha256": "96c8af6c0e60ff27a16d892969cb90637eda97598e72685f5ecf489913d7b048",
+    "size": 44955504
   },
   "windows": {
     "url": "",
