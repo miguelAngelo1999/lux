@@ -1,11 +1,11 @@
 {
-  "version": "1.44.44",
+  "version": "1.44.47",
   "channel": "stable",
-  "notes": "v1.44.44: fix background launch - activate NSApp so Flutter run loop starts",
+  "notes": "v1.44.47: fix background launch - NSApp.activate in applicationDidFinishLaunching",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "040b25fda9a2e23edbf43fccac10bf3f0e77002056d55dd12aab76ea30d8b2c3",
-    "size": 44957410
+    "sha256": "cc65a1e3d48c0cd732c5342ed7f402e895f16da5e375d283d5940088941b8757",
+    "size": 44957962
   },
   "windows": {
     "url": "",
