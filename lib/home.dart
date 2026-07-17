@@ -1364,9 +1364,13 @@ class _HomeState extends State<Home>
   }
 
   void _onCoreReady(AppStateModel appState) {
-    setState(() {
-      isCoreReady.value = true;
-    });
+    // Set ValueNotifier directly — don't wrap in setState as that can be
+    // deferred on macOS when the window hasn't been shown yet (background launch).
+    // The ValueNotifier notifies its listeners immediately regardless of widget state.
+    isCoreReady.value = true;
+    appLog('CORE', '_onCoreReady fired isCoreReady=true');
+    // Trigger a UI rebuild separately if the widget is mounted
+    if (mounted) setState(() {});
     // After core starts, probe for a network proxy in the background.
     // Wait 3s for lux_core to fully initialize its HTTP routes.
     // If the first check fails (null result / timeout), retry at 20s.

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:lux/util/app_log.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
@@ -324,8 +325,11 @@ class CoreManager {
   }
 
   Future<void> run() async {
+    appLog('CORE', 'coreProcess.run() starting');
     await coreProcess?.run();
+    appLog('CORE', 'coreProcess.run() done — pinging...');
     await ping();
+    appLog('CORE', 'ping succeeded — calling onReady');
     onReady();
   }
 

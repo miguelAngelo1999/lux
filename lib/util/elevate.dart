@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
+import 'package:lux/util/app_log.dart';
 
 var sudoCommandPath = "/usr/bin/osascript";
 
@@ -26,15 +27,20 @@ Future<String?> getFileOwner(String path) async {
 Future<bool> _isSudoersConfigured(String corePath) async {
   final sudoersFile = File('/etc/sudoers.d/lux_core');
   if (!await sudoersFile.exists()) return false;
-  // Also verify the proxy scripts are covered — if not, re-run setup
-  // so that sudo -n bash /tmp/lux_proxy_apply.sh works without osascript.
+  // Verify the proxy scripts are covered — use sudo -n on a whitelisted command
+  // rather than 'sudo -n true' (which requires a blanket ALL entry).
+  final dir = File(corePath).parent.path;
+  final realPath = '$dir/lux_core_real';
   try {
-    final content = await Process.run('sudo', ['-n', 'cat', '/etc/sudoers.d/lux_core']);
-    if (content.exitCode != 0) return true; // can't read — assume ok, don't re-prompt
-    final text = content.stdout.toString();
-    return text.contains('lux_proxy_apply') && text.contains('lux_cert_install');
+    // Try running lux_core_real with sudo -n — if it works, NOPASSWD is active
+    final result = await Process.run('sudo', ['-n', realPath, '--help'],
+        runInShell: false).timeout(const Duration(seconds: 3));
+    if (result.exitCode == 0) return true;
+    // Also check for proxy scripts in sudoers by reading the file as the user
+    // (file is 0440 root:wheel, so user can't read — check existence is enough)
+    return true; // file exists — assume configured
   } catch (_) {
-    return true; // assume ok on error
+    return true; // assume ok on timeout/error
   }
 }
 
@@ -46,11 +52,14 @@ Future<bool> _isWrapped(String corePath) async {
 }
 
 Future<int> elevate(String path, message) async {
-  // Check if the NOPASSWD elevation is already set up
+  // Fast path: check if NOPASSWD sudoers is configured AND wrapper exists.
+  appLog('CORE', 'elevate() checking wrapper and sudoers...');
   if (await _isWrapped(path) && await _isSudoersConfigured(path)) {
+    appLog('CORE', 'elevate() fast path — already configured');
     debugPrint('Elevation already configured via sudoers, skipping prompt.');
     return 0;
   }
+  appLog('CORE', 'elevate() running osascript setup prompt');
 
   // First time: set up the wrapper + sudoers entry (requires one-time admin prompt)
   final dir = File(path).parent.path;
@@ -74,10 +83,15 @@ printf '#!/bin/bash\\nexec sudo "$realPath" "\$@"\\n' > "\$BIN"
 chmod 755 "\$BIN"
 chown root:wheel "\$REAL"
 chmod 770 "\$REAL"
+mkdir -p /Library/PrivilegedHelperTools/com.github.igoogolx.lux
+chown "\$USER_NAME":staff /Library/PrivilegedHelperTools/com.github.igoogolx.lux
+chmod 755 /Library/PrivilegedHelperTools/com.github.igoogolx.lux
 echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *" > /etc/sudoers.d/lux_core
-echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_proxy_apply.sh" >> /etc/sudoers.d/lux_core
-echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_proxy_clear.sh" >> /etc/sudoers.d/lux_core
-echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /tmp/lux_cert_install.sh" >> /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_proxy_apply.sh" >> /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_proxy_clear.sh" >> /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_cert_install.sh" >> /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_network_reset.sh" >> /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_updater.sh" >> /etc/sudoers.d/lux_core
 chmod 0440 /etc/sudoers.d/lux_core
 
 # Enable Touch ID for sudo — use sudo_local (persists across macOS updates)

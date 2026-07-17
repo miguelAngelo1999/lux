@@ -8,6 +8,7 @@ import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
+import 'package:lux/util/app_log.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/notifier.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -39,14 +40,18 @@ void exitApp() async {
 
 Future<void> setAutoConnect(CoreManager? coreManager) async {
   var isAutoConnect = await readAutoConnect();
+  appLog('CORE', 'setAutoConnect isAutoConnect=$isAutoConnect');
   if (isAutoConnect) {
     // Try immediately, then retry up to 5 times with increasing delay
     for (var attempt = 0; attempt < 5; attempt++) {
       try {
+        appLog('CORE', 'setAutoConnect attempt $attempt calling start()');
         await coreManager?.start();
+        appLog('CORE', 'setAutoConnect start() succeeded');
         notifier.show(tr().connectOnOpenMsg);
         return; // Success — stop retrying
       } catch (e) {
+        appLog('CORE', 'setAutoConnect attempt $attempt failed: $e');
         if (attempt < 4) {
           // Wait before retrying: 500ms, 1s, 2s, 4s
           await Future.delayed(Duration(milliseconds: 500 * (1 << attempt)));
