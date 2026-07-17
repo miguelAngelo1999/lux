@@ -67,12 +67,13 @@ void main(List<String> args) async {
         }
       }
       windowManager.center();
-      var isLaunchFromStartUp =
-          Platform.isWindows && args.contains(launchFromStartupArg);
-      if (!isLaunchFromStartUp) {
+      // macOS: always start silent in tray. Auto-connect runs in background.
+      // Window shows only when user clicks tray/dock icon, or on error.
+      // Windows with startup arg: same silent behavior.
+      var isSilentStart = Platform.isMacOS ||
+          (Platform.isWindows && args.contains(launchFromStartupArg));
+      if (!isSilentStart) {
         windowManager.show();
-      } else {
-        notifier.show(tr().launchAtStartUpMessage);
       }
     });
 

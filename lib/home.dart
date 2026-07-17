@@ -37,6 +37,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/core_config.dart';
+import 'package:lux/util/t_text.dart';
+import 'package:lux/widget/proxy_edit_dialog.dart';
 
 class Home extends StatefulWidget {
   final ClientMode clientMode;
@@ -344,13 +346,13 @@ class _HomeState extends State<Home>
     if (alreadyInstalled) {
       await InstalledCertsStore.markInstalled(fakeFpClean, ['macOS System Keychain', 'curl', 'Node.js']);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('🔬 Debug: cert marked as installed — triggering network-change path'),
+        content: TText('🔬 Debug: cert marked as installed — triggering network-change path'),
         duration: Duration(seconds: 2),
       ));
       // Mimic the connectivity listener's check — should silently skip
       if (await InstalledCertsStore.isFullyInstalled(fakeFpClean)) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('✅ Correctly skipped — cert already fully installed'),
+          content: TText('✅ Correctly skipped — cert already fully installed'),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 3),
         ));
@@ -551,7 +553,7 @@ class _HomeState extends State<Home>
           freshSsl = ssl; // reuse already-detected SSL info — no need to re-probe
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Proxy added — checking SSL…')));
+            const SnackBar(content: TText('Proxy added — checking SSL…')));
           String proxyAddr;
           if (user.isNotEmpty) {
             proxyAddr = '${Uri.encodeComponent(user)}:${Uri.encodeComponent(pass)}@$server:$port';
@@ -589,11 +591,11 @@ class _HomeState extends State<Home>
             });
           });
         } else if (freshSsl.error != null && freshSsl.error!.contains('407')) {          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
+            content: TText('Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
             duration: Duration(seconds: 5)));
         } else if (freshSsl.detected && !freshSsl.hasCert) {
           if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('SSL interception detected — connect to proxy to capture certificate'),
+            content: TText('SSL interception detected — connect to proxy to capture certificate'),
             duration: Duration(seconds: 4)));
         }
         // Refresh the proxies page so the new proxy appears immediately
@@ -652,7 +654,7 @@ class _HomeState extends State<Home>
           title: const Row(children: [
             Icon(Icons.wifi_find, size: 20),
             SizedBox(width: 8),
-            Text('Network Proxy Detected', style: TextStyle(fontSize: 16)),
+            TText('Network Proxy Detected', style: TextStyle(fontSize: 16)),
           ]),
           content: SizedBox(
             width: 400,
@@ -716,7 +718,7 @@ class _HomeState extends State<Home>
                           const Row(children: [
                             Icon(Icons.security, size: 14, color: Colors.orange),
                             SizedBox(width: 6),
-                            Text('SSL Interception Detected',
+                            TText('SSL Interception Detected',
                                 style: TextStyle(fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.orange)),
@@ -748,7 +750,7 @@ class _HomeState extends State<Home>
                           const Row(children: [
                             Icon(Icons.info_outline, size: 13, color: Colors.blue),
                             SizedBox(width: 4),
-                            Text('SSL check requires credentials',
+                            TText('SSL check requires credentials',
                                 style: TextStyle(fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.blue)),
@@ -766,7 +768,7 @@ class _HomeState extends State<Home>
                     Row(children: const [
                       Icon(Icons.shield_outlined, size: 13, color: Colors.green),
                       SizedBox(width: 4),
-                      Text('No SSL interception detected',
+                      TText('No SSL interception detected',
                           style: TextStyle(fontSize: 12, color: Colors.green)),
                     ]),
                   ],
@@ -849,7 +851,7 @@ class _HomeState extends State<Home>
                     const Row(children: [
                       Icon(Icons.lock_outline, size: 12, color: Colors.orange),
                       SizedBox(width: 4),
-                      Text('407 auth required',
+                      TText('407 auth required',
                           style: TextStyle(fontSize: 11, color: Colors.orange)),
                     ]),
                   ],
@@ -881,7 +883,7 @@ class _HomeState extends State<Home>
                 ),
                 GestureDetector(
                   onTap: () => setSt(() => autoSelect = !autoSelect),
-                  child: const Text('Auto-select',
+                  child: TText('Auto-select',
                       style: TextStyle(fontSize: 12)),
                 ),
                 const Spacer(),
@@ -895,7 +897,7 @@ class _HomeState extends State<Home>
                     }
                     Navigator.of(ctx).pop();
                   },
-                  child: const Text('Ignore'),
+                  child: TText('Ignore'),
                 ),
                 FilledButton(
                   onPressed: _doAdd,
@@ -930,7 +932,7 @@ class _HomeState extends State<Home>
           children: [
             Icon(Icons.security, color: Colors.orange, size: 22),
             SizedBox(width: 8),
-            Flexible(child: Text('Proxy intercepts HTTPS', style: TextStyle(fontSize: 16))),
+            Flexible(child: TText('Proxy intercepts HTTPS', style: TextStyle(fontSize: 16))),
           ],
         ),
         content: SizedBox(
@@ -976,7 +978,7 @@ class _HomeState extends State<Home>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Skip for now'),
+            child: TText('Skip for now'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
@@ -984,7 +986,7 @@ class _HomeState extends State<Home>
               Navigator.of(ctx).pop();
               await _installCertInline();
             },
-            child: const Text('Trust & Install Certificate'),
+            child: TText('Trust & Install Certificate'),
           ),
         ],
       ),
@@ -1017,7 +1019,7 @@ class _HomeState extends State<Home>
       final pemBytes = await coreManager!.getSslBumpCert();
       if (pemBytes == null || pemBytes.isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No certificate available')));
+          const SnackBar(content: TText('No certificate available')));
         return;
       }
       final result = await CertInstaller.install(pemBytes);
@@ -1081,7 +1083,10 @@ class _HomeState extends State<Home>
 
   void _init(AppStateModel appState) async {
     trayManager.addListener(this);
-    await windowManager.setPreventClose(true);
+    // setPreventClose is a UI-only concern — don't await it here as it can
+    // hang on macOS when the app launches in the background (window manager
+    // not ready until app is foregrounded). Fire and forget.
+    windowManager.setPreventClose(true).catchError((_) {});
     // Load persisted dismissed proxies before detection runs
     await _loadDismissedProxies();
     // Migrate any old store names in the cert store (e.g. 'Node.js' → 'Node.js / npm')
@@ -1137,9 +1142,13 @@ class _HomeState extends State<Home>
       }
     });
     coreManager?.run().catchError((e) {
+      appLog('CORE', 'lux_core failed to start: $e');
       setState(() {
         coreError = e;
       });
+      // Show window on error so user sees what went wrong
+      windowManager.show();
+      windowManager.focus();
     });
 
     // Watchdog: if lux_core dies unexpectedly, reset network settings
@@ -1208,6 +1217,25 @@ class _HomeState extends State<Home>
   /// then relaunches Lux.app. Mirrors the updater pattern.
   /// After writing the script, exits Lux — the script outlives us.
   Future<void> _relaunchApp() async {
+    if (Platform.isWindows) {
+      // On Windows: reset network then relaunch via a detached PowerShell process
+      try {
+        appLog('WATCHDOG', 'relaunching on Windows');
+        await NetworkReset.reset();
+        final exePath = Platform.resolvedExecutable;
+        await Process.start(
+          'powershell.exe',
+          ['-noprofile', '-NonInteractive', '-command',
+           'Start-Sleep -Seconds 2; Start-Process "$exePath"'],
+          mode: ProcessStartMode.detached,
+        );
+        await Future.delayed(const Duration(milliseconds: 500));
+        exit(0);
+      } catch (e) {
+        appLog('WATCHDOG', 'Windows relaunch failed: $e');
+      }
+      return;
+    }
     if (!Platform.isMacOS) return;
     try {
       appLog('WATCHDOG', 'writing relaunch script and exiting');
@@ -1429,7 +1457,7 @@ class _HomeState extends State<Home>
                   // Switched successfully — show a brief notification
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Proxy password expired — switched to next available proxy'),
+                      content: TText('Proxy password expired — switched to next available proxy'),
                       duration: Duration(seconds: 5),
                       backgroundColor: Colors.orange,
                     ),
@@ -1447,7 +1475,7 @@ class _HomeState extends State<Home>
                     barrierDismissible: false,
                     builder: (ctx) => AlertDialog(
                       icon: const Icon(Icons.wifi_off, color: Colors.red, size: 32),
-                      title: const Text('No Internet Access'),
+                      title: TText('No Internet Access'),
                       content: const Text(
                         'Your proxy password expired and no working proxy was found.\n\n'
                         'Please select a proxy or enter new credentials to restore internet access.',
@@ -1455,12 +1483,64 @@ class _HomeState extends State<Home>
                       actions: [
                         FilledButton(
                           onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Go to Proxies'),
+                          child: TText('Go to Proxies'),
                         ),
                       ],
                     ),
                   );
                 }
+              }
+            case 'proxy_auth_failed':
+              {
+                final proxyId = message['proxyId'] as String? ?? '';
+                final proxyName = message['proxyName'] as String? ?? 'proxy';
+                appLog('PROXY', 'auth failed for proxy $proxyId ($proxyName)');
+                if (!mounted) return;
+                await windowManager.show();
+                await windowManager.focus();
+                await windowManager.setAlwaysOnTop(true);
+                await Future.delayed(const Duration(milliseconds: 200));
+                await windowManager.setAlwaysOnTop(false);
+                if (!mounted) return;
+                final displayName = proxyName.isNotEmpty ? proxyName : 'your proxy';
+                await showDialog(
+                  context: context,
+                  barrierDismissible: true,
+                  builder: (ctx) => AlertDialog(
+                    icon: const Icon(Icons.lock_outline, color: Colors.orange, size: 32),
+                    title: TText('Proxy Authentication Failed'),
+                    content: Text(
+                      'Connection to "$displayName" was rejected (407 Proxy Auth Required).\n\n'
+                      'Your password may have changed. Update your credentials to restore internet access.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: TText('Dismiss'),
+                      ),
+                      if (proxyId.isNotEmpty)
+                        FilledButton(
+                          onPressed: () async {
+                            Navigator.of(ctx).pop();
+                            if (!mounted || coreManager == null) return;
+                            final detail = await coreManager!.getProxyDetail(proxyId);
+                            if (!mounted || detail == null) return;
+                            await showDialog(
+                              context: context,
+                              builder: (_) => ProxyEditDialog(
+                                coreManager: coreManager!,
+                                initialValue: detail,
+                                onSaved: () {
+                                  _refreshTray();
+                                },
+                              ),
+                            );
+                          },
+                          child: TText('Update Password'),
+                        ),
+                    ],
+                  ),
+                );
               }
           }
         });
@@ -1492,9 +1572,7 @@ class _HomeState extends State<Home>
   }
 
   Future<AppExitResponse> _handleExitRequest() async {
-    if (Platform.isMacOS) {
-      await coreManager?.safeExit();
-    }
+    await coreManager?.safeExit();
     return AppExitResponse.exit;
   }
 
@@ -1505,6 +1583,7 @@ class _HomeState extends State<Home>
     windowManager.removeListener(this);
     powerMonitor.removeListener(this);
     _listener.dispose();
+    _networkDetector?.dispose();
     super.dispose();
   }
 
@@ -1659,7 +1738,7 @@ class _HomeState extends State<Home>
               children: [
                 const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
                 const SizedBox(height: 16),
-                const Text('lux_core failed to start',
+                TText('lux_core failed to start',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 Text('$coreError', style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -1667,7 +1746,7 @@ class _HomeState extends State<Home>
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   icon: const Icon(Icons.refresh, size: 16),
-                  label: const Text('Retry'),
+                  label: TText('Retry'),
                   onPressed: () async {
                     setState(() { coreError = null; });
                     try {
@@ -1680,7 +1759,7 @@ class _HomeState extends State<Home>
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () => exit(0),
-                  child: const Text('Quit'),
+                  child: TText('Quit'),
                 ),
               ],
             ),
