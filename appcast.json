@@ -1,11 +1,11 @@
 {
-  "version": "1.44.47",
+  "version": "1.44.48",
   "channel": "stable",
-  "notes": "v1.44.47: fix background launch - NSApp.activate in applicationDidFinishLaunching",
+  "notes": "v1.44.48: fix relaunch throttling - use osascript Finder open to bypass macOS background app delay",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "cc65a1e3d48c0cd732c5342ed7f402e895f16da5e375d283d5940088941b8757",
-    "size": 44957962
+    "sha256": "f0879c6b16cd261cf0d7ca1d062762897a3c9aeb2adbb2c2d3187675795bb027",
+    "size": 44951573
   },
   "windows": {
     "url": "",
