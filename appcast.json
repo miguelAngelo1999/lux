@@ -1,11 +1,11 @@
 {
-  "version": "1.44.40",
+  "version": "1.44.41",
   "channel": "stable",
-  "notes": "v1.44.40: add core startup logging to diagnose background launch hang",
+  "notes": "v1.44.41: fix background auto-connect - isCoreReady.value was deferred by setState in hidden window",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "d75da88f33b06397c1a417d15de8486d9c7341ec6f548da7c9d19483c6739164",
-    "size": 44956239
+    "sha256": "546209b221e2b146d603baaa0dc24cc0c27d3a1d2bf1aec9849cc5f15021866c",
+    "size": 44956343
   },
   "windows": {
     "url": "",
