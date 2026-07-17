@@ -1,11 +1,11 @@
 {
-  "version": "1.44.43",
+  "version": "1.44.44",
   "channel": "stable",
-  "notes": "v1.44.43: add auto-connect logging to diagnose background start",
+  "notes": "v1.44.44: fix background launch - activate NSApp so Flutter run loop starts",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a2598a664d04435eac4e818d868acdcb1d7ff0863007e7a3d8bf0d6ad4bdce52",
-    "size": 44957362
+    "sha256": "040b25fda9a2e23edbf43fccac10bf3f0e77002056d55dd12aab76ea30d8b2c3",
+    "size": 44957410
   },
   "windows": {
     "url": "",
