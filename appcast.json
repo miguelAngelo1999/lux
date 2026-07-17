@@ -1,11 +1,11 @@
 {
-  "version": "1.44.38",
+  "version": "1.44.39",
   "channel": "stable",
-  "notes": "v1.44.38: fix background launch - dont await windowManager.setPreventClose blocking core startup",
+  "notes": "v1.44.39: silent tray start - auto-connect in background, show window only on error",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "512b3a9b40cc4ada109a6bdb561447f0e828e5b6d0e34dbc45162375d6084f9f",
-    "size": 44955981
+    "sha256": "b70f186f3616f1681acfaae02d84a55d12ce8fa62403631e8ce37362f83df4a2",
+    "size": 44955810
   },
   "windows": {
     "url": "",
