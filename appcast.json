@@ -1,11 +1,11 @@
 {
-  "version": "1.44.39",
+  "version": "1.44.40",
   "channel": "stable",
-  "notes": "v1.44.39: silent tray start - auto-connect in background, show window only on error",
+  "notes": "v1.44.40: add core startup logging to diagnose background launch hang",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "b70f186f3616f1681acfaae02d84a55d12ce8fa62403631e8ce37362f83df4a2",
-    "size": 44955810
+    "sha256": "d75da88f33b06397c1a417d15de8486d9c7341ec6f548da7c9d19483c6739164",
+    "size": 44956239
   },
   "windows": {
     "url": "",
