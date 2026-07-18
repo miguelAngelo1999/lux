@@ -1,11 +1,11 @@
 {
-  "version": "1.44.51",
+  "version": "1.44.50",
   "channel": "stable",
-  "notes": "v1.44.51: auto-connect on startup without window focus",
+  "notes": "v1.44.50: auto-connect on startup without window focus",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "bf26821067312e38bfd2f1c4c19700df21b97861c04cddac9aed863275b3f30e",
-    "size": 44954944
+    "sha256": "99827949154362e420c546115d8ae2f236247757bc539f174aa50f0cd6d53b2c",
+    "size": 44952865
   },
   "windows": {
     "url": "",
