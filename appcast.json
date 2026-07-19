@@ -1,11 +1,11 @@
 {
-  "version": "1.44.56",
+  "version": "1.44.57",
   "channel": "stable",
-  "notes": "v1.44.56: add diagnostic logging to autoConnect goroutine",
+  "notes": "v1.44.57: fix connectivity listener stopping proxy during TUN startup",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "4370e576552fe7e3bdda40fda7a8e245bc9212c1a625f6582a2b0033b3a31102",
-    "size": 44956533
+    "sha256": "e331ce20cc4b9d503277b6cb3a54a6b745af238634930f9e8dbf126705d3149a",
+    "size": 44957119
   },
   "windows": {
     "url": "",
