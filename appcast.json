@@ -1,11 +1,11 @@
 {
-  "version": "1.44.55",
+  "version": "1.44.56",
   "channel": "stable",
-  "notes": "v1.44.55: add Go-side network watchdog for background reconnection",
+  "notes": "v1.44.56: add diagnostic logging to autoConnect goroutine",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "82746da31d4cda77461719e3e598ebdd5c2994bdabe59dbcb8d200b03c1dd3ea",
-    "size": 44955874
+    "sha256": "4370e576552fe7e3bdda40fda7a8e245bc9212c1a625f6582a2b0033b3a31102",
+    "size": 44956533
   },
   "windows": {
     "url": "",
