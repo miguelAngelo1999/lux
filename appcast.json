@@ -1,11 +1,11 @@
 {
-  "version": "1.44.54",
+  "version": "1.44.55",
   "channel": "stable",
-  "notes": "v1.44.54: increase log retention to 1 month + log 500 error body for diagnosis",
+  "notes": "v1.44.55: add Go-side network watchdog for background reconnection",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "0befa603659c9e125130dfd8e6cc921edd4825538099c1864df56a54564996d4",
-    "size": 44951310
+    "sha256": "82746da31d4cda77461719e3e598ebdd5c2994bdabe59dbcb8d200b03c1dd3ea",
+    "size": 44955874
   },
   "windows": {
     "url": "",
