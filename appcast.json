@@ -1,11 +1,11 @@
 {
-  "version": "1.44.50",
+  "version": "1.44.51",
   "channel": "stable",
-  "notes": "v1.44.50: auto-connect on startup without window focus",
+  "notes": "v1.44.51: fix auto-connect elevation check blocking mixed mode",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "99827949154362e420c546115d8ae2f236247757bc539f174aa50f0cd6d53b2c",
-    "size": 44952865
+    "sha256": "12be3beb1fa53f1368a7df316afb5098acd20036a7999400116d94a05f40a91f",
+    "size": 44951863
   },
   "windows": {
     "url": "",
