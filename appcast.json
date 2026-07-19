@@ -1,11 +1,11 @@
 {
-  "version": "1.44.59",
+  "version": "1.44.62",
   "channel": "stable",
-  "notes": "v1.44.59: synchronous auto-connect before API server starts",
+  "notes": "v1.44.62: fix auto-connect on startup: hide window after lux_core launches",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "8bda46b99427ac2e14fb3af8731bc23d4f36b877d1ddfea47afd6a078f7b0d71",
-    "size": 44955874
+    "sha256": "e078670f32b0dfb4cbfc6ba752cc8e1b4886a5cc7518789df0575ef6ef6412b5",
+    "size": 44957259
   },
   "windows": {
     "url": "",
