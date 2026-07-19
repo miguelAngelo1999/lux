@@ -1,11 +1,11 @@
 {
-  "version": "1.44.51",
+  "version": "1.44.52",
   "channel": "stable",
-  "notes": "v1.44.51: fix auto-connect elevation check blocking mixed mode",
+  "notes": "v1.44.52: fix auto-connect timing - add 2s stabilization delay",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "12be3beb1fa53f1368a7df316afb5098acd20036a7999400116d94a05f40a91f",
-    "size": 44951863
+    "sha256": "ec2108f0a93161194b46f6254f894eafb147239bea7176be7e08eb244f750468",
+    "size": 44951981
   },
   "windows": {
     "url": "",
