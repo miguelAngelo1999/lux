@@ -1,11 +1,11 @@
 {
-  "version": "1.44.53",
+  "version": "1.44.54",
   "channel": "stable",
-  "notes": "v1.44.53: fix auto-connect 500 error - add retry with backoff for network interface readiness",
+  "notes": "v1.44.54: increase log retention to 1 month + log 500 error body for diagnosis",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "166190d71bf90348c7efaf7fe0275448c20967876e2b6376b5ae558a2bc06fe6",
-    "size": 44952534
+    "sha256": "0befa603659c9e125130dfd8e6cc921edd4825538099c1864df56a54564996d4",
+    "size": 44951310
   },
   "windows": {
     "url": "",
