@@ -1,11 +1,11 @@
 {
-  "version": "1.44.62",
+  "version": "1.44.63",
   "channel": "stable",
-  "notes": "v1.44.62: fix auto-connect on startup: hide window after lux_core launches",
+  "notes": "v1.44.63: fix auto-connect on startup: hide window after lux_core launches",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "e078670f32b0dfb4cbfc6ba752cc8e1b4886a5cc7518789df0575ef6ef6412b5",
-    "size": 44957259
+    "sha256": "d726119dbe54a0b8b5d571ba07bf1fd30949eeb0295490fcce2f686a0aa70afb",
+    "size": 44957368
   },
   "windows": {
     "url": "",
