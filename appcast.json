@@ -1,11 +1,11 @@
 {
-  "version": "1.44.57",
+  "version": "1.44.58",
   "channel": "stable",
-  "notes": "v1.44.57: fix connectivity listener stopping proxy during TUN startup",
+  "notes": "v1.44.58: synchronous auto-connect before API server starts",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "e331ce20cc4b9d503277b6cb3a54a6b745af238634930f9e8dbf126705d3149a",
-    "size": 44957119
+    "sha256": "bd8069f038457a9154c56b916fcabb2c22283da1c11f9c36dedca91acd0298e2",
+    "size": 44955905
   },
   "windows": {
     "url": "",
