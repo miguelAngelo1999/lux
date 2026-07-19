@@ -1,11 +1,11 @@
 {
-  "version": "1.44.58",
+  "version": "1.44.59",
   "channel": "stable",
-  "notes": "v1.44.58: synchronous auto-connect before API server starts",
+  "notes": "v1.44.59: synchronous auto-connect before API server starts",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "bd8069f038457a9154c56b916fcabb2c22283da1c11f9c36dedca91acd0298e2",
-    "size": 44955905
+    "sha256": "8bda46b99427ac2e14fb3af8731bc23d4f36b877d1ddfea47afd6a078f7b0d71",
+    "size": 44955874
   },
   "windows": {
     "url": "",
