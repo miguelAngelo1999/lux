@@ -1,11 +1,11 @@
 {
-  "version": "1.44.52",
+  "version": "1.44.53",
   "channel": "stable",
-  "notes": "v1.44.52: fix auto-connect timing - add 2s stabilization delay",
+  "notes": "v1.44.53: fix auto-connect 500 error - add retry with backoff for network interface readiness",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "ec2108f0a93161194b46f6254f894eafb147239bea7176be7e08eb244f750468",
-    "size": 44951981
+    "sha256": "166190d71bf90348c7efaf7fe0275448c20967876e2b6376b5ae558a2bc06fe6",
+    "size": 44952534
   },
   "windows": {
     "url": "",
