@@ -1,11 +1,11 @@
 {
-  "version": "1.44.65",
+  "version": "1.44.66",
   "channel": "stable",
-  "notes": "v1.44.65: fix startup crash: disable window state restoration",
+  "notes": "v1.44.66: fix startup crash: remove applicationDidFinishLaunching override",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "e7e5fcb8877f0d413961318c64550abf9901ce8b21a36b55195d65f245390c33",
-    "size": 44946495
+    "sha256": "8f2d31155089cc33452cfe5d439e066ad9428ed4a89ffa88c6712b366af2bd09",
+    "size": 44946092
   },
   "windows": {
     "url": "",
