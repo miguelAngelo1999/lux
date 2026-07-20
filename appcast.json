@@ -1,15 +1,15 @@
 {
-  "version": "1.44.74",
+  "version": "1.44.75",
   "channel": "stable",
-  "notes": "v1.44.74: fix: force window show in applicationDidFinishLaunching for background launch",
+  "notes": "v1.44.75: fix: tray-only mode \u2014 hide dock icon when window closes, show on open",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "45345221fcf3bf125cea1151db2063c04024fced147baa3ab0e0ead057a8b11e",
-    "size": 44941564
+    "sha256": "a4b1701a3e51519e6f717e1aa9e8d34636a71b504ed9f02e0a22b757366257e1",
+    "size": 44944136
   },
   "windows": {
-    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "d086e4bfde14f20e3572695f549f49232f9ea281c5f9a6d912a7c3b432ef8a5c",
-    "size": 33331082
+    "url": "",
+    "sha256": "",
+    "size": 0
   }
 }
