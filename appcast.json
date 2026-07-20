@@ -1,11 +1,11 @@
 {
-  "version": "1.44.66",
+  "version": "1.44.67",
   "channel": "stable",
-  "notes": "v1.44.66: fix startup crash: remove applicationDidFinishLaunching override",
+  "notes": "v1.44.67: fix: cut autoConnect wait from 30s to 5s",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "8f2d31155089cc33452cfe5d439e066ad9428ed4a89ffa88c6712b366af2bd09",
-    "size": 44946092
+    "sha256": "9188a1d4784a747a558dfaa1a1af5f0100dfc6b432ce963b3c36a5a7a69492e5",
+    "size": 44946076
   },
   "windows": {
     "url": "",
