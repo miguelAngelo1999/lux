@@ -432,10 +432,13 @@ Future<void> downloadAndInstall(
 
 /// Builds a standalone Windows batch file that runs OUTSIDE the Lux process.
 /// Flow: Lux writes script → launches detached → Lux exits →
-///       script waits → stops lux_core → runs installer → installer relaunches Lux.
+///       script waits → stops lux_core → runs installer (elevated via UAC) →
+///       installer's ssPostInstall does schtasks /run to relaunch Lux.
 String _buildWindowsUpdaterScript(String installerPath) {
   // Escape backslashes for the batch file
   final escaped = installerPath.replaceAll('/', '\\');
+  // Single-quoted for PowerShell inside batch (avoids double-quote nesting issues)
+  final psEscaped = escaped.replaceAll("'", "''");
   return '@echo off\r\n'
       'echo Lux updater started at %date% %time% > "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
@@ -451,9 +454,16 @@ String _buildWindowsUpdaterScript(String installerPath) {
       'taskkill /F /IM lux_core.exe /T >nul 2>&1\r\n'
       'timeout /t 1 /nobreak >nul\r\n'
       '\r\n'
-      ':: Run installer silently — it will relaunch lux on finish\r\n'
+      ':: Run installer elevated via PowerShell Start-Process -Verb RunAs.\r\n'
+      ':: The installer (PrivilegesRequired=lowest) still needs elevation for\r\n'
+      ':: Register-ScheduledTask -RunLevel Highest in its [Code] section.\r\n'
+      ':: -Wait ensures this bat does not exit until installer finishes.\r\n'
+      ':: The installer ssPostInstall does "schtasks /run /tn LuxApp" to relaunch Lux.\r\n'
       'echo Running installer: $escaped >> "%TEMP%\\lux_updater.log"\r\n'
-      '"$escaped" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART\r\n'
+      'powershell -NonInteractive -WindowStyle Hidden -Command '
+      '"Start-Process -FilePath \'$psEscaped\' '
+      '-ArgumentList \'/VERYSILENT\',\'/SUPPRESSMSGBOXES\',\'/NORESTART\' '
+      '-Verb RunAs -Wait"\r\n'
       'echo Installer exited with code %errorlevel% >> "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
       ':: Clean up this script\r\n'
