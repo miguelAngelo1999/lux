@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get trayProxiesLabel => '切换代理';
+
+  @override
   String get trayDashboardLabel => '管理面板';
 
   @override
@@ -112,4 +115,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addProxyTip => '添加新代理';
+
+  @override
+  String get peekPassword => '查看密码';
+
+  @override
+  String get peekPasswordTitle => '代理密码';
+
+  @override
+  String get peekPasswordElevationRequired => '需要管理员权限才能查看密码';
+
+  @override
+  String get peekPasswordNoPassword => '此代理未配置密码';
+
+  @override
+  String get peekPasswordElevationFailed => '权限提升失败，无法显示密码。';
+
+  @override
+  String get peekPasswordCopied => '密码已复制到剪贴板';
+
+  @override
+  String get lockPassword => '锁定密码';
+
+  @override
+  String get passwordLockedLabel => '密码已锁定';
+
+  @override
+  String get lockPasswordConfirmTitle => '锁定密码？';
+
+  @override
+  String get lockPasswordConfirmMessage =>
+      '此操作将永久禁止任何人查看此密码。代理将继续正常工作，但密码将永远无法被显示。此操作不可撤销。';
+
+  @override
+  String get lockPasswordSuccess => '密码已永久锁定';
 }

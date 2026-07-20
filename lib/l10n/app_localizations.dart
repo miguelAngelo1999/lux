@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
+import 'app_localizations_fil.dart';
 import 'app_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -95,8 +96,15 @@ abstract class AppLocalizations {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
+    Locale('fil'),
     Locale('zh')
   ];
+
+  /// No description provided for @trayProxiesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Proxy'**
+  String get trayProxiesLabel;
 
   /// No description provided for @trayDashboardLabel.
   ///
@@ -295,6 +303,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add new proxy'**
   String get addProxyTip;
+
+  /// No description provided for @peekPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Password'**
+  String get peekPassword;
+
+  /// No description provided for @peekPasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy Password'**
+  String get peekPasswordTitle;
+
+  /// No description provided for @peekPasswordElevationRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin credentials required to view password'**
+  String get peekPasswordElevationRequired;
+
+  /// No description provided for @peekPasswordNoPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'No password configured for this proxy'**
+  String get peekPasswordNoPassword;
+
+  /// No description provided for @peekPasswordElevationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Elevation failed. Cannot reveal password.'**
+  String get peekPasswordElevationFailed;
+
+  /// No description provided for @peekPasswordCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Password copied to clipboard'**
+  String get peekPasswordCopied;
+
+  /// No description provided for @lockPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock Password'**
+  String get lockPassword;
+
+  /// No description provided for @passwordLockedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password Locked'**
+  String get passwordLockedLabel;
+
+  /// No description provided for @lockPasswordConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock Password?'**
+  String get lockPasswordConfirmTitle;
+
+  /// No description provided for @lockPasswordConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This will permanently prevent anyone from viewing this password. The proxy will continue to work, but the password can never be revealed again. This cannot be undone.'**
+  String get lockPasswordConfirmMessage;
+
+  /// No description provided for @lockPasswordSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Password locked permanently'**
+  String get lockPasswordSuccess;
 }
 
 class _AppLocalizationsDelegate
@@ -308,7 +382,7 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'zh'].contains(locale.languageCode);
+      <String>['en', 'fil', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -319,6 +393,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'en':
       return AppLocalizationsEn();
+    case 'fil':
+      return AppLocalizationsFil();
     case 'zh':
       return AppLocalizationsZh();
   }
