@@ -1,11 +1,11 @@
 {
-  "version": "1.44.67",
+  "version": "1.44.69",
   "channel": "stable",
-  "notes": "v1.44.67: fix: cut autoConnect wait from 30s to 5s",
+  "notes": "v1.44.69: fix: NSApp.activate in awakeFromNib so Flutter engine starts when hidden",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "9188a1d4784a747a558dfaa1a1af5f0100dfc6b432ce963b3c36a5a7a69492e5",
-    "size": 44946076
+    "sha256": "69dd3c409aad55bd03e7ef6fb58901b50c07dfafd56b8af72b40d4c86a93102f",
+    "size": 44946108
   },
   "windows": {
     "url": "",
