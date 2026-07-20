@@ -1,11 +1,11 @@
 {
-  "version": "1.44.71",
+  "version": "1.44.74",
   "channel": "stable",
-  "notes": "v1.44.71: fix: show window briefly on macOS to force Flutter engine init when backgrounded",
+  "notes": "v1.44.74: fix: force window show in applicationDidFinishLaunching for background launch",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "8e42e0984a23cd0f7a8655dbc3c9b8ef6c00d9e2dd52fd47ccae3f709b3e20ae",
-    "size": 44945084
+    "sha256": "45345221fcf3bf125cea1151db2063c04024fced147baa3ab0e0ead057a8b11e",
+    "size": 44941564
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
