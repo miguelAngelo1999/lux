@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lux/const/const.dart';
+import 'package:lux/core/core_manager.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/widget/proxy_list_item.dart';
 
@@ -10,6 +11,7 @@ class ProxyListCard extends StatefulWidget {
   final Function onCollapse;
   final bool isCollapsed;
   final List<SubscriptionItem> subscriptionList;
+  final CoreManager? coreManager;
 
   final void Function(ProxyItemAction action, ProxyItem item) onItemChange;
 
@@ -20,6 +22,7 @@ class ProxyListCard extends StatefulWidget {
     required this.isCollapsed,
     required this.onItemChange,
     required this.subscriptionList,
+    this.coreManager,
   });
 
   @override
@@ -103,6 +106,7 @@ class _ProxyListCardState extends State<ProxyListCard> {
                     return ProxyListItem(
                       key: Key(proxyList.proxies[index].id),
                       item: proxyList.proxies[index],
+                      coreManager: widget.coreManager,
                       onChange: (action) =>
                           widget.onItemChange(action, proxyList.proxies[index]),
                     );

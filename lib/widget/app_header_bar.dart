@@ -1,8 +1,10 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lux/model/app.dart';
+import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -16,13 +18,22 @@ class AppHeaderBar extends StatefulWidget {
   final CoreManager coreManager;
   final String curProxyInfo;
   final void Function(String) onCurProxyInfoChange;
+  /// Called after lux successfully connects — used to trigger SSL bump check.
+  final VoidCallback? onConnected;
+  /// Called after a proxy is added/edited so the proxies page can refresh.
+  final VoidCallback? onProxyListChanged;
+  /// Extra widgets appended to the AppBar actions (used for window controls).
+  final List<Widget>? extraActions;
 
   const AppHeaderBar(
       {super.key,
       required this.coreManager,
       required this.urlStr,
       required this.curProxyInfo,
-      required this.onCurProxyInfoChange});
+      required this.onCurProxyInfoChange,
+      this.onConnected,
+      this.onProxyListChanged,
+      this.extraActions});
 
   final String urlStr;
 
@@ -85,6 +96,8 @@ class _State extends State<AppHeaderBar> with WindowListener {
         setState(() {
           isStarted = true;
         });
+        // Trigger SSL bump check after connecting
+        Future.delayed(const Duration(seconds: 5), () => widget.onConnected?.call());
       } else {
         await widget.coreManager.stop();
         setState(() {
@@ -146,8 +159,10 @@ class _State extends State<AppHeaderBar> with WindowListener {
     refreshData();
 
     if (runtimeStatusChannel == null) {
-      widget.coreManager.getRuntimeStatusChannel().then((channel) {
+      widget.coreManager.getRuntimeStatusChannel().then((channel) async {
         runtimeStatusChannel = channel;
+        if (channel == null) return;
+        await channel.ready;
         runtimeStatusChannel?.stream.listen((message) {
           RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));
           setState(() {
@@ -157,6 +172,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
                   .updateIsStarted(value.isStarted);
             }
           });
+          WidgetsBinding.instance.scheduleFrame();
         });
       });
     }
@@ -168,8 +184,16 @@ class _State extends State<AppHeaderBar> with WindowListener {
   }
 
   void _handleAdd() async {
-    final addingUrl = "${widget.urlStr}&mode=add";
-    launchUrl(Uri.parse(addingUrl));
+    await showDialog(
+      context: context,
+      builder: (context) => ProxyEditDialog(
+        coreManager: widget.coreManager,
+        onSaved: () {
+          refreshData();
+          widget.onProxyListChanged?.call();
+        },
+      ),
+    );
   }
 
   @override
@@ -183,12 +207,21 @@ class _State extends State<AppHeaderBar> with WindowListener {
     );
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
-        leading: IconButton(
-            tooltip: tr().goWebDashboardTip,
-            onPressed: openWebDashboard,
-            icon: const Icon(
-              Icons.settings,
-            )),
+        actions: widget.extraActions,
+        // On macOS, add left padding so content doesn't overlap the traffic light buttons
+        leadingWidth: Platform.isMacOS ? 86 : null,
+        leading: Platform.isMacOS
+            ? Padding(
+                padding: const EdgeInsets.only(left: 76),
+                child: IconButton(
+                    tooltip: 'Open web dashboard (advanced)',
+                    onPressed: openWebDashboard,
+                    icon: const Icon(Icons.open_in_browser, size: 18)),
+              )
+            : IconButton(
+                tooltip: 'Open web dashboard (advanced)',
+                onPressed: openWebDashboard,
+                icon: const Icon(Icons.open_in_browser, size: 18)),
         title: Row(
           children: [
             SizedBox(

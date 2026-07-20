@@ -21,7 +21,6 @@ class AppBottomBar extends StatefulWidget {
 class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
   ProxyMode proxyMode = ProxyMode.tun;
   TrafficState? trafficData;
-  WebSocketChannel? trafficChannel;
   bool isWindowHidden = false;
 
   Future<void> refreshMode() async {
@@ -36,19 +35,30 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
     super.initState();
     refreshMode();
     windowManager.addListener(this);
-    if (trafficChannel == null) {
-      widget.coreManager.getTrafficChannel().then((channel) {
-        trafficChannel = channel;
-        trafficChannel?.stream.listen((message) {
-          if (isWindowHidden) {
-            return;
-          }
-          TrafficData value = TrafficData.fromJson(json.decode(message));
-          setState(() {
-            trafficData = TrafficState(rawData: value);
-          });
-        });
-      });
+    _connectTraffic();
+  }
+
+  Future<void> _connectTraffic() async {
+    while (mounted) {
+      try {
+        final channel = await widget.coreManager.getTrafficChannel();
+        if (channel == null) {
+          await Future.delayed(const Duration(seconds: 3));
+          continue;
+        }
+        await channel.ready;
+        await for (final message in channel.stream) {
+          if (!mounted) return;
+          if (isWindowHidden) continue;
+          final value = TrafficData.fromJson(json.decode(message as String));
+          setState(() { trafficData = TrafficState(rawData: value); });
+          WidgetsBinding.instance.scheduleFrame();
+        }
+      } catch (_) {
+        // channel closed or failed — clear cache and retry
+      }
+      widget.coreManager.clearTrafficChannel();
+      if (mounted) await Future.delayed(const Duration(seconds: 3));
     }
   }
 
@@ -67,7 +77,6 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
   void dispose() {
     windowManager.removeListener(this);
     super.dispose();
-    trafficChannel?.sink.close();
   }
 
   @override
@@ -139,8 +148,20 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
           SizedBox(width: 4),
           Tooltip(
             message: tr().proxyModeTooltip,
-            child: Text(
-              getModeLabel(proxyMode),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                getModeLabel(proxyMode),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
             ),
           ),
         ],
