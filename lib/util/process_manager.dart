@@ -21,19 +21,31 @@ class ProcessManager {
   Future<void> run() async {
     if (Platform.isWindows) {
       await verifyCoreBinary(path);
+
+      // Kill any zombie lux_core holding port 1090 before starting a new one.
+      // This prevents "bind: Only one usage of each socket address" errors.
+      try {
+        await Process.run('powershell.exe', [
+          '-noprofile', '-NonInteractive', '-command',
+          r'$pid = (Get-NetTCPConnection -LocalPort 1090 -EA SilentlyContinue | '
+          r'Where-Object State -eq "Listen" | Select-Object -First 1).OwningProcess;'
+          r'if ($pid) { Stop-Process -Id $pid -Force -EA SilentlyContinue }',
+        ]);
+        // Brief pause for OS to release the port
+        await Future.delayed(const Duration(milliseconds: 300));
+      } catch (_) {}
+
       List<String> processArgs = [];
 
       if (needElevate) {
         processArgs = [
           '-noprofile',
-          "Start-Process '$path' -Verb RunAs -windowstyle hidden",
-          "-ArgumentList \"${args.join(' ')}\""
+          "Start-Process '$path' -Verb RunAs -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
         ];
       } else {
         processArgs = [
           '-noprofile',
-          "Start-Process '$path'  -windowstyle hidden",
-          "-ArgumentList \"${args.join(' ')}\""
+          "Start-Process '$path' -windowstyle hidden -ArgumentList \"${args.join(' ')}\"",
         ];
       }
 
@@ -59,6 +71,22 @@ class ProcessManager {
           }
         }
       }
+      // Kill any stale lux_core holding port 1090 before starting a new one.
+      // This prevents "bind: address already in use" on restart/crash.
+      try {
+        final portCheck = await Process.run('lsof', ['-ti', ':1090']);
+        final pids = (portCheck.stdout as String)
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        for (final pid in pids) {
+          await Process.run('kill', ['-9', pid]);
+        }
+        if (pids.isNotEmpty) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      } catch (_) {}
       process = await Process.start(path, args);
       process?.stdout.transform(utf8.decoder).forEach(debugPrint);
       process?.stderr.transform(utf8.decoder).forEach(debugPrint);

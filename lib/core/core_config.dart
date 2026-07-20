@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lux/util/utils.dart';
 import 'package:path/path.dart' as path;
@@ -12,6 +15,87 @@ Future<Map<String, dynamic>> readConfig() async {
   } catch (e) {
     return {};
   }
+}
+
+// ── Local app preferences (lux_prefs.json) ──────────────────────────────────
+// Separate from config.json (managed by lux_core) so we never corrupt it.
+
+Future<String> _prefsPath() async {
+  final homeDir = await getHomeDir();
+  return path.join(homeDir, 'lux_prefs.json');
+}
+
+Future<Map<String, dynamic>> _readPrefs() async {
+  try {
+    final p = await _prefsPath();
+    final f = File(p);
+    if (!f.existsSync()) return {};
+    final raw = f.readAsStringSync();
+    final decoded = jsonDecode(raw);
+    return decoded is Map<String, dynamic> ? decoded : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+Future<void> _writePrefs(Map<String, dynamic> prefs) async {
+  try {
+    final p = await _prefsPath();
+    File(p).writeAsStringSync(jsonEncode(prefs));
+  } catch (_) {}
+}
+
+Future<Set<String>> readDismissedProxies() async {
+  final prefs = await _readPrefs();
+  final raw = prefs['dismissedProxies'];
+  if (raw is List) return raw.cast<String>().toSet();
+  return {};
+}
+
+Future<void> addDismissedProxy(String address) async {
+  final prefs = await _readPrefs();
+  final existing = (prefs['dismissedProxies'] as List?)?.cast<String>() ?? [];
+  if (!existing.contains(address)) {
+    existing.add(address);
+    prefs['dismissedProxies'] = existing;
+    await _writePrefs(prefs);
+  }
+}
+
+Future<void> clearDismissedProxies() async {
+  final prefs = await _readPrefs();
+  prefs['dismissedProxies'] = <String>[];
+  await _writePrefs(prefs);
+}
+
+// ── Wizard step dismissals ────────────────────────────────────────────────────
+// Key: "$certFingerprint:$stepName" — per cert, per step.
+// If a step is dismissed for a given cert, the wizard skips it on next launch.
+
+Future<Set<String>> readDismissedWizardSteps() async {
+  final prefs = await _readPrefs();
+  final raw = prefs['dismissedWizardSteps'];
+  if (raw is List) return raw.cast<String>().toSet();
+  return {};
+}
+
+Future<void> dismissWizardStep(String certFingerprint, String stepName) async {
+  final prefs = await _readPrefs();
+  final existing = (prefs['dismissedWizardSteps'] as List?)?.cast<String>().toSet() ?? {};
+  existing.add('$certFingerprint:$stepName');
+  prefs['dismissedWizardSteps'] = existing.toList();
+  await _writePrefs(prefs);
+}
+
+Future<bool> isWizardStepDismissed(String certFingerprint, String stepName) async {
+  final dismissed = await readDismissedWizardSteps();
+  return dismissed.contains('$certFingerprint:$stepName');
+}
+
+Future<void> clearDismissedWizardSteps() async {
+  final prefs = await _readPrefs();
+  prefs['dismissedWizardSteps'] = <String>[];
+  await _writePrefs(prefs);
 }
 
 Future<Map<String, dynamic>> readSetting() async {
@@ -154,24 +238,62 @@ class ProxyItem {
   final String? server;
   final int? port;
   final String? subscription;
+  final String? password;
+  final bool passwordLocked;
 
   ProxyItem(
-      this.id, this.name, this.server, this.port, this.subscription, this.type);
+      this.id, this.name, this.server, this.port, this.subscription, this.type,
+      {this.password, this.passwordLocked = false});
 
   ProxyItem.fromJson(Map<String, dynamic> json)
       : id = (json['id'] as String),
         name = (json['name'] as String),
         type = (json['type'] as String),
-        server = (json['server'] as String),
+        server = (json['server'] is String ? json['server'] as String : null),
         subscription = (json['subscription'] is String
             ? json['subscription'] as String
             : null),
-        port = (json['port'] as int);
+        port = (json['port'] is int ? json['port'] as int : null),
+        password = (json['password'] is String ? json['password'] : null),
+        passwordLocked = (json['passwordLocked'] is bool ? json['passwordLocked'] : false);
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
       };
+}
+
+/// Detailed proxy configuration including sensitive fields like password.
+class ProxyDetail {
+  final String id;
+  final String name;
+  final String type;
+  final String? server;
+  final int? port;
+  final String? password;
+  final Map<String, dynamic> raw;
+
+  ProxyDetail({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.server,
+    this.port,
+    this.password,
+    required this.raw,
+  });
+
+  factory ProxyDetail.fromJson(Map<String, dynamic> json) {
+    return ProxyDetail(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      server: json['server'] as String?,
+      port: json['port'] as int?,
+      password: json['password'] as String?,
+      raw: json,
+    );
+  }
 }
 
 class ProxyList {
@@ -266,6 +388,143 @@ class RuleList {
   Map<String, dynamic> toJson() => {'rules': rules};
 }
 
+class CustomizedRuleItem {
+  final String ruleType;
+  final String payload;
+  final String policy;
+  final bool disabled;
+  final String raw;
+  /// Optional protocol filter: "tcp", "udp", or null (matches both).
+  final String? protocol;
+
+  const CustomizedRuleItem({
+    required this.ruleType,
+    required this.payload,
+    required this.policy,
+    required this.disabled,
+    required this.raw,
+    this.protocol,
+  });
+
+  factory CustomizedRuleItem.fromJson(Map<String, dynamic> json) {
+    final raw = json['raw'] as String? ?? '';
+    // Parse protocol from the raw string's optional 4th field
+    String? protocol;
+    final parts = raw.replaceFirst(RegExp(r'^#'), '').split(',');
+    if (parts.length >= 4) {
+      final p = parts[3].trim().toLowerCase();
+      if (p == 'tcp' || p == 'udp') protocol = p;
+    }
+    return CustomizedRuleItem(
+      ruleType: json['ruleType'] as String? ?? '',
+      payload: json['payload'] as String? ?? '',
+      policy: json['policy'] as String? ?? '',
+      disabled: json['disabled'] as bool? ?? false,
+      raw: raw,
+      protocol: protocol,
+    );
+  }
+
+  CustomizedRuleItem copyWith({
+    String? ruleType,
+    String? payload,
+    String? policy,
+    bool? disabled,
+    String? raw,
+    Object? protocol = _sentinel,
+  }) =>
+      CustomizedRuleItem(
+        ruleType: ruleType ?? this.ruleType,
+        payload: payload ?? this.payload,
+        policy: policy ?? this.policy,
+        disabled: disabled ?? this.disabled,
+        raw: raw ?? this.raw,
+        protocol: protocol == _sentinel ? this.protocol : protocol as String?,
+      );
+
+  /// Produces the raw rule string, including optional protocol suffix.
+  String toRawString() {
+    final base = protocol != null
+        ? '$ruleType,$payload,$policy,$protocol'
+        : '$ruleType,$payload,$policy';
+    return disabled ? '#$base' : base;
+  }
+}
+
+// Sentinel for copyWith optional nullable field
+const Object _sentinel = Object();
+
+/// Human-readable fields extracted from an intercepting CA certificate.
+class CertInfo {
+  final String subject;
+  final String issuer;
+  final String organizationName;
+  final String notBefore;
+  final String notAfter;
+  final String sha256Fingerprint;
+  final bool isCA;
+
+  const CertInfo({
+    required this.subject,
+    required this.issuer,
+    required this.organizationName,
+    required this.notBefore,
+    required this.notAfter,
+    required this.sha256Fingerprint,
+    required this.isCA,
+  });
+
+  factory CertInfo.fromJson(Map<String, dynamic> json) {
+    return CertInfo(
+      subject: json['subject'] as String? ?? '',
+      issuer: json['issuer'] as String? ?? '',
+      organizationName: json['organizationName'] as String? ?? '',
+      notBefore: json['notBefore'] as String? ?? '',
+      notAfter: json['notAfter'] as String? ?? '',
+      sha256Fingerprint: json['sha256Fingerprint'] as String? ?? '',
+      isCA: json['isCA'] as bool? ?? false,
+    );
+  }
+}
+
+/// Result of the SSL bump detection probe from the backend.
+class SslBumpStatus {
+  /// Whether an intercepting/inspecting proxy was detected.
+  final bool detected;
+
+  /// Whether a CA cert is available for download.
+  final bool hasCert;
+
+  /// RFC3339 timestamp of the last check (may be empty on first load).
+  final String checkedAt;
+
+  /// Error message if the probe failed.
+  final String? error;
+
+  /// Parsed metadata about the intercepting CA cert, if available.
+  final CertInfo? certInfo;
+
+  const SslBumpStatus({
+    required this.detected,
+    required this.hasCert,
+    this.checkedAt = '',
+    this.error,
+    this.certInfo,
+  });
+
+  factory SslBumpStatus.fromJson(Map<String, dynamic> json) {
+    return SslBumpStatus(
+      detected: json['detected'] as bool? ?? false,
+      hasCert: json['hasCert'] as bool? ?? false,
+      checkedAt: json['checkedAt'] as String? ?? '',
+      error: json['error'] as String?,
+      certInfo: json['certInfo'] is Map<String, dynamic>
+          ? CertInfo.fromJson(json['certInfo'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
 // Define the data classes
 class Speed {
   final Proxy proxy;
@@ -355,15 +614,173 @@ class RuntimeStatus {
 }
 
 class Setting {
-  late final ProxyMode mode;
+  final ProxyMode mode;
+  final bool autoLaunch;
+  final bool autoConnect;
+  final String defaultInterface;
+  final int localServerPort;
+  final bool allowLan;
+  final bool? blockQuic;
+  final bool? shouldFindProcess;
+  final bool? fakeIp;
+  final bool? disableDnsCache;
+  final bool hijackDns;
+  final bool autoModeEnabled;
+  final String autoModeType;
+  final String autoModeUrl;
+  final bool? sensitiveInfoMode;
+  final bool loadBalanceEnabled;
+  final List<String> loadBalanceInterfaces;
+  final String loadBalanceStrategy;
+  final bool? restoreAutoDetect;
 
-  Setting(this.mode);
+  const Setting({
+    this.mode = ProxyMode.mixed,
+    this.autoLaunch = false,
+    this.autoConnect = true,
+    this.defaultInterface = '',
+    this.localServerPort = 1090,
+    this.allowLan = false,
+    this.blockQuic,
+    this.shouldFindProcess,
+    this.fakeIp,
+    this.disableDnsCache,
+    this.hijackDns = false,
+    this.autoModeEnabled = false,
+    this.autoModeType = 'fallback',
+    this.autoModeUrl = 'https://google.com',
+    this.sensitiveInfoMode,
+    this.loadBalanceEnabled = false,
+    this.loadBalanceInterfaces = const [],
+    this.loadBalanceStrategy = 'least-conn',
+    this.restoreAutoDetect,
+  });
 
-  Setting.fromJson(Map<String, dynamic> json) {
-    mode = (json.containsKey('mode') && json['mode'] is String)
-        ? (json['mode'] == 'tun'
-            ? ProxyMode.tun
-            : (json['mode'] == 'system' ? ProxyMode.system : ProxyMode.mixed))
-        : ProxyMode.mixed;
+  Setting.fromJson(Map<String, dynamic> json)
+      : mode = _parseMode(json['mode'] as String? ?? 'mixed'),
+        autoLaunch = json['autoLaunch'] as bool? ?? false,
+        autoConnect = json['autoConnect'] as bool? ?? true,
+        defaultInterface = json['defaultInterface'] as String? ?? '',
+        localServerPort = (json['localServer'] as Map?)?['port'] as int? ?? 1090,
+        allowLan = (json['localServer'] as Map?)?['allowLan'] as bool? ?? false,
+        blockQuic = json['blockQuic'] as bool?,
+        shouldFindProcess = json['shouldFindProcess'] as bool?,
+        fakeIp = (json['dns'] as Map?)?['fakeIp'] as bool?,
+        disableDnsCache = (json['dns'] as Map?)?['disableCache'] as bool?,
+        hijackDns = (json['hijackDns'] as Map?)?['enabled'] as bool? ?? false,
+        autoModeEnabled = (json['autoMode'] as Map?)?['enabled'] as bool? ?? false,
+        autoModeType = (json['autoMode'] as Map?)?['type'] as String? ?? 'fallback',
+        autoModeUrl = (json['autoMode'] as Map?)?['url'] as String? ?? 'https://google.com',
+        sensitiveInfoMode = json['sensitiveInfoMode'] as bool?,
+        loadBalanceEnabled = (json['loadBalance'] as Map?)?['enabled'] as bool? ?? false,
+        loadBalanceInterfaces = ((json['loadBalance'] as Map?)?['interfaces'] as List?)
+                ?.map((e) => e as String)
+                .toList() ??
+            const [],
+        loadBalanceStrategy = (json['loadBalance'] as Map?)?['strategy'] as String? ?? 'least-conn',
+        restoreAutoDetect = json['restoreAutoDetect'] as bool?;
+
+  Map<String, dynamic> toJson() => {
+        'mode': mode == ProxyMode.tun ? 'tun' : mode == ProxyMode.system ? 'system' : 'mixed',
+        'autoLaunch': autoLaunch,
+        'autoConnect': autoConnect,
+        'defaultInterface': defaultInterface,
+        'localServer': {'port': localServerPort, 'allowLan': allowLan},
+        if (blockQuic != null) 'blockQuic': blockQuic,
+        if (shouldFindProcess != null) 'shouldFindProcess': shouldFindProcess,
+        if (fakeIp != null || disableDnsCache != null)
+          'dns': {
+            if (fakeIp != null) 'fakeIp': fakeIp,
+            if (disableDnsCache != null) 'disableCache': disableDnsCache,
+          },
+        'hijackDns': {'enabled': hijackDns},
+        'autoMode': {
+          'enabled': autoModeEnabled,
+          'type': autoModeType,
+          'url': autoModeUrl,
+        },
+        if (sensitiveInfoMode != null) 'sensitiveInfoMode': sensitiveInfoMode,
+        'loadBalance': {
+          'enabled': loadBalanceEnabled,
+          'interfaces': loadBalanceInterfaces,
+          'strategy': loadBalanceStrategy,
+        },
+        if (restoreAutoDetect != null) 'restoreAutoDetect': restoreAutoDetect,
+      };
+
+  Setting copyWith({
+    ProxyMode? mode,
+    bool? autoLaunch,
+    bool? autoConnect,
+    String? defaultInterface,
+    int? localServerPort,
+    bool? allowLan,
+    bool? blockQuic,
+    bool? shouldFindProcess,
+    bool? fakeIp,
+    bool? disableDnsCache,
+    bool? hijackDns,
+    bool? autoModeEnabled,
+    String? autoModeType,
+    String? autoModeUrl,
+    bool? sensitiveInfoMode,
+    bool? loadBalanceEnabled,
+    List<String>? loadBalanceInterfaces,
+    String? loadBalanceStrategy,
+    bool? restoreAutoDetect,
+  }) =>
+      Setting(
+        mode: mode ?? this.mode,
+        autoLaunch: autoLaunch ?? this.autoLaunch,
+        autoConnect: autoConnect ?? this.autoConnect,
+        defaultInterface: defaultInterface ?? this.defaultInterface,
+        localServerPort: localServerPort ?? this.localServerPort,
+        allowLan: allowLan ?? this.allowLan,
+        blockQuic: blockQuic ?? this.blockQuic,
+        shouldFindProcess: shouldFindProcess ?? this.shouldFindProcess,
+        fakeIp: fakeIp ?? this.fakeIp,
+        disableDnsCache: disableDnsCache ?? this.disableDnsCache,
+        hijackDns: hijackDns ?? this.hijackDns,
+        autoModeEnabled: autoModeEnabled ?? this.autoModeEnabled,
+        autoModeType: autoModeType ?? this.autoModeType,
+        autoModeUrl: autoModeUrl ?? this.autoModeUrl,
+        sensitiveInfoMode: sensitiveInfoMode ?? this.sensitiveInfoMode,
+        loadBalanceEnabled: loadBalanceEnabled ?? this.loadBalanceEnabled,
+        loadBalanceInterfaces: loadBalanceInterfaces ?? this.loadBalanceInterfaces,
+        loadBalanceStrategy: loadBalanceStrategy ?? this.loadBalanceStrategy,
+        restoreAutoDetect: restoreAutoDetect ?? this.restoreAutoDetect,
+      );
+
+  static ProxyMode _parseMode(String s) {
+    if (s == 'tun') return ProxyMode.tun;
+    if (s == 'system') return ProxyMode.system;
+    return ProxyMode.mixed;
   }
+}
+
+/// Result of a network proxy auto-detection probe.
+class DetectedProxy {
+  final String host;
+  final String port;
+  final String scheme;
+  final bool needsAuth;
+  final String source;
+
+  const DetectedProxy({
+    required this.host,
+    required this.port,
+    required this.scheme,
+    required this.needsAuth,
+    required this.source,
+  });
+
+  factory DetectedProxy.fromJson(Map<String, dynamic> json) => DetectedProxy(
+        host: json['host'] as String? ?? '',
+        port: json['port'] as String? ?? '8080',
+        scheme: json['scheme'] as String? ?? 'http',
+        needsAuth: (json['requiresAuth'] as bool? ?? json['needsAuth'] as bool?) ?? false,
+        source: json['source'] as String? ?? '',
+      );
+
+  String get address => '$host:$port';
 }

@@ -8,6 +8,7 @@ import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
+import 'package:lux/util/app_log.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/notifier.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -39,17 +40,48 @@ void exitApp() async {
 
 Future<void> setAutoConnect(CoreManager? coreManager) async {
   var isAutoConnect = await readAutoConnect();
+  appLog('CORE', 'setAutoConnect isAutoConnect=$isAutoConnect');
   if (isAutoConnect) {
+    // Give Go-side auto-connect a short window to fire (it typically connects in 1-3s).
+    // Then check immediately — if already connected, skip Flutter-side start().
+    await Future.delayed(const Duration(seconds: 5));
+    
+    // Check if lux_core already auto-connected (Go-side auto-connect)
     try {
-      await Future.delayed(const Duration(seconds: 2));
-      await coreManager?.start();
-      notifier.show(tr().connectOnOpenMsg);
-    } catch (e) {
-      String? msg = e.toString();
-      if (e is DioException) {
-        msg = e.message;
+      final alreadyStarted = await coreManager?.getIsStarted() ?? false;
+      if (alreadyStarted) {
+        appLog('CORE', 'setAutoConnect: lux_core already connected (Go-side auto-connect), skipping');
+        return;
       }
-      notifier.show(tr().connectOnOpenErrMsg(msg.toString()));
+    } catch (_) {
+      // If we can't check, proceed with normal retry logic
+    }
+    // Try immediately, then retry up to 5 times with increasing delay
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        appLog('CORE', 'setAutoConnect attempt $attempt calling start()');
+        await coreManager?.start();
+        appLog('CORE', 'setAutoConnect start() succeeded');
+        notifier.show(tr().connectOnOpenMsg);
+        return; // Success — stop retrying
+      } catch (e) {
+        String errorDetail = e.toString();
+        if (e is DioException && e.response != null) {
+          errorDetail = 'HTTP ${e.response!.statusCode}: ${e.response!.data}';
+        }
+        appLog('CORE', 'setAutoConnect attempt $attempt failed: $errorDetail');
+        if (attempt < 4) {
+          // Wait before retrying: 500ms, 1s, 2s, 4s
+          await Future.delayed(Duration(milliseconds: 500 * (1 << attempt)));
+        } else {
+          // Final failure
+          String? msg = e.toString();
+          if (e is DioException) {
+            msg = e.message;
+          }
+          notifier.show(tr().connectOnOpenErrMsg(msg.toString()));
+        }
+      }
     }
   }
 }
@@ -78,23 +110,40 @@ Future<void> setAutoLaunch(CoreManager? coreManager) async {
 
 Locale convertLocale(String locale) {
   switch (locale) {
+    case 'en':
     case 'en-US':
-      {
-        return const Locale('en');
-      }
+      return const Locale('en');
     case 'zh-CN':
-      {
-        return const Locale('zh');
-      }
+    case 'zh':
+      return const Locale('zh');
+    case 'fil':
+      return const Locale('fil');
+    case 'es':
+      return const Locale('es');
+    case 'fr':
+      return const Locale('fr');
+    case 'pt':
+      return const Locale('pt');
+    case 'ar':
+      return const Locale('ar');
+    case 'de':
+      return const Locale('de');
+    case 'ja':
+      return const Locale('ja');
+    case 'ko':
+      return const Locale('ko');
     default:
-      {
-        var curLocale = Intl.getCurrentLocale();
-        if (curLocale.startsWith('zh')) {
-          return const Locale('zh');
-        } else {
-          return const Locale('en');
-        }
-      }
+      final curLocale = Intl.getCurrentLocale();
+      if (curLocale.startsWith('zh')) return const Locale('zh');
+      if (curLocale.startsWith('fil')) return const Locale('fil');
+      if (curLocale.startsWith('es')) return const Locale('es');
+      if (curLocale.startsWith('fr')) return const Locale('fr');
+      if (curLocale.startsWith('pt')) return const Locale('pt');
+      if (curLocale.startsWith('ar')) return const Locale('ar');
+      if (curLocale.startsWith('de')) return const Locale('de');
+      if (curLocale.startsWith('ja')) return const Locale('ja');
+      if (curLocale.startsWith('ko')) return const Locale('ko');
+      return const Locale('en');
   }
 }
 
@@ -129,24 +178,10 @@ Function compareVersion = (String a, String b) {
   return versionA.compareTo(versionB);
 };
 
+// Update check is now handled by lib/util/updater.dart (see dashboard.dart).
+// This stub is kept so any existing callers compile without changes.
 Future<void> checkForUpdate() async {
-  try {
-    final dio = Dio();
-    var latestReleaseRes = await dio
-        .get('https://api.github.com/repos/igoogolx/lux/releases/latest');
-    if (latestReleaseRes.data.containsKey('tag_name') &&
-        latestReleaseRes.data['tag_name'] is String) {
-      var latestVersion = latestReleaseRes.data['tag_name'].replaceAll('v', '');
-      var currentVersion = await getAppVersion();
-      debugPrint(
-          'latest version: $latestVersion, current version: $currentVersion');
-      if (compareVersion(latestVersion, currentVersion) == 1) {
-        notifier.show(tr().newVersionMessage, notifierPayloadNewRelease);
-      }
-    }
-  } catch (e) {
-    debugPrint('error checking for updates: $e');
-  }
+  // no-op: real check happens via Updater.checkForUpdate() in dashboard
 }
 
 String formatBytes(int bytes) {
