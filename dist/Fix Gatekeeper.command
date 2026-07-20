@@ -1,72 +1,32 @@
-#!/bin/bash
-# ============================================================
-# Lux Installation Helper
-# Run this AFTER dragging Lux.app to your Applications folder
-# ============================================================
-echo "====================================="
-echo "  Lux — Installation Helper"
-echo "====================================="
-echo ""
+#!/usr/bin/osascript
+-- ============================================================
+-- Lux Installation Helper — Launcher
+-- ============================================================
+-- Uses /usr/bin/osascript as interpreter so this works
+-- regardless of the user's default shell (bash, zsh, fish…).
+--
+-- Background: Terminal.app has a confirmed bug where .command
+-- files silently fail when "Shells open with" is set to a
+-- non-standard shell path. The shebang is never reached —
+-- Terminal just opens the shell and does nothing.
+-- osascript bypasses Terminal's shell preference entirely.
+--
+-- This script opens a new Terminal window and runs the
+-- installer bash script (lux_install.sh) located alongside
+-- this file in the same folder (the DMG volume).
+-- ============================================================
 
-APP="/Applications/Lux.app"
-BIN="$APP/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core"
-REAL="${BIN}_real"
+set selfDir to do shell script "dirname " & quoted form of (POSIX path of (path to me))
+set installerScript to selfDir & "/lux_install.sh"
 
-# Step 1: Check Lux.app is in Applications
-if [ ! -d "$APP" ]; then
-    echo "⚠️  Lux.app not found in /Applications."
-    echo "Please drag Lux.app to your Applications folder first, then run this script again."
-    echo ""
-    read -n 1 -p "Press any key to close..."
-    exit 1
-fi
+-- Verify the installer script exists alongside this launcher
+set checkResult to do shell script "test -f " & quoted form of installerScript & " && echo yes || echo no"
+if checkResult is not "yes" then
+	display dialog "Could not find lux_install.sh next to this file." & return & return & "Make sure both files are in the same folder." buttons {"OK"} default button "OK" with icon stop
+	return
+end if
 
-echo "✅ Found Lux.app in /Applications"
-echo ""
-
-# Step 2: Remove quarantine (fixes 'damaged' / Gatekeeper block)
-echo "Step 1/3: Removing macOS quarantine..."
-sudo xattr -cr "$APP"
-echo "✅ Quarantine removed"
-echo ""
-
-# Step 3: Set up elevation wrapper for lux_core
-echo "Step 2/3: Setting up elevation (lux_core needs root for TUN mode)..."
-
-# The wrapper script (lux_core) calls sudo lux_core_real
-# lux_core_real is the actual binary — needs root:wheel + setuid
-if [ -f "$REAL" ]; then
-    # Already set up — just fix permissions in case
-    sudo chown root:wheel "$REAL"
-    sudo chmod 770 "$REAL"
-    sudo chmod u+s "$REAL"
-    echo "✅ lux_core_real permissions fixed"
-elif [ -f "$BIN" ]; then
-    # First install — move binary to _real, create wrapper
-    sudo mv "$BIN" "$REAL"
-    printf '#!/bin/bash\nexec sudo "%s" "$@"\n' "$REAL" | sudo tee "$BIN" > /dev/null
-    sudo chmod 755 "$BIN"
-    sudo chown root:wheel "$REAL"
-    sudo chmod 770 "$REAL"
-    sudo chmod u+s "$REAL"
-    echo "✅ lux_core wrapper created"
-else
-    echo "⚠️  lux_core binary not found — the app may be corrupted"
-fi
-echo ""
-
-# Step 4: Set up passwordless sudo for lux_core_real
-echo "Step 3/3: Setting up passwordless sudo (so Lux doesn't ask for password)..."
-USER_=$(whoami)
-SUDOERS_LINE="$USER_ ALL=(root) NOPASSWD: $REAL *"
-echo "$SUDOERS_LINE" | sudo tee /etc/sudoers.d/lux_core > /dev/null
-sudo chmod 0440 /etc/sudoers.d/lux_core
-sudo visudo -c -f /etc/sudoers.d/lux_core 2>/dev/null && echo "✅ Passwordless sudo configured" || echo "⚠️  sudoers setup failed — Lux will prompt for password on connect"
-echo ""
-
-echo "====================================="
-echo "✅ Installation complete!"
-echo "Open Lux from your Applications folder."
-echo "====================================="
-echo ""
-read -n 1 -p "Press any key to close..."
+tell application "Terminal"
+	activate
+	do script "/bin/bash " & quoted form of installerScript
+end tell

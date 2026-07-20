@@ -43,8 +43,13 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
     client.badCertificateCallback = (_, __, ___) => true;
     client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
 
-    final request = await client.getUrl(Uri.parse(appcastUrl));
+    final request = await client.getUrl(
+      // Add cache-busting timestamp so GDrive CDN always returns fresh content
+      Uri.parse('$appcastUrl&_t=${DateTime.now().millisecondsSinceEpoch}'),
+    );
     request.followRedirects = true;
+    request.headers.set('Cache-Control', 'no-cache, no-store');
+    request.headers.set('Pragma', 'no-cache');
     final response = await request.close().timeout(const Duration(seconds: 15));
     final body = await response.transform(const SystemEncoding().decoder).join();
 
@@ -572,6 +577,9 @@ echo "Relaunching Lux..."
 LOGGED_USER=\$(stat -f '%Su' /dev/console)
 LOGGED_UID=\$(id -u "\$LOGGED_USER" 2>/dev/null || echo "")
 if [ -n "\$LOGGED_UID" ]; then
+  # Use osascript to open via Finder — avoids macOS background app throttling
+  # that affects launchctl asuser open (can delay 5+ minutes)
+  launchctl asuser "\$LOGGED_UID" /usr/bin/osascript -e 'tell application "Finder" to open POSIX file "/Applications/Lux.app"' 2>/dev/null || \
   launchctl asuser "\$LOGGED_UID" /usr/bin/open -a /Applications/Lux.app
 else
   sudo -u "\$LOGGED_USER" open -a /Applications/Lux.app

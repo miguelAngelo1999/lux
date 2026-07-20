@@ -91,18 +91,18 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
 
   Future<void> _toggle(CustomizedRuleItem item) async {
     _lastMutation = DateTime.now();
+    // Optimistic UI: just flip the disabled flag visually
     setState(() {
       _isMutating = true;
       final idx = _rules.indexOf(item);
       if (idx >= 0) {
-        _rules[idx] = item.copyWith(
-          disabled: !item.disabled,
-          raw: item.disabled ? item.toRawString() : '#${item.toRawString()}',
-        );
+        _rules[idx] = item.copyWith(disabled: !item.disabled);
       }
     });
     try {
       await widget.coreManager.toggleCustomizedRule(item.raw);
+      // Reload to get the authoritative raw string from backend
+      await _load();
     } catch (e) {
       debugPrint('Toggle error: $e');
       if (mounted) {
@@ -366,7 +366,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
               Expanded(child: TText('Payload', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               SizedBox(width: 80, child: TText('Policy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               SizedBox(width: 44, child: TText('Proto', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 80),
+              SizedBox(width: 112),
             ],
           ),
         ),
@@ -496,45 +496,49 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                                 ),
                               ),
                             ),
-                          // Actions - use compact overflow menu
-                          SizedBox(
-                            width: 80,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    isDisabled ? Icons.check_box_outline_blank : Icons.check_box,
-                                    size: 16,
-                                    color: isDisabled ? Colors.grey : Theme.of(ctx).colorScheme.primary,
+                          // Actions
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Toggle switch — compact
+                              SizedBox(
+                                width: 36,
+                                height: 20,
+                                child: Transform.scale(
+                                  scale: 0.7,
+                                  child: Switch(
+                                    value: !isDisabled,
+                                    onChanged: (_) => _toggle(rule),
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   ),
-                                  onPressed: () => _toggle(rule),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                  tooltip: isDisabled ? 'Enable' : 'Disable',
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.edit, size: 14),
-                                  onPressed: () => _showAddEdit(item: rule),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                  tooltip: 'Edit',
+                              ),
+                              // Edit
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, size: 14),
+                                onPressed: () => _showAddEdit(item: rule),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                tooltip: 'Edit',
+                              ),
+                              // Delete — red trash icon
+                              IconButton(
+                                icon: Icon(Icons.delete_outline, size: 14,
+                                    color: Theme.of(ctx).colorScheme.error),
+                                onPressed: () => _delete(rule),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                tooltip: 'Delete',
+                              ),
+                              // Drag handle
+                              ReorderableDragStartListener(
+                                index: i,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(right: 8),
+                                  child: Icon(Icons.drag_handle, size: 16, color: Colors.grey),
                                 ),
-                                IconButton(
-                                  icon: Icon(Icons.delete_outline, size: 14,
-                                      color: Theme.of(ctx).colorScheme.error),
-                                  onPressed: () => _delete(rule),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                  tooltip: 'Delete',
-                                ),
-                                // Drag handle
-                                ReorderableDragStartListener(
-                                  index: i,
-                                  child: const Icon(Icons.drag_handle, size: 16, color: Colors.grey),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

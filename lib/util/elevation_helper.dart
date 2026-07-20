@@ -113,10 +113,17 @@ Write-Output $ok
     return output == 'true';
   }
 
-  /// macOS: Uses osascript to prompt for admin password.
+  /// macOS: Uses Touch ID / password to verify admin access.
+  /// sudo -n is tried first (instant if NOPASSWD active).
+  /// osascript on macOS 13+ shows Touch ID automatically if the machine supports it.
   static Future<bool> _requestMacOSElevation(String message) async {
+    // Fast path: if NOPASSWD is active, no prompt needed
+    final silent = await Process.run('sudo', ['-n', 'true']);
+    if (silent.exitCode == 0) return true;
+
+    // osascript 'with administrator privileges' — macOS shows Touch ID when available
     final script =
-        'do shell script "echo elevated" with prompt "$message" with administrator privileges';
+        'do shell script "echo ok" with prompt "$message" with administrator privileges';
     final result = await Process.run('/usr/bin/osascript', ['-e', script]);
     return result.exitCode == 0;
   }

@@ -42,7 +42,8 @@ class NetworkReset {
   }
 
   static Future<void> _resetMacOS() async {
-    final script = File('/tmp/lux_network_reset.sh');
+    const _luxScriptsDir = '/Library/PrivilegedHelperTools/com.github.igoogolx.lux';
+    final script = File('$_luxScriptsDir/lux_network_reset.sh');
     await script.writeAsString(
       '#!/bin/bash\n'
       '# Clear system proxy on all interfaces\n'

@@ -60,6 +60,7 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     super.awakeFromNib()
+    // Window visibility is managed by waitUntilReadyToShow in main.dart.
   }
 
   // MARK: - Native floating panel
@@ -149,8 +150,4 @@ class MainFlutterWindow: NSWindow {
     self.quickEditPanel = panel
   }
 
-  override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
-    super.order(place, relativeTo: otherWin)
-    hiddenWindowAtLaunch()
-  }
 }

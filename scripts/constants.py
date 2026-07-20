@@ -11,3 +11,5 @@ WINDOWS_BASENAME     = 'Lux-{version}-Windows-x64.exe'
 # The appcast.json file ID is stable — we overwrite its content each release
 APPCAST_FILE_NAME    = 'appcast.json'
 APPCAST_FILE_ID      = '1jf-8thv_VVPIQ3k_n83UhygzEKkydI2p'
+# Stable DMG file ID — always update in-place so the download URL never changes
+DMG_FILE_ID          = '1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-'

@@ -22,6 +22,7 @@ import 'package:lux/tr.dart';
 import 'package:lux/tray.dart';
 import 'package:lux/util/notifier.dart';
 import 'package:flutter/services.dart';
+import 'package:lux/util/core_lockfile.dart';
 import 'package:lux/util/process_manager.dart';
 import 'package:lux/widget/quick_edit_window.dart';
 import 'package:lux/util/utils.dart';
@@ -42,8 +43,9 @@ import 'package:lux/widget/proxy_edit_dialog.dart';
 
 class Home extends StatefulWidget {
   final ClientMode clientMode;
+  final bool silentStart;
 
-  const Home(this.clientMode, {super.key});
+  const Home(this.clientMode, {super.key, this.silentStart = false});
 
   @override
   State<Home> createState() => _HomeState();
@@ -71,6 +73,24 @@ class _HomeState extends State<Home>
   String? _lastDetectedCertFingerprint;
   VoidCallback? _proxyListRefresh; // set by Dashboard, called after adding a proxy
   final _quickEditChannel = const MethodChannel('lux_quick_edit');
+  final _dockChannel = const MethodChannel('lux_dock');
+
+  /// Hide the window and remove the dock icon (tray-only mode).
+  Future<void> _hideWindow() async {
+    await windowManager.hide().catchError((_) {});
+    if (Platform.isMacOS) {
+      _dockChannel.invokeMethod('hide').catchError((_) {});
+    }
+  }
+
+  /// Show the window and restore the dock icon.
+  Future<void> _showWindow() async {
+    if (Platform.isMacOS) {
+      await _dockChannel.invokeMethod('show').catchError((_) {});
+    }
+    await windowManager.show();
+    await windowManager.focus();
+  }
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   Future<void> _handleNativeQuickEdit(MethodCall call) async {
@@ -444,8 +464,7 @@ class _HomeState extends State<Home>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted || _wizardShowing) return;
           _wizardShowing = true;
-          windowManager.show();
-          windowManager.focus();
+          _showWindow();
           SetupWizard.show(context, coreManager!, sslStatus).whenComplete(() {
             _wizardShowing = false;
           });
@@ -509,8 +528,7 @@ class _HomeState extends State<Home>
     _proxyDialogShowing = true;
 
     // Bring app to foreground to ensure user sees the prompt
-    await windowManager.show();
-    await windowManager.focus();
+    await _showWindow();
 
     // Use the SSL cert's organization name as default proxy name if available
     final defaultName = ssl.certInfo?.organizationName.isNotEmpty == true
@@ -1103,8 +1121,7 @@ class _HomeState extends State<Home>
       await windowManager.center();
     }
     await windowManager.setSkipTaskbar(false);
-    await windowManager.show();
-    await windowManager.focus();
+    await _showWindow();
     if (mounted) {
       setState(() => _quickEditMode = true);
     }
@@ -1145,19 +1162,68 @@ class _HomeState extends State<Home>
     var curHomeDir = await getHomeDir();
     await initAppLog(curHomeDir);
     appLog('APP', 'init started homeDir=$curHomeDir');
-    final port = await findAvailablePort(8000, 9000);
-    var uuid = Uuid();
-    var secret = uuid.v4();
     final Version currentVersion = Version.parse(await getAppVersion());
-    var needElevate = true;
-    var homeDirArg = '-home_dir=$curHomeDir';
-    if (Platform.isWindows) {
-      homeDirArg = "-home_dir=`\"$curHomeDir`\"";
+
+    // ── LaunchAgent fast path (macOS only) ──────────────────────────────────
+    // If the LaunchAgent pre-started lux_core, a lockfile exists with the
+    // fixed port and persistent secret. Try to connect to it directly —
+    // no new process launch needed, no scheduler throttle problem.
+    int port;
+    String secret;
+    ProcessManager? process;
+
+    if (Platform.isMacOS) {
+      final lock = await readLockfile(curHomeDir);
+      if (lock != null) {
+        // Verify lux_core is actually responding on that port
+        bool alive = false;
+        try {
+          final testSocket = await Socket.connect('127.0.0.1', lock.port,
+              timeout: const Duration(seconds: 2));
+          testSocket.destroy();
+          alive = true;
+        } catch (_) {}
+
+        if (alive) {
+          appLog('CORE', 'LaunchAgent lux_core already running on port=${lock.port} — skipping launch');
+          port = lock.port;
+          secret = lock.secret;
+          process = null; // no process to manage — LaunchAgent owns it
+        } else {
+          appLog('CORE', 'lockfile found but lux_core not responding — will relaunch');
+          await deleteLockfile(curHomeDir);
+          port = luxCoreFixedPort;
+          secret = const Uuid().v4();
+          await writeLockfile(curHomeDir, CoreLockfile(port: port, secret: secret));
+          process = ProcessManager(
+              corePath,
+              ['-home_dir=$curHomeDir', '-port=$port', '-secret=$secret'],
+              true);
+        }
+      } else {
+        // No lockfile — LaunchAgent not installed yet or first launch.
+        // Use fixed port so lockfile written here is valid for future LaunchAgent starts.
+        port = luxCoreFixedPort;
+        secret = const Uuid().v4();
+        await writeLockfile(curHomeDir, CoreLockfile(port: port, secret: secret));
+        process = ProcessManager(
+            corePath,
+            ['-home_dir=$curHomeDir', '-port=$port', '-secret=$secret'],
+            true);
+      }
+    } else {
+      // Windows — keep existing dynamic port behavior
+      port = await findAvailablePort(8000, 9000);
+      secret = const Uuid().v4();
+      var needElevate = true;
+      var homeDirArg = "-home_dir=`\"$curHomeDir`\"";
       final proxyMode = await readProxyMode();
       needElevate = proxyMode != ProxyMode.system;
+      process = ProcessManager(
+          corePath, [homeDirArg, '-port=$port', '-secret=$secret'], needElevate);
     }
-    final process = ProcessManager(
-        corePath, [homeDirArg, '-port=$port', '-secret=$secret'], needElevate);
+    // ────────────────────────────────────────────────────────────────────────
+
     var curBaseUrl = '127.0.0.1:$port';
     var curHttpUrl = 'http://$curBaseUrl';
     var curUrlStr =
@@ -1191,9 +1257,16 @@ class _HomeState extends State<Home>
         coreError = e;
       });
       // Show window on error so user sees what went wrong
-      windowManager.show();
-      windowManager.focus();
+      _showWindow();
     });
+
+    // Hide the window after run() is called (or after we confirmed core is
+    // already running). On macOS the window was already briefly shown then
+    // hidden in waitUntilReadyToShow to force Flutter engine initialization.
+    // On Windows we hide here if it's a silent start.
+    if (widget.silentStart && Platform.isWindows) {
+      windowManager.hide().catchError((_) {});
+    }
 
     // Watchdog: if lux_core dies unexpectedly, reset network settings
     // so internet isn't permanently broken by stale system proxy / TUN.
@@ -1415,6 +1488,12 @@ class _HomeState extends State<Home>
     appLog('CORE', '_onCoreReady fired isCoreReady=true');
     // Trigger a UI rebuild separately if the widget is mounted
     if (mounted) setState(() {});
+    // On macOS silent start, hide the window now that lux_core is ready.
+    // We waited until here (instead of hiding at startup) because macOS Sequoia
+    // requires the window to be visible for Flutter engine to fully initialize.
+    if (widget.silentStart && Platform.isMacOS) {
+      _hideWindow();
+    }
     // After core starts, probe for a network proxy in the background.
     // Wait 3s for lux_core to fully initialize its HTTP routes.
     // If the first check fails (null result / timeout), retry at 20s.
@@ -1512,8 +1591,7 @@ class _HomeState extends State<Home>
                   );
                 } else {
                   // No working proxy found — bring Lux to front and alert user
-                  await windowManager.show();
-                  await windowManager.focus();
+                  await _showWindow();
                   await windowManager.setAlwaysOnTop(true);
                   await Future.delayed(const Duration(milliseconds: 300));
                   await windowManager.setAlwaysOnTop(false);
@@ -1544,8 +1622,7 @@ class _HomeState extends State<Home>
                 final proxyName = message['proxyName'] as String? ?? 'proxy';
                 appLog('PROXY', 'auth failed for proxy $proxyId ($proxyName)');
                 if (!mounted) return;
-                await windowManager.show();
-                await windowManager.focus();
+                await _showWindow();
                 await windowManager.setAlwaysOnTop(true);
                 await Future.delayed(const Duration(milliseconds: 200));
                 await windowManager.setAlwaysOnTop(false);
@@ -1637,10 +1714,15 @@ class _HomeState extends State<Home>
   }
 
   @override
+  void onWindowClose() async {
+    // Window closed by user — hide to tray and remove dock icon
+    await _hideWindow();
+  }
+
+  @override
   void onTrayIconMouseDown() {
     windowManager.setSkipTaskbar(false);
-    windowManager.show();
-    windowManager.focus();
+    _showWindow();
   }
 
   @override
@@ -1659,8 +1741,7 @@ class _HomeState extends State<Home>
         await windowManager.center();
       }
       await windowManager.setSkipTaskbar(false);
-      await windowManager.show();
-      await windowManager.focus();
+      await _showWindow();
     } else if (key == 'connect') {
       appLog('PROXY', 'user tapped connect from tray');
       await coreManager?.start();
@@ -1827,7 +1908,7 @@ class _HomeState extends State<Home>
           // Restore full window size and hide back to tray
           await windowManager.setSize(const Size(800, 650));
           await windowManager.center();
-          await windowManager.hide();
+          await _hideWindow();
           await windowManager.setSkipTaskbar(true);
           _refreshTray();
         },

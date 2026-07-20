@@ -49,7 +49,9 @@ class CertInstaller {
     try {
       // Build a single admin script for all root-requiring operations.
       // User gets ONE password prompt.
-      final adminScript = File('/tmp/lux_cert_install.sh');
+      // Use the fixed privileged helper dir so the sudoers NOPASSWD rule covers it.
+      const _luxScriptsDir = '/Library/PrivilegedHelperTools/com.github.igoogolx.lux';
+      final adminScript = File('$_luxScriptsDir/lux_cert_install.sh');
       final scriptLines = [
         '#!/bin/bash',
         '# Do NOT use set -e — each step must run independently.',

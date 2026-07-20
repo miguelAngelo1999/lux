@@ -55,6 +55,8 @@ class CoreManager {
   WebSocketChannel? _runtimeStatusChannel;
   WebSocketChannel? _eventChannel;
 
+  DateTime? _lastStartTime;
+
   CoreManager(
     this.baseUrl,
     this.coreProcess,
@@ -103,6 +105,10 @@ class CoreManager {
       return handler.next(options);
     }));
 
+    // Set initial start time to now — covers the case where Go-side auto-connect
+    // starts the proxy before Flutter's start() is ever called.
+    _lastStartTime = DateTime.now();
+
     Connectivity()
         .onConnectivityChanged
         .listen((List<ConnectivityResult> result) async {
@@ -117,6 +123,13 @@ class CoreManager {
         }
         var isStarted = await getIsStarted();
         if (!isStarted) {
+          return;
+        }
+        // Grace period: don't stop if proxy was started less than 15 seconds ago.
+        // TUN interface setup causes brief connectivity blips that trigger false positives.
+        if (_lastStartTime != null &&
+            DateTime.now().difference(_lastStartTime!).inSeconds < 15) {
+          debugPrint("connectivity=none but within startup grace period, skipping stop");
           return;
         }
         var setting = await getSetting();
@@ -182,6 +195,7 @@ class CoreManager {
           sendTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         ));
+    _lastStartTime = DateTime.now();
     // Set proxy settings for CLI tools when connecting
     try {
       final setting = await getSetting();
@@ -320,11 +334,34 @@ class CoreManager {
   }
 
   Future<void> restart() async {
+    if (coreProcess == null) {
+      // LaunchAgent owns lux_core — kick it via launchctl kickstart
+      appLog('CORE', 'restart() — LaunchAgent mode, using launchctl kickstart');
+      try {
+        final user = Platform.environment['USER'] ?? '';
+        final uid = (await Process.run('id', ['-u'])).stdout.toString().trim();
+        await Process.run('launchctl', [
+          'kickstart', '-k',
+          'gui/$uid/com.github.igoogolx.lux.core',
+        ]);
+      } catch (e) {
+        appLog('CORE', 'launchctl kickstart failed: $e');
+      }
+      return;
+    }
     coreProcess?.exit();
     await coreProcess?.run();
   }
 
   Future<void> run() async {
+    if (coreProcess == null) {
+      // lux_core pre-started by LaunchAgent — just ping to confirm it's ready
+      appLog('CORE', 'run() — LaunchAgent mode, pinging existing lux_core...');
+      await ping();
+      appLog('CORE', 'ping succeeded — calling onReady');
+      onReady();
+      return;
+    }
     appLog('CORE', 'coreProcess.run() starting');
     await coreProcess?.run();
     appLog('CORE', 'coreProcess.run() done — pinging...');

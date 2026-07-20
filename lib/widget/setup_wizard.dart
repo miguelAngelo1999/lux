@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/util/cert_installer.dart';
@@ -290,11 +291,18 @@ class SetupWizard extends StatefulWidget {
       if (allDone.every((d) => d)) return;
     }
     if (!context.mounted) return;
+    // Ensure window is visible — wizard may be triggered while window is hidden
+    await windowManager.show();
+    await windowManager.focus();
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => SetupWizard(coreManager: coreManager, sslStatus: sslStatus),
     );
+    // Keep window visible after wizard closes — don't let it go back to tray
+    if (context.mounted) {
+      await windowManager.show();
+    }
   }
 
   @override

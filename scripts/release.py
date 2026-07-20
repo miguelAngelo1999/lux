@@ -25,7 +25,7 @@ PUBSPEC     = REPO_ROOT / 'pubspec.yaml'
 sys.path.insert(0, str(SCRIPTS_DIR))
 from constants import (
     GDRIVE_FOLDER_ID, SERVICE_ACCOUNT_KEY, GITHUB_REPO,
-    DMG_BASENAME, WINDOWS_BASENAME, APPCAST_FILE_NAME,
+    DMG_BASENAME, WINDOWS_BASENAME, APPCAST_FILE_NAME, DMG_FILE_ID, APPCAST_FILE_ID,
 )
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -58,14 +58,28 @@ def _patch_ssl_and_proxy():
     ssl._create_default_https_context = ssl._create_unverified_context
     urllib3.disable_warnings()
     _os.environ.update({'PYTHONHTTPSVERIFY': '0', 'CURL_CA_BUNDLE': '', 'REQUESTS_CA_BUNDLE': ''})
-    proxy = 'http://127.0.0.1:1090'
+
+    # Monkey-patch requests.Session.send so ALL sessions (including google-auth's
+    # internal ones) skip SSL verification — covers OpenSSL 3.x KeyUsage strictness.
+    # Patching send() rather than request() catches subclasses (e.g. OAuth2Session)
+    # that call super().request() → send() without going through our request patch.
+    import requests as _requests
+    _orig_send = _requests.Session.send
+    def _patched_send(self, request, **kwargs):
+        kwargs['verify'] = False
+        return _orig_send(self, request, **kwargs)
+    _requests.Session.send = _patched_send
+
+    proxy = os.environ.get('LUX_PROXY', 'http://127.0.0.1:1090')
     _oi = httplib2.Http.__init__
     def _pi(self, *a, **k):
         k['disable_ssl_certificate_validation'] = True
-        m = re.match(r'http://(?:([^:@]+):([^@]+)@)?([\w.]+):(\d+)', proxy)
-        if m:
-            k.setdefault('proxy_info', httplib2.ProxyInfo(
-                httplib2.socks.PROXY_TYPE_HTTP, m.group(3), int(m.group(4))))
+        if proxy and proxy.lower() not in ('', 'none', 'direct'):
+            m = re.match(r'http://(?:([^:@]+):([^@]+)@)?([\w.]+):(\d+)', proxy)
+            if m and httplib2.socks is not None:
+                k.setdefault('proxy_info', httplib2.ProxyInfo(
+                    httplib2.socks.PROXY_TYPE_HTTP, m.group(3), int(m.group(4)),
+                    proxy_rdns=True))
         _oi(self, *a, **k)
     httplib2.Http.__init__ = _pi
     return proxy
@@ -75,14 +89,19 @@ def gdrive_service():
     import os
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
-    from google.auth.transport.requests import Request
+    from google.auth.transport.requests import Request, AuthorizedSession
     from googleapiclient.discovery import build
+    from googleapiclient._auth import authorized_http
+    import google_auth_httplib2
     import requests as _req
 
     proxy = _patch_ssl_and_proxy()
     sess = _req.Session()
     sess.verify = False
-    sess.proxies = {'http': proxy, 'https': proxy}
+    if proxy and proxy.lower() not in ('', 'none', 'direct'):
+        sess.proxies = {'http': proxy, 'https': proxy}
+    else:
+        sess.proxies = {}
 
     creds = None
     if TOKEN_CACHE.exists():
@@ -100,7 +119,11 @@ def gdrive_service():
             creds = flow.run_local_server(port=0)
         TOKEN_CACHE.write_text(creds.to_json())
 
-    return build('drive', 'v3', credentials=creds)
+    # Use google_auth_httplib2 with a properly configured httplib2 instance
+    import httplib2
+    http = httplib2.Http(disable_ssl_certificate_validation=True)
+    authed_http = google_auth_httplib2.AuthorizedHttp(creds, http=http)
+    return build('drive', 'v3', http=authed_http)
 
 def find_file_in_folder(service, folder_id, name):
     """Return file id if name exists in folder, else None."""
@@ -184,15 +207,46 @@ def build_macos(version, args):
     if dmg_path.exists():
         dmg_path.unlink()
     run(f'xattr -cr "{app_path}"')
-    run(
-        f'create-dmg --overwrite --no-code-sign --dmg-title "Lux {version}" '
-        f'"{app_path}" "{DIST_DIR}/"',
-        cwd=REPO_ROOT,
-    )
-    # create-dmg names it after the app; rename to versioned name
-    created = next(DIST_DIR.glob('*.dmg'), None)
-    if created and created != dmg_path:
-        created.rename(dmg_path)
+
+    # Build DMG using hdiutil — supports adding extra files (Fix Gatekeeper.command)
+    # sindresorhus/create-dmg v8 does not support --add-file
+    import tempfile, shutil
+    staging = Path(tempfile.mkdtemp()) / f'Lux {version}'
+    staging.mkdir(parents=True)
+    try:
+        # Copy app into staging
+        shutil.copytree(str(app_path), str(staging / 'Lux.app'), symlinks=True)
+        # Add Applications symlink
+        (staging / 'Applications').symlink_to('/Applications')
+        # Add Fix Gatekeeper.command launcher (osascript) + lux_install.sh (bash)
+        # The launcher uses #!/usr/bin/osascript so it works even when the user's
+        # default shell is fish — Terminal.app has a bug where .command files
+        # silently fail with non-standard default shells. osascript bypasses this.
+        gatekeeper_script = DIST_DIR / 'Fix Gatekeeper.command'
+        install_script = DIST_DIR / 'lux_install.sh'
+        if gatekeeper_script.exists():
+            run(f'chmod +x "{gatekeeper_script}"')
+            shutil.copy2(str(gatekeeper_script), str(staging / 'Fix Gatekeeper.command'))
+            print(f'  ✓ Added Fix Gatekeeper.command to DMG')
+        if install_script.exists():
+            run(f'chmod +x "{install_script}"')
+            shutil.copy2(str(install_script), str(staging / 'lux_install.sh'))
+            print(f'  ✓ Added lux_install.sh to DMG')
+        # Create writable image from staging folder
+        tmp_dmg = DIST_DIR / f'tmp_{dmg_name}'
+        run(
+            f'hdiutil create -volname "Lux {version}" -srcfolder "{staging}" '
+            f'-ov -format UDRW "{tmp_dmg}"'
+        )
+        # Convert to compressed read-only DMG
+        run(
+            f'hdiutil convert "{tmp_dmg}" -format UDZO -imagekey zlib-level=9 '
+            f'-o "{dmg_path}"'
+        )
+        tmp_dmg.unlink(missing_ok=True)
+    finally:
+        shutil.rmtree(str(staging.parent), ignore_errors=True)
+
     print(f'  ✓ {dmg_name}')
     return dmg_path
 
@@ -237,7 +291,16 @@ def main():
     service = gdrive_service()
 
     if dmg_path is not None:
-        dmg_id  = upload_file(service, dmg_path, GDRIVE_FOLDER_ID, dmg_path.name)
+        # Always update the same file ID — keeps the download URL stable across releases
+        from googleapiclient.http import MediaFileUpload
+        media = MediaFileUpload(str(dmg_path), mimetype='application/octet-stream', resumable=True)
+        f = service.files().update(
+            fileId=DMG_FILE_ID,
+            media_body=media,
+            fields='id,name,size'
+        ).execute()
+        print(f'  ↻ Updated DMG (id={f["id"]}, size={int(f.get("size",0))//1024//1024}MB)')
+        dmg_id  = DMG_FILE_ID
         dmg_url = direct_url(dmg_id)
     else:
         # Windows-only run — preserve existing macOS URL from current appcast
@@ -245,7 +308,7 @@ def main():
         try:
             import urllib.request
             with urllib.request.urlopen(
-                f'https://drive.google.com/uc?export=download&id=1jf-8thv_VVPIQ3k_n83UhygzEKkydI2p&confirm=t',
+                f'https://drive.google.com/uc?export=download&id={APPCAST_FILE_ID}&confirm=t',
                 timeout=10
             ) as resp:
                 existing = json.loads(resp.read())

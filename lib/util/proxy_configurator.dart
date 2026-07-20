@@ -46,7 +46,9 @@ class ProxyConfigurator {
 
     // Write admin script to set launchctl env vars and /etc/zshenv.
     // networksetup is intentionally omitted — lux_core handles system proxy.
-    final script = File('/tmp/lux_proxy_apply.sh');
+    // Use the fixed privileged helper dir so the sudoers NOPASSWD rule covers it.
+    const _luxScriptsDir = '/Library/PrivilegedHelperTools/com.github.igoogolx.lux';
+    final script = File('$_luxScriptsDir/lux_proxy_apply.sh');
     await script.writeAsString(
       '#!/bin/bash\n'
       'PROXY="$httpProxy"\n'
@@ -102,7 +104,9 @@ class ProxyConfigurator {
   }
 
   static Future<void> _clearMacOS() async {
-    final script = File('/tmp/lux_proxy_clear.sh');
+    // Use the fixed privileged helper dir so the sudoers NOPASSWD rule covers it.
+    const _luxScriptsDir = '/Library/PrivilegedHelperTools/com.github.igoogolx.lux';
+    final script = File('$_luxScriptsDir/lux_proxy_clear.sh');
     await script.writeAsString(
       '#!/bin/bash\n'
       'for VAR in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy NODE_EXTRA_CA_CERTS CURL_CA_BUNDLE; do\n'

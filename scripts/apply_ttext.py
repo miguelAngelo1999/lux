@@ -73,6 +73,7 @@ def process_file(path):
     return False
 
 TARGET_FILES = [
+    'home.dart',
     'dashboard.dart',
     'pages/settings_page.dart',
     'pages/proxies_page.dart',

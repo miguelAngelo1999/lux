@@ -42,6 +42,20 @@ Future<void> setAutoConnect(CoreManager? coreManager) async {
   var isAutoConnect = await readAutoConnect();
   appLog('CORE', 'setAutoConnect isAutoConnect=$isAutoConnect');
   if (isAutoConnect) {
+    // Give Go-side auto-connect a short window to fire (it typically connects in 1-3s).
+    // Then check immediately — if already connected, skip Flutter-side start().
+    await Future.delayed(const Duration(seconds: 5));
+    
+    // Check if lux_core already auto-connected (Go-side auto-connect)
+    try {
+      final alreadyStarted = await coreManager?.getIsStarted() ?? false;
+      if (alreadyStarted) {
+        appLog('CORE', 'setAutoConnect: lux_core already connected (Go-side auto-connect), skipping');
+        return;
+      }
+    } catch (_) {
+      // If we can't check, proceed with normal retry logic
+    }
     // Try immediately, then retry up to 5 times with increasing delay
     for (var attempt = 0; attempt < 5; attempt++) {
       try {
@@ -51,7 +65,11 @@ Future<void> setAutoConnect(CoreManager? coreManager) async {
         notifier.show(tr().connectOnOpenMsg);
         return; // Success — stop retrying
       } catch (e) {
-        appLog('CORE', 'setAutoConnect attempt $attempt failed: $e');
+        String errorDetail = e.toString();
+        if (e is DioException && e.response != null) {
+          errorDetail = 'HTTP ${e.response!.statusCode}: ${e.response!.data}';
+        }
+        appLog('CORE', 'setAutoConnect attempt $attempt failed: $errorDetail');
         if (attempt < 4) {
           // Wait before retrying: 500ms, 1s, 2s, 4s
           await Future.delayed(Duration(milliseconds: 500 * (1 << attempt)));

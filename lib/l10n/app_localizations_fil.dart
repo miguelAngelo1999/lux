@@ -9,6 +9,9 @@ class AppLocalizationsFil extends AppLocalizations {
   AppLocalizationsFil([String locale = 'fil']) : super(locale);
 
   @override
+  String get trayProxiesLabel => 'Switch Proxy';
+
+  @override
   String get trayDashboardLabel => 'Buksan ang Dashboard';
 
   @override

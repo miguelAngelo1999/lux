@@ -50,6 +50,16 @@ void main(List<String> args) async {
       windowButtonVisibility: Platform.isMacOS,
     );
 
+    // Determine silent-start before the callback so it's in scope for runApp.
+    // macOS: always start silent. Windows: silent only when launched at startup.
+    // NOTE: We do NOT hide inside waitUntilReadyToShow. Hiding the window that
+    // early causes macOS to throttle the Dart event loop before Home._init()
+    // can call coreProcess.run(), so lux_core never starts until the user
+    // clicks the dock icon. Instead, Home._init() hides the window AFTER
+    // coreProcess.run() has been called.
+    final isSilentStart = Platform.isMacOS ||
+        (Platform.isWindows && args.contains(launchFromStartupArg));
+
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       // Explicitly re-apply title bar style after window is ready.
       if (Platform.isMacOS) {
@@ -67,14 +77,11 @@ void main(List<String> args) async {
         }
       }
       windowManager.center();
-      // macOS: always start silent in tray. Auto-connect runs in background.
-      // Window shows only when user clicks tray/dock icon, or on error.
-      // Windows with startup arg: same silent behavior.
-      var isSilentStart = Platform.isMacOS ||
-          (Platform.isWindows && args.contains(launchFromStartupArg));
-      if (!isSilentStart) {
-        windowManager.show();
-      }
+      // Always show the window on startup so Flutter engine initializes.
+      // On macOS Sequoia the engine fails to start when launched hidden.
+      // The window starts visible; home.dart hides it after lux_core connects
+      // if silentStart is true.
+      await windowManager.show();
     });
 
     final theme = await readTheme();
@@ -85,7 +92,7 @@ void main(List<String> args) async {
       return ReleaseModeErrorWidget(details: details);
     };
 
-    runApp(App(theme, defaultLocaleValue, clientMode));
+    runApp(App(theme, defaultLocaleValue, clientMode, silentStart: isSilentStart));
   } catch (e) {
     await notifier.show("$e");
     exitApp();
