@@ -1,0 +1,15 @@
+{
+  "version": "1.44.76",
+  "channel": "stable",
+  "notes": "v1.44.76: fix: watchdog escalation, runtime status WS reconnect, app detection, MITM wizard, PAC detection",
+  "macOS": {
+    "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
+    "sha256": "91753da284125fdabeeb9e9efeac8a315831c730c0717ac612d6069cb43080d8",
+    "size": 44963192
+  },
+  "windows": {
+    "url": "",
+    "sha256": "",
+    "size": 0
+  }
+}
