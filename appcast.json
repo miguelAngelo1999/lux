@@ -1,11 +1,11 @@
 {
-  "version": "1.44.63",
+  "version": "1.44.64",
   "channel": "stable",
-  "notes": "v1.44.63: fix auto-connect on startup: hide window after lux_core launches",
+  "notes": "v1.44.64: add LaunchAgent: lux_core starts at login independently of Flutter",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "d726119dbe54a0b8b5d571ba07bf1fd30949eeb0295490fcce2f686a0aa70afb",
-    "size": 44957368
+    "sha256": "0d3329ef258794795a8b701440aab744ae0cb056ee4f3604e585022401c97df6",
+    "size": 44946485
   },
   "windows": {
     "url": "",
