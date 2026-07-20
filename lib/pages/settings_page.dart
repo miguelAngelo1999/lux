@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:lux/util/cert_installer.dart';
 import 'package:lux/util/network_reset.dart';
+import 'package:lux/widget/setup_wizard.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:flutter/material.dart';
@@ -536,6 +537,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       (
         category: 'SSL & MITM',
         items: [
+          e('Setup Wizard', 'loopback uwp node electron cert install corporate proxy fix env vars',
+              _setupWizardTile()),
           e('SSL Inspection', 'certificate corporate proxy intercept trust CA cert',
               _sslInspectionSection()),
           if (Platform.isWindows)
@@ -1131,6 +1134,38 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 }
               },
         child: TText('Reset', style: TextStyle(fontSize: 12)),
+      ),
+    );
+  }
+
+  Widget _setupWizardTile() {
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.auto_fix_high, size: 20),
+      title: TText('Setup Wizard', style: TextStyle(fontSize: 14)),
+      subtitle: Text(
+        Platform.isWindows
+            ? 'Install cert, set Node/Electron env vars, UWP loopback, app compatibility'
+            : 'Install cert, configure proxy CA trust, app compatibility',
+        style: const TextStyle(fontSize: 12),
+      ),
+      trailing: FilledButton.icon(
+        icon: const Icon(Icons.play_arrow, size: 16),
+        label: TText('Open'),
+        onPressed: () async {
+          // Get current SSL status for the wizard — probe fresh
+          SslBumpStatus ssl = const SslBumpStatus(
+            detected: false, hasCert: false,
+          );
+          try {
+            ssl = await widget.coreManager.getSslBumpStatus(fresh: true);
+          } catch (_) {}
+          if (!mounted) return;
+          // Clear any dismissed steps so all steps are shown
+          await clearDismissedWizardSteps();
+          if (!mounted) return;
+          await SetupWizard.show(context, widget.coreManager, ssl);
+        },
       ),
     );
   }
