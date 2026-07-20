@@ -432,7 +432,7 @@ Future<void> downloadAndInstall(
 
 /// Builds a standalone Windows batch file that runs OUTSIDE the Lux process.
 /// Flow: Lux writes script → launches detached → Lux exits →
-///       script waits → stops lux_core → runs installer (elevated via UAC) →
+///       script waits → stops lux_core → runs installer elevated (UAC) →
 ///       installer's ssPostInstall does schtasks /run to relaunch Lux.
 String _buildWindowsUpdaterScript(String installerPath) {
   // Escape backslashes for the batch file
@@ -447,16 +447,19 @@ String _buildWindowsUpdaterScript(String installerPath) {
       'timeout /t 2 /nobreak >nul\r\n'
       'tasklist /FI "IMAGENAME eq lux.exe" 2>nul | find /i "lux.exe" >nul\r\n'
       'if not errorlevel 1 goto wait_lux\r\n'
+      'echo lux.exe exited >> "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
-      ':: Also stop lux_core via scheduled task (handles elevated processes)\r\n'
+      ':: Kill lux_core HERE (in user context) before elevating.\r\n'
+      ':: Once we elevate for the installer, Stop-Process can\'t reach user processes.\r\n'
       'schtasks /end /tn LuxApp >nul 2>&1\r\n'
       'timeout /t 2 /nobreak >nul\r\n'
       'taskkill /F /IM lux_core.exe /T >nul 2>&1\r\n'
-      'timeout /t 1 /nobreak >nul\r\n'
+      'taskkill /F /IM lux.exe /T >nul 2>&1\r\n'
+      'timeout /t 2 /nobreak >nul\r\n'
+      'echo processes killed >> "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
       ':: Run installer elevated via PowerShell Start-Process -Verb RunAs.\r\n'
-      ':: The installer (PrivilegesRequired=lowest) still needs elevation for\r\n'
-      ':: Register-ScheduledTask -RunLevel Highest in its [Code] section.\r\n'
+      ':: All lux processes are already dead so the installer can overwrite lux.exe.\r\n'
       ':: -Wait ensures this bat does not exit until installer finishes.\r\n'
       ':: The installer ssPostInstall does "schtasks /run /tn LuxApp" to relaunch Lux.\r\n'
       'echo Running installer: $escaped >> "%TEMP%\\lux_updater.log"\r\n'
