@@ -527,7 +527,34 @@ class _HomeState extends State<Home>
     bool obscure = true;
     bool dontShowAgain = false;
     bool autoSelect = true; // auto-select new proxy as active after adding
+    bool scanning = false;  // true while re-scanning for proxy address
     BuildContext? _dialogCtx; // set when dialog opens, used by Enter key
+
+    // Re-scan for proxy address — called by the Scan button in the dialog
+    Future<void> _doScan(StateSetter setSt) async {
+      if (coreManager == null) return;
+      setSt(() => scanning = true);
+      try {
+        final found = await coreManager!.detectNetworkProxy();
+        if (found != null && found.host.isNotEmpty) {
+          setSt(() {
+            serverCtrl.text = found.host;
+            portCtrl.text   = found.port;
+            if (nameCtrl.text.isEmpty || nameCtrl.text == detected.host) {
+              nameCtrl.text = found.host;
+            }
+          });
+          appLog('NET', 'manual scan found ${found.address} via ${found.source}');
+        } else {
+          // Nothing found — give a brief visual feedback
+          appLog('NET', 'manual scan: no proxy detected');
+        }
+      } catch (e) {
+        appLog('NET', 'manual scan error: $e');
+      } finally {
+        setSt(() => scanning = false);
+      }
+    }
 
     // Extracted add logic — called by both the button and Enter on password field
     Future<void> _doAdd() async {
@@ -811,6 +838,23 @@ class _HomeState extends State<Home>
                         textInputAction: TextInputAction.next,
                         onSubmitted: (_) =>
                             FocusScope.of(ctx).requestFocus(userFocus),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    // Scan button — re-runs proxy detection and fills server/port
+                    Tooltip(
+                      message: 'Scan for proxy',
+                      child: SizedBox(
+                        width: 36, height: 36,
+                        child: scanning
+                            ? const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.search, size: 18),
+                                onPressed: () => _doScan(setSt),
+                              ),
                       ),
                     ),
                   ]),
