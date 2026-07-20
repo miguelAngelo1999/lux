@@ -1587,7 +1587,8 @@ class _HomeState extends State<Home>
     windowManager.removeListener(this);
     powerMonitor.removeListener(this);
     _listener.dispose();
-    _networkDetector?.dispose();
+    // NetworkDetector has no resources to dispose
+    _networkDetector = null;
     super.dispose();
   }
 
