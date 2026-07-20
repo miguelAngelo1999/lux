@@ -1,11 +1,11 @@
 {
-  "version": "1.44.69",
+  "version": "1.44.71",
   "channel": "stable",
-  "notes": "v1.44.69: fix: NSApp.activate in awakeFromNib so Flutter engine starts when hidden",
+  "notes": "v1.44.71: fix: show window briefly on macOS to force Flutter engine init when backgrounded",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "69dd3c409aad55bd03e7ef6fb58901b50c07dfafd56b8af72b40d4c86a93102f",
-    "size": 44946108
+    "sha256": "8e42e0984a23cd0f7a8655dbc3c9b8ef6c00d9e2dd52fd47ccae3f709b3e20ae",
+    "size": 44945084
   },
   "windows": {
     "url": "",
