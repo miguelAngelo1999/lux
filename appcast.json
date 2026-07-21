@@ -1,11 +1,11 @@
 {
-  "version": "1.44.77",
+  "version": "1.44.78",
   "channel": "stable",
-  "notes": "fix: force reconnect after power outage \u2014 stop+start clears stale connections",
+  "notes": "fix: don't flag public CA certs as SSL intercept when proxy temporarily down",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "64590eb572888975e94ad17e459850a5ef53dd0d68ed3b5de0a763e18ec7f387",
-    "size": 44957795
+    "sha256": "9c73501e8ce41a0800de92bb816d2484d609726c54ffff03386a35bdb9b80713",
+    "size": 44957997
   },
   "windows": {
     "url": "",
