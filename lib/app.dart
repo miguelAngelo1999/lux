@@ -13,8 +13,10 @@ class App extends StatefulWidget {
   final ThemeMode theme;
   final Locale defaultLocal;
   final ClientMode clientMode;
+  final bool silentStart;
 
-  const App(this.theme, this.defaultLocal, this.clientMode, {super.key});
+  const App(this.theme, this.defaultLocal, this.clientMode,
+      {super.key, this.silentStart = false});
 
   @override
   State<App> createState() => _App();
@@ -38,7 +40,7 @@ class _App extends State<App> {
           themeMode: appState.theme,
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
-          home: Home(widget.clientMode),
+          home: Home(widget.clientMode, silentStart: widget.silentStart),
           onGenerateTitle: (context) {
             initTr(context);
             return 'Lux';
@@ -47,12 +49,20 @@ class _App extends State<App> {
           localizationsDelegates: [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
           ],
-          supportedLocales: [
-            Locale('en'),
-            Locale('zh'),
-          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          // Force our locale — fil is supported by GlobalMaterialLocalizations
+          // but if any delegate doesn't support it, this ensures our delegate still works
+          localeResolutionCallback: (locale, supportedLocales) {
+            for (final supported in supportedLocales) {
+              if (supported.languageCode == appState.locale.languageCode) {
+                return supported;
+              }
+            }
+            return supportedLocales.first;
+          },
         ),
       ),
     );

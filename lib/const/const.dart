@@ -58,10 +58,23 @@ const launchFromStartupArg = 'launch_from_startup';
 
 const localServersGroupKey = 'local_servers';
 
-const latestReleaseUrl = 'https://github.com/igoogolx/lux/releases/latest';
+/// Raw GitHub URL for appcast.json — always reliably served, no GDrive redirects.
+/// release.py updates this file in the repo after each release.
+const appcastUrl = 'https://raw.githubusercontent.com/miguelAngelo1999/lux/personal/all-features/appcast.json';
+
+/// Also update init_appcast.py if the GDrive appcast file ID changes.
+/// GDrive direct download (for reference): https://drive.usercontent.google.com/download?id=1jf-8thv_VVPIQ3k_n83UhygzEKkydI2p&export=download&confirm=t
+
+/// Fallback: browser releases page
+const releasesPageUrl = 'https://github.com/miguelAngelo1999/lux/releases/latest';
+
+/// Legacy alias kept for compatibility
+const latestReleaseUrl = releasesPageUrl;
 
 enum ProxyItemAction {
   edit,
   delete,
   qrCode,
+  peekPassword,
+  lockPassword,
 }

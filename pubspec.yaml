@@ -99,6 +99,7 @@ flutter:
     - assets/tray.png
     - assets/tray.icns
     - assets/bin/
+    - assets/translations.json
     - pubspec.yaml
 
   # An image asset can refer to one or more resolution-specific "variants", see
