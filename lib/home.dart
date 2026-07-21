@@ -1266,8 +1266,18 @@ class _HomeState extends State<Home>
             final alreadyUp = await coreManager!.getIsStarted().timeout(
                 const Duration(seconds: 5));
             if (alreadyUp) {
-              appLog('WATCHDOG', 'lux_core already running after attempt $attempt — treating as success');
-              return;
+              // lux_core is running but connections may be stale from before
+              // the outage. Force a stop+start to get fresh connections.
+              appLog('WATCHDOG', 'lux_core running after attempt $attempt — forcing stop+start to clear stale connections');
+              try {
+                await coreManager!.stop();
+                await Future.delayed(const Duration(seconds: 2));
+                await coreManager!.start();
+                appLog('WATCHDOG', 'reconnected after forced stop+start');
+                return;
+              } catch (restartE) {
+                appLog('WATCHDOG', 'stop+start failed: $restartE — continuing retries');
+              }
             }
           } catch (_) {}
           if (attempt < 3) await Future.delayed(Duration(seconds: attempt * 5));
