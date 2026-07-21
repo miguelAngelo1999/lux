@@ -1,11 +1,11 @@
 {
-  "version": "1.44.76",
+  "version": "1.44.75",
   "channel": "stable",
-  "notes": "v1.44.76: fix: watchdog escalation, runtime status WS reconnect, app detection, MITM wizard, PAC detection",
+  "notes": "fix: force reconnect after power outage",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "91753da284125fdabeeb9e9efeac8a315831c730c0717ac612d6069cb43080d8",
-    "size": 44963192
+    "sha256": "fcd3ea01131bbbfee7d54ae5808dd03807d9edb603f5d06255c02f50ae17c819",
+    "size": 44957798
   },
   "windows": {
     "url": "",
