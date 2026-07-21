@@ -1,11 +1,11 @@
 {
-  "version": "1.44.78",
+  "version": "1.44.79",
   "channel": "stable",
-  "notes": "fix: don't flag public CA certs as SSL intercept when proxy temporarily down",
+  "notes": "fix: translate search placeholders and Scan for Proxy button",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "9c73501e8ce41a0800de92bb816d2484d609726c54ffff03386a35bdb9b80713",
-    "size": 44957997
+    "sha256": "6922029ab4d1dc35947065e876d95f25554f2173a28e3f0ad99c941a8a96372a",
+    "size": 44963102
   },
   "windows": {
     "url": "",
