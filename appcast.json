@@ -1,11 +1,11 @@
 {
-  "version": "1.44.79",
+  "version": "1.44.80",
   "channel": "stable",
-  "notes": "fix: translate search placeholders and Scan for Proxy button",
+  "notes": "refactor: replace wizard popup with individual settings actions + no forced focus",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "6922029ab4d1dc35947065e876d95f25554f2173a28e3f0ad99c941a8a96372a",
-    "size": 44963102
+    "sha256": "cb90a2193d18d9f9a0efd94cf043fc7e7547bb0b1f5281f2f564e16523db0885",
+    "size": 44961320
   },
   "windows": {
     "url": "",
