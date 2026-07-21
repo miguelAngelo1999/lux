@@ -1,11 +1,11 @@
 {
-  "version": "1.44.75",
+  "version": "1.44.76",
   "channel": "stable",
-  "notes": "fix: force reconnect after power outage",
+  "notes": "fix: force reconnect after power outage \u2014 stop+start clears stale connections",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "fcd3ea01131bbbfee7d54ae5808dd03807d9edb603f5d06255c02f50ae17c819",
-    "size": 44957798
+    "sha256": "321e43eabdce8f968c703867fab4653551d6b0e63cdb38199d9415927da278b8",
+    "size": 44957787
   },
   "windows": {
     "url": "",
