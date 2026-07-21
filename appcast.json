@@ -1,11 +1,11 @@
 {
-  "version": "1.44.82",
+  "version": "1.44.83",
   "channel": "stable",
-  "notes": "fix: use /bin/bash for sudo -n in proxy configurator and updater to match NOPASSWD sudoers rule",
+  "notes": "fix: appcast from GDrive by default; configurable update server in Settings \u2192 Advanced; fix /bin/bash sudo for proxy scripts and updater",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "ef6a87b465d870056edb72e7cd48ba928d16cdd64f3b9ed30b23d93aa98d8aa4",
-    "size": 44960543
+    "sha256": "09c41c9bc1e7c2c90909f027b80a470887b5b7b607db4ced9a6d82d6d9a078ed",
+    "size": 44968473
   },
   "windows": {
     "url": "",
