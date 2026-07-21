@@ -1,11 +1,11 @@
 {
-  "version": "1.44.80",
+  "version": "1.44.81",
   "channel": "stable",
-  "notes": "refactor: replace wizard popup with individual settings actions + no forced focus",
+  "notes": "fix: use /bin/bash for sudo -n to match NOPASSWD sudoers rule, remove osascript password prompt",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "cb90a2193d18d9f9a0efd94cf043fc7e7547bb0b1f5281f2f564e16523db0885",
-    "size": 44961320
+    "sha256": "a9353003ee76d1ecdbaeaca457be45190358278868296e116a8e8464b5257ca0",
+    "size": 44961171
   },
   "windows": {
     "url": "",
