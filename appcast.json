@@ -1,7 +1,7 @@
 {
   "version": "1.44.83",
   "channel": "stable",
-  "notes": "fix: checksum sync, WebSocket retry, toggle stuck on Windows, stale connection recovery",
+  "notes": "fix: updater download uses lux proxy directly \u2014 avoids broken HTTP_PROXY env var on corporate machines (sua_ip:porta placeholder error)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "09c41c9bc1e7c2c90909f027b80a470887b5b7b607db4ced9a6d82d6d9a078ed",
@@ -9,7 +9,7 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "6b30b14b7ecd91b89bef362aecf8b5f9021c80c21eeabe0cb185a87b134022b0",
-    "size": 33340333
+    "sha256": "52021552c1150073bbb5c367ea06b88a95daacf846bc1f0d7cca6b2863888f73",
+    "size": 33342733
   }
 }
