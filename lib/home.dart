@@ -542,6 +542,7 @@ class _HomeState extends State<Home>
     final passCtrl   = TextEditingController();
     final userFocus  = FocusNode();
     final passFocus  = FocusNode();
+    final keyboardFocus = FocusNode(); // persistent — not recreated on rebuild
     bool obscure = true;
     bool dontShowAgain = false;
     bool autoSelect = true; // auto-select new proxy as active after adding
@@ -574,8 +575,12 @@ class _HomeState extends State<Home>
       }
     }
 
+    bool _adding = false; // guard against double-add (button + Enter simultaneously)
+
     // Extracted add logic — called by both the button and Enter on password field
     Future<void> _doAdd() async {
+      if (_adding) return; // prevent double-add
+      _adding = true;
       if (_dialogCtx != null) Navigator.of(_dialogCtx!).pop();
       final server = serverCtrl.text.trim();
       final port   = portCtrl.text.trim();
@@ -687,8 +692,12 @@ class _HomeState extends State<Home>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) {
           _dialogCtx = ctx;
+          // Request focus once so Enter key works immediately (not on every rebuild)
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!keyboardFocus.hasFocus) keyboardFocus.requestFocus();
+          });
           return KeyboardListener(
-            focusNode: FocusNode()..requestFocus(),
+            focusNode: keyboardFocus,
             onKeyEvent: (event) {
               if (event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.enter) {
@@ -978,7 +987,7 @@ class _HomeState extends State<Home>
 
     nameCtrl.dispose(); serverCtrl.dispose(); portCtrl.dispose();
     userCtrl.dispose(); passCtrl.dispose();
-    userFocus.dispose(); passFocus.dispose();
+    userFocus.dispose(); passFocus.dispose(); keyboardFocus.dispose();
     _proxyDialogShowing = false; // allow new dialogs after this one closes
   }
 

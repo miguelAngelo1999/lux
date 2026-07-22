@@ -1,7 +1,7 @@
 {
   "version": "1.44.83",
   "channel": "stable",
-  "notes": "fix: Enter key blank UI; SSL cert cache fallback; proxy detect saved original",
+  "notes": "fix: Enter key blank UI (FocusNode leak + double-add guard); SSL cert cache fallback; proxy detect reads saved original",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "09c41c9bc1e7c2c90909f027b80a470887b5b7b607db4ced9a6d82d6d9a078ed",
