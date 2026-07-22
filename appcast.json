@@ -1,7 +1,7 @@
 {
   "version": "1.44.83",
   "channel": "stable",
-  "notes": "fix: updater download uses lux proxy directly \u2014 avoids broken HTTP_PROXY env var on corporate machines (sua_ip:porta placeholder error)",
+  "notes": "fix: Enter key blank UI (FocusNode leak + double-add guard); SSL cert detection consistent via cache fallback; proxy detect reads saved original",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "09c41c9bc1e7c2c90909f027b80a470887b5b7b607db4ced9a6d82d6d9a078ed",
@@ -9,7 +9,7 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "52021552c1150073bbb5c367ea06b88a95daacf846bc1f0d7cca6b2863888f73",
-    "size": 33342733
+    "sha256": "38528e13624501b9cbc91fbfb5153ec8b68d3acf1fef6200fb048eb1e115e506",
+    "size": 33355978
   }
 }
