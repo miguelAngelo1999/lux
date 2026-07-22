@@ -1,7 +1,7 @@
 {
   "version": "1.44.83",
   "channel": "stable",
-  "notes": "fix: Enter key blank UI; SSL cert cache fallback; proxy detect reads saved original; wizard skip blank UI fix",
+  "notes": "fix: proxy list auto-refresh after adding from startup dialog; Enter key blank UI fix; SSL cert cache fallback; proxy detect reads saved original",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "09c41c9bc1e7c2c90909f027b80a470887b5b7b607db4ced9a6d82d6d9a078ed",
@@ -9,7 +9,7 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "38528e13624501b9cbc91fbfb5153ec8b68d3acf1fef6200fb048eb1e115e506",
-    "size": 33355978
+    "sha256": "bfa5a22dcb7c528c562e352642fcef1a46d8760921cbb4eb5205cbe079ab602b",
+    "size": 33360699
   }
 }
