@@ -1,7 +1,7 @@
 {
   "version": "1.44.83",
   "channel": "stable",
-  "notes": "fix: auto-connect toggle stuck on Windows — force stop() before retry when start() returns 500 (stale TUN state); stale connection recovery after outage",
+  "notes": "fix: checksum sync, WebSocket retry, toggle stuck on Windows, stale connection recovery",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "09c41c9bc1e7c2c90909f027b80a470887b5b7b607db4ced9a6d82d6d9a078ed",
