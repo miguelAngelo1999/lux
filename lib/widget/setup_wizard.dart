@@ -48,15 +48,9 @@ const _allApps = [
       '/Applications/Antigravity IDE.app',
       '/Applications/Antigravity.app',
     ],
-    domains: [
-      'daily-cloudcode-pa.googleapis.com',
-      'cloudcode-pa.googleapis.com',
-      'oauth2.googleapis.com',
-      'play.googleapis.com',
-      'antigravity-unleash.goog',
-    ],
-    reason: 'Go language server rejects corporate proxy certs — Lux re-signs with a compliant CA',
-    hasCertIssues: true,
+    domains: [], // No MITM needed — uses Electron/Node which respects NODE_EXTRA_CA_CERTS
+    reason: 'Electron app — NODE_EXTRA_CA_CERTS and NODE_TLS_REJECT_UNAUTHORIZED handle proxy cert trust (set in step 2)',
+    hasCertIssues: false, // NOT a Go binary — env vars in System Config step are sufficient
   ),
   _AppEntry(
     name: 'DaVinci Resolve',
@@ -228,12 +222,52 @@ Future<List<_AppEntry>> detectInstalledApps({bool certIssuesOnly = true}) async 
     if (paths.isEmpty) continue;
     bool detected = false;
     for (final p in paths) {
-      // Handle wildcard paths
+      // Handle wildcard paths — glob instead of just checking base dir
       if (p.contains('*')) {
         try {
-          final parts = p.split('*');
-          final base = parts[0];
-          if (await Directory(base).exists()) { detected = true; break; }
+          // Split into the pre-wildcard dir and the remaining suffix
+          final starIdx = p.indexOf('*');
+          final base = p.substring(0, p.lastIndexOf(Platform.pathSeparator, starIdx) + 1);
+          final suffix = p.substring(base.length); // e.g. "*\AppData\Local\Programs\Antigravity IDE\..."
+
+          final baseDir = Directory(base);
+          if (!await baseDir.exists()) continue;
+
+          // Get the first path segment of suffix (the wildcard part)
+          final suffixParts = suffix.split(RegExp(r'[/\\]'));
+          final isWildcardSegment = suffixParts[0] == '*';
+
+          if (isWildcardSegment && suffixParts.length > 1) {
+            // e.g. C:\Users\*\AppData\...\App.exe
+            // Check each child of base dir for the rest of the path
+            final rest = suffix.substring(suffixParts[0].length + 1); // after "*\"
+            await for (final child in baseDir.list()) {
+              if (child is! Directory) continue;
+              final candidate = '${child.path}${Platform.pathSeparator}$rest';
+              // The remaining path may also have wildcards (e.g. JetBrains\*\bin\*.exe)
+              // For simplicity: check if the next non-wildcard directory segment exists
+              final restParts = rest.split(RegExp(r'[/\\]'));
+              if (restParts.isEmpty) continue;
+              if (restParts.any((seg) => seg == '*')) {
+                // Multi-level wildcard: just check the deepest non-wildcard base
+                var checkPath = child.path;
+                for (final seg in restParts) {
+                  if (seg == '*') break;
+                  checkPath += '${Platform.pathSeparator}$seg';
+                }
+                if (await Directory(checkPath).exists() || await File(checkPath).exists()) {
+                  detected = true; break;
+                }
+              } else {
+                if (await File(candidate).exists() || await Directory(candidate).exists()) {
+                  detected = true; break;
+                }
+              }
+            }
+          } else {
+            // Simple wildcard — just check base exists (last resort fallback)
+            if (await baseDir.exists()) { detected = true; }
+          }
         } catch (_) {}
       } else {
         // On macOS, .app bundles are directories — check both File and Directory
@@ -403,8 +437,7 @@ class _SetupWizardState extends State<SetupWizard> {
 
   Future<void> _doApplyMitm() async {
     if (_selectedApps.isEmpty) { await _nextStep(); return; }
-    setState(() => _busy = true); _clearStatus();
-    try {
+    setState(() => _busy = true); _clearStatus();    try {
       await widget.coreManager.setMitmEnabled(true);
       for (final idx in _selectedApps) {
         for (final d in _installedApps[idx].domains) {
@@ -473,7 +506,15 @@ class _SetupWizardState extends State<SetupWizard> {
     switch (_step) {
       case 0: await _doInstallCert(); if (_statusOk) await _nextStep(); break;
       case 1: await _doApplyEnvVars(); if (_statusOk) await _nextStep(); break;
-      case 2: await _doApplyMitm(); if (_statusOk) await _nextStep(); break;
+      case 2:
+        // _doApplyMitm calls _nextStep() internally when no apps are selected.
+        // Guard against double-navigation by checking if dialog is still mounted.
+        final wasStep2 = _step;
+        await _doApplyMitm();
+        // Only call _nextStep if _doApplyMitm didn't already navigate us away
+        // (i.e. step didn't change and we're still mounted and _statusOk)
+        if (mounted && _step == wasStep2 && _statusOk) await _nextStep();
+        break;
     }
   }
 
