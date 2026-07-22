@@ -147,14 +147,15 @@ Future<void> downloadAndInstall(
     debugPrint('[Updater] downloading $url → ${file.path}');
     appLog('UPDATE', 'download started url=$url dest=${file.path}');
 
-    // Use DIRECT for the DMG download — the system proxy (set by lux_core via
-    // networksetup) handles authentication transparently. Routing through
-    // Lux's own 1090 port adds an extra SSL interception layer that causes
-    // GDrive to return 403. HttpClient with findProxy=null uses the OS proxy.
+    // Use lux's own proxy port for the download — it has corporate proxy
+    // credentials and handles SSL. Fall back to DIRECT if not running.
+    // We intentionally do NOT read HTTP_PROXY/HTTPS_PROXY env vars because
+    // on some machines they contain placeholder values (e.g. "seu_ip:porta")
+    // that cause "Invalid proxy configuration" errors.
     final client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
-    // Do NOT set findProxy — let Dart use the system proxy (set by networksetup)
-    // which already has corp proxy credentials. This is how browsers download.
+    // Try lux proxy first (127.0.0.1:1090), fall back to DIRECT
+    client.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
 
     final request = await client.getUrl(Uri.parse(url));
     request.followRedirects = true;
