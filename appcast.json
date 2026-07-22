@@ -1,15 +1,15 @@
 {
   "version": "1.44.83",
   "channel": "stable",
-  "notes": "fix: appcast from GDrive by default; configurable update server in Settings \u2192 Advanced; fix /bin/bash sudo for proxy scripts and updater",
+  "notes": "fix: auto-connect toggle stuck on Windows — force stop() before retry when start() returns 500 (stale TUN state); stale connection recovery after outage",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "09c41c9bc1e7c2c90909f027b80a470887b5b7b607db4ced9a6d82d6d9a078ed",
     "size": 44968473
   },
   "windows": {
-    "url": "",
-    "sha256": "",
-    "size": 0
+    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
+    "sha256": "48d3d833e8c7ca776977ae79e2cdbf169b00c95fc05addb5715b89896bc37424",
+    "size": 33337044
   }
 }

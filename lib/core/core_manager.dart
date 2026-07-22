@@ -381,6 +381,16 @@ class CoreManager {
     _trafficChannel = null;
   }
 
+  void clearRuntimeStatusChannel() {
+    _runtimeStatusChannel?.sink.close();
+    _runtimeStatusChannel = null;
+  }
+
+  void clearEventChannel() {
+    _eventChannel?.sink.close();
+    _eventChannel = null;
+  }
+
   Future<WebSocketChannel?> getRuntimeStatusChannel() async {
     _runtimeStatusChannel ??= WebSocketChannel.connect(
         Uri.parse('$baseWsUrl/heartbeat/runtime-status?token=$token'));

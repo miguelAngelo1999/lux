@@ -1523,8 +1523,26 @@ class _HomeState extends State<Home>
     if (eventChannel == null) {
       coreManager?.getEventChannel().then((channel) async {
         if (channel == null) return;
-        await channel.ready;
-        eventChannel = channel;
+        // Retry connection — on Windows lux_core's WS server may not be ready
+        // immediately after HTTP ping succeeds (errno 1225 = connection refused)
+        WebSocketChannel current = channel;
+        for (int attempt = 0; attempt < 5; attempt++) {
+          try {
+            await current.ready;
+            break; // connected
+          } catch (_) {
+            if (attempt < 4) {
+              await Future.delayed(Duration(seconds: attempt + 1));
+              coreManager?.clearEventChannel();
+              final fresh = await coreManager?.getEventChannel();
+              if (fresh == null) return;
+              current = fresh;
+            } else {
+              return; // give up — non-critical, app works without event channel
+            }
+          }
+        }
+        eventChannel = current;
         eventChannel?.stream.listen((rawData) async {
           if (rawData is! String) {
             return;

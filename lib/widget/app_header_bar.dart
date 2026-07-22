@@ -162,7 +162,26 @@ class _State extends State<AppHeaderBar> with WindowListener {
       widget.coreManager.getRuntimeStatusChannel().then((channel) async {
         runtimeStatusChannel = channel;
         if (channel == null) return;
-        await channel.ready;
+        // Retry connection — on Windows lux_core's WS server may not be ready
+        // immediately after HTTP ping succeeds (errno 1225 = connection refused)
+        WebSocketChannel current = channel;
+        for (int attempt = 0; attempt < 5; attempt++) {
+          try {
+            await current.ready;
+            break; // connected
+          } catch (_) {
+            if (attempt < 4) {
+              await Future.delayed(Duration(seconds: attempt + 1));
+              widget.coreManager.clearRuntimeStatusChannel();
+              final fresh = await widget.coreManager.getRuntimeStatusChannel();
+              if (fresh == null) return;
+              current = fresh;
+              runtimeStatusChannel = fresh;
+            } else {
+              return; // give up — heartbeat will recover later
+            }
+          }
+        }
         runtimeStatusChannel?.stream.listen((message) {
           RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));
           setState(() {

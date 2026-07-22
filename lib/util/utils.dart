@@ -66,10 +66,26 @@ Future<void> setAutoConnect(CoreManager? coreManager) async {
         return; // Success — stop retrying
       } catch (e) {
         String errorDetail = e.toString();
+        bool is500 = false;
         if (e is DioException && e.response != null) {
           errorDetail = 'HTTP ${e.response!.statusCode}: ${e.response!.data}';
+          is500 = e.response!.statusCode == 500;
         }
         appLog('CORE', 'setAutoConnect attempt $attempt failed: $errorDetail');
+
+        // On Windows, repeated 500s on start() mean lux_core has stale internal
+        // state (e.g. TUN adapter left open from previous session). Force stop()
+        // to flush that state, then retry. This is the "toggle never comes on"
+        // bug after restart. Do this after attempt 1 (give Go one chance first).
+        if (is500 && attempt == 1 && Platform.isWindows) {
+          appLog('CORE', 'setAutoConnect: 500 on Windows — forcing stop() to clear stale state');
+          try {
+            await coreManager?.stop();
+            await Future.delayed(const Duration(seconds: 2));
+          } catch (_) {}
+          continue; // retry start() immediately after stop
+        }
+
         if (attempt < 4) {
           // Wait before retrying: 500ms, 1s, 2s, 4s
           await Future.delayed(Duration(milliseconds: 500 * (1 << attempt)));
