@@ -1163,7 +1163,10 @@ class _HomeState extends State<Home>
     appLog('APP', 'init started homeDir=$curHomeDir');
     final Version currentVersion = Version.parse(await getAppVersion());
 
-    // Simple port/secret generation — random port each launch, no lockfile needed.
+    // ── LaunchAgent fast path (macOS only) ──────────────────────────────────
+    // If the LaunchAgent pre-started lux_core, a lockfile exists with the
+    // fixed port and persistent secret. Try to connect to it directly —
+    // Simple port/secret generation — random port each launch.
     final int port;
     final String secret;
     final ProcessManager process;
@@ -1176,7 +1179,7 @@ class _HomeState extends State<Home>
           ['-home_dir=$curHomeDir', '-port=$port', '-secret=$secret'],
           true);
     } else {
-      // Windows — keep existing dynamic port behavior
+      // Windows — dynamic port behavior
       port = await findAvailablePort(8000, 9000);
       secret = const Uuid().v4();
       var needElevate = true;
