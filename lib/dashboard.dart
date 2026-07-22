@@ -56,8 +56,14 @@ class _DashboardState extends State<Dashboard> with WindowListener {
       if (_selectedTab == 0) {
         _refreshProxies?.call();
       } else {
-        // Not on proxies tab — switch to it so user sees the new proxy
+        // Switch to proxies tab — ProxiesPage.initState will call refreshData()
+        // automatically when it builds, so no explicit refresh needed.
         setState(() => _selectedTab = 0);
+        // But also call after a short delay in case ProxiesPage was already
+        // built and is just being shown (no re-init, so list might be stale).
+        Future.delayed(const Duration(milliseconds: 200), () {
+          _refreshProxies?.call();
+        });
       }
     });
   }
