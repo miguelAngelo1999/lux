@@ -49,10 +49,10 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
     client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
 
     // Add cache-busting only for GDrive URLs (query param approach)
-    final cacheBust = baseUrl.contains('?') ? '&_t=' : '?_t=';
-    final fetchUrl = baseUrl.contains('drive.usercontent.google.com')
-        ? Uri.parse('$baseUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}')
-        : Uri.parse(baseUrl);
+    final cacheBust = appcastUrl.contains('?') ? '&_t=' : '?_t=';
+    final fetchUrl = appcastUrl.contains('drive.usercontent.google.com')
+        ? Uri.parse('$appcastUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}')
+        : Uri.parse(appcastUrl);
 
     final request = await client.getUrl(fetchUrl);
     request.followRedirects = true;
