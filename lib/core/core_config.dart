@@ -45,6 +45,24 @@ Future<void> _writePrefs(Map<String, dynamic> prefs) async {
   } catch (_) {}
 }
 
+/// Custom appcast URL — overrides the default when set.
+/// Stored in local prefs so it survives app updates.
+Future<String?> readCustomAppcastUrl() async {
+  final prefs = await _readPrefs();
+  final v = prefs['customAppcastUrl'];
+  return v is String && v.isNotEmpty ? v : null;
+}
+
+Future<void> writeCustomAppcastUrl(String? url) async {
+  final prefs = await _readPrefs();
+  if (url == null || url.isEmpty) {
+    prefs.remove('customAppcastUrl');
+  } else {
+    prefs['customAppcastUrl'] = url;
+  }
+  await _writePrefs(prefs);
+}
+
 Future<Set<String>> readDismissedProxies() async {
   final prefs = await _readPrefs();
   final raw = prefs['dismissedProxies'];
@@ -633,6 +651,8 @@ class Setting {
   final List<String> loadBalanceInterfaces;
   final String loadBalanceStrategy;
   final bool? restoreAutoDetect;
+  final String? healthCheckUrl;
+  final String? delayTestUrl;
 
   const Setting({
     this.mode = ProxyMode.mixed,
@@ -654,6 +674,8 @@ class Setting {
     this.loadBalanceInterfaces = const [],
     this.loadBalanceStrategy = 'least-conn',
     this.restoreAutoDetect,
+    this.healthCheckUrl,
+    this.delayTestUrl,
   });
 
   Setting.fromJson(Map<String, dynamic> json)
@@ -678,7 +700,9 @@ class Setting {
                 .toList() ??
             const [],
         loadBalanceStrategy = (json['loadBalance'] as Map?)?['strategy'] as String? ?? 'least-conn',
-        restoreAutoDetect = json['restoreAutoDetect'] as bool?;
+        restoreAutoDetect = json['restoreAutoDetect'] as bool?,
+        healthCheckUrl = json['healthCheckUrl'] as String?,
+        delayTestUrl = json['delayTestUrl'] as String?;
 
   Map<String, dynamic> toJson() => {
         'mode': mode == ProxyMode.tun ? 'tun' : mode == ProxyMode.system ? 'system' : 'mixed',
@@ -728,6 +752,8 @@ class Setting {
     List<String>? loadBalanceInterfaces,
     String? loadBalanceStrategy,
     bool? restoreAutoDetect,
+    String? healthCheckUrl,
+    String? delayTestUrl,
   }) =>
       Setting(
         mode: mode ?? this.mode,
@@ -749,6 +775,8 @@ class Setting {
         loadBalanceInterfaces: loadBalanceInterfaces ?? this.loadBalanceInterfaces,
         loadBalanceStrategy: loadBalanceStrategy ?? this.loadBalanceStrategy,
         restoreAutoDetect: restoreAutoDetect ?? this.restoreAutoDetect,
+        healthCheckUrl: healthCheckUrl ?? this.healthCheckUrl,
+        delayTestUrl: delayTestUrl ?? this.delayTestUrl,
       );
 
   static ProxyMode _parseMode(String s) {

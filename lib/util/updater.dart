@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:version/version.dart';
 
 import '../const/const.dart';
+import '../core/core_config.dart';
 import 'app_log.dart';
 
 /// Result of an update check.
@@ -38,15 +39,22 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
     final pkg = await PackageInfo.fromPlatform();
     final current = pkg.version;
 
+    // Use custom appcast URL if set in prefs, otherwise fall back to default
+    final customUrl = await readCustomAppcastUrl();
+    final baseUrl = (customUrl != null && customUrl.isNotEmpty) ? customUrl : appcastUrl;
+
     // Use Dart's HttpClient directly with proxy + SSL bypass
     final client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
     client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
 
-    final request = await client.getUrl(
-      // Add cache-busting timestamp so GDrive CDN always returns fresh content
-      Uri.parse('$appcastUrl&_t=${DateTime.now().millisecondsSinceEpoch}'),
-    );
+    // Add cache-busting only for GDrive URLs (query param approach)
+    final cacheBust = baseUrl.contains('?') ? '&_t=' : '?_t=';
+    final fetchUrl = baseUrl.contains('drive.usercontent.google.com')
+        ? Uri.parse('$baseUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}')
+        : Uri.parse(baseUrl);
+
+    final request = await client.getUrl(fetchUrl);
     request.followRedirects = true;
     request.headers.set('Cache-Control', 'no-cache, no-store');
     request.headers.set('Pragma', 'no-cache');
@@ -360,16 +368,16 @@ Future<void> downloadAndInstall(
           ? installerInHelper.path
           : installerScript.path;
 
-      // Try NOPASSWD sudo first (silent if sudoers covers lux_updater.sh)
-      final sudoTest = await Process.run('sudo', ['-n', 'true']);
-      if (sudoTest.exitCode == 0) {
-        // NOPASSWD active — launch silently
-        await Process.run('bash', ['-c', 'sudo bash "$scriptToRun" &'],
-            runInShell: false);
+      // Try NOPASSWD sudo first — use /bin/bash to match sudoers rule exactly:
+      // "NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/.../lux_updater.sh"
+      final sudoResult = await Process.run(
+          'sudo', ['-n', '/bin/bash', scriptToRun], runInShell: false);
+      if (sudoResult.exitCode == 0) {
+        // Ran successfully via NOPASSWD — nothing more to do
       } else {
         // Fall back to osascript — uses Touch ID if pam_tid.so is configured, else password
         final osaResult = await Process.run('/usr/bin/osascript', ['-e',
-          'do shell script "bash \'$scriptToRun\' &" '
+          'do shell script "/bin/bash \'$scriptToRun\'" '
           'with administrator privileges',
         ]);
         if (osaResult.exitCode != 0) {

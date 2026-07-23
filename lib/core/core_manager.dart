@@ -509,6 +509,9 @@ class CoreManager {
     lb['strategy'] = setting.loadBalanceStrategy;
     raw['loadBalance'] = lb;
 
+    if (setting.healthCheckUrl != null) raw['healthCheckUrl'] = setting.healthCheckUrl;
+    if (setting.delayTestUrl != null) raw['delayTestUrl'] = setting.delayTestUrl;
+
     await dio.put('$baseHttpUrl/setting', data: raw);
   }
 

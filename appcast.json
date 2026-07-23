@@ -1,15 +1,15 @@
 {
-  "version": "1.44.83",
+  "version": "1.44.85",
   "channel": "stable",
-  "notes": "fix: proxy list auto-refresh after adding from startup dialog; Enter key blank UI fix; SSL cert cache fallback; proxy detect reads saved original",
+  "notes": "fix: updater uses sudo -n -l to check NOPASSWD without running script \u2014 avoids false auth failure from non-zero script exit",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "09c41c9bc1e7c2c90909f027b80a470887b5b7b607db4ced9a6d82d6d9a078ed",
-    "size": 44968473
+    "sha256": "ab4443ce7abd98708b9c0c4d3a1a88bdbf00fcb1a26268d642c2ea00a4688890",
+    "size": 44972272
   },
   "windows": {
-    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "bfa5a22dcb7c528c562e352642fcef1a46d8760921cbb4eb5205cbe079ab602b",
-    "size": 33360699
+    "url": "",
+    "sha256": "",
+    "size": 0
   }
 }

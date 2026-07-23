@@ -256,7 +256,10 @@
       "Identify which app made each connection (shows in Connections)": "Identify which app made each connection (shows in Connections)",
       "Modify system DNS to route through Lux": "Modify system DNS to route through Lux",
       "Re-enable Windows": "Re-enable Windows",
-      "Start Lux when you log in": "Start Lux when you log in"
+      "Start Lux when you log in": "Start Lux when you log in",
+      "Scan for Proxy": "Scan for Proxy",
+      "Scan for proxy": "Scan for proxy",
+      "Scanning…": "Scanning…"
     },
     "fil": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -504,7 +507,10 @@
       "Identify which app made each connection (shows in Connections)": "Tukuyin kung aling app ang gumawa ng bawat koneksyon (ipinapakita sa Mga Koneksyon)",
       "Modify system DNS to route through Lux": "Baguhin ang system DNS upang i-ruta sa Lux",
       "Re-enable Windows": "Muling paganahin ang Windows",
-      "Start Lux when you log in": "Simulan ang Lux kapag nag-log in ka"
+      "Start Lux when you log in": "Simulan ang Lux kapag nag-log in ka",
+      "Scan for Proxy": "Hanapin ang Proxy",
+      "Scan for proxy": "Hanapin ang proxy",
+      "Scanning…": "Naghahanap…"
     },
     "zh": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -752,7 +758,10 @@
       "Identify which app made each connection (shows in Connections)": "识别哪个应用程序建立了每个连接（在连接中显示）",
       "Modify system DNS to route through Lux": "修改系统DNS以通过Lux路由",
       "Re-enable Windows": "重新启用 Windows",
-      "Start Lux when you log in": "登录后启动 Lux"
+      "Start Lux when you log in": "登录后启动 Lux",
+      "Scan for Proxy": "扫描代理",
+      "Scan for proxy": "扫描代理",
+      "Scanning…": "扫描中…"
     },
     "es": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1000,7 +1009,10 @@
       "Identify which app made each connection (shows in Connections)": "Identifique qué aplicación realizó cada conexión (se muestra en Conexiones)",
       "Modify system DNS to route through Lux": "Modificar el DNS del sistema para enrutar a través de Lux",
       "Re-enable Windows": "Vuelva a habilitar Windows",
-      "Start Lux when you log in": "Inicie Lux cuando inicie sesión"
+      "Start Lux when you log in": "Inicie Lux cuando inicie sesión",
+      "Scan for Proxy": "Buscar Proxy",
+      "Scan for proxy": "Buscar proxy",
+      "Scanning…": "Buscando…"
     },
     "fr": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1248,7 +1260,10 @@
       "Identify which app made each connection (shows in Connections)": "Identifiez quelle application a établi chaque connexion (s'affiche dans Connexions)",
       "Modify system DNS to route through Lux": "Modifier le DNS du système pour acheminer via Lux",
       "Re-enable Windows": "Réactiver Windows",
-      "Start Lux when you log in": "Démarrez Lux lorsque vous vous connectez"
+      "Start Lux when you log in": "Démarrez Lux lorsque vous vous connectez",
+      "Scan for Proxy": "Rechercher un Proxy",
+      "Scan for proxy": "Rechercher un proxy",
+      "Scanning…": "Recherche…"
     },
     "pt": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1496,7 +1511,10 @@
       "Identify which app made each connection (shows in Connections)": "Identifique qual aplicativo fez cada conexão (mostra em Conexões)",
       "Modify system DNS to route through Lux": "Modifique o DNS do sistema para rotear através do Lux",
       "Re-enable Windows": "Reativar o Windows",
-      "Start Lux when you log in": "Inicie o Lux ao fazer login"
+      "Start Lux when you log in": "Inicie o Lux ao fazer login",
+      "Scan for Proxy": "Buscar Proxy",
+      "Scan for proxy": "Buscar proxy",
+      "Scanning…": "Buscando…"
     },
     "ar": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1744,7 +1762,10 @@
       "Identify which app made each connection (shows in Connections)": "تحديد التطبيق الذي أجرى كل اتصال (يظهر في الاتصالات)",
       "Modify system DNS to route through Lux": "قم بتعديل نظام DNS للتوجيه عبر Lux",
       "Re-enable Windows": "إعادة تمكين ويندوز",
-      "Start Lux when you log in": "ابدأ تشغيل Lux عند تسجيل الدخول"
+      "Start Lux when you log in": "ابدأ تشغيل Lux عند تسجيل الدخول",
+      "Scan for Proxy": "البحث عن بروكسي",
+      "Scan for proxy": "البحث عن بروكسي",
+      "Scanning…": "جارٍ البحث…"
     },
     "de": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -1992,7 +2013,10 @@
       "Identify which app made each connection (shows in Connections)": "Identifizieren Sie, welche App die einzelnen Verbindungen hergestellt hat (wird unter „Verbindungen“ angezeigt).",
       "Modify system DNS to route through Lux": "Ändern Sie das System-DNS, um über Lux zu leiten",
       "Re-enable Windows": "Aktivieren Sie Windows erneut",
-      "Start Lux when you log in": "Starten Sie Lux, wenn Sie sich anmelden"
+      "Start Lux when you log in": "Starten Sie Lux, wenn Sie sich anmelden",
+      "Scan for Proxy": "Proxy suchen",
+      "Scan for proxy": "Proxy suchen",
+      "Scanning…": "Suche…"
     },
     "ja": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -2240,7 +2264,10 @@
       "Identify which app made each connection (shows in Connections)": "各接続を行ったアプリを特定します (「接続」に表示)",
       "Modify system DNS to route through Lux": "Lux を経由するようにシステム DNS を変更する",
       "Re-enable Windows": "Windowsを再度有効にする",
-      "Start Lux when you log in": "ログイン時にLuxを起動します"
+      "Start Lux when you log in": "ログイン時にLuxを起動します",
+      "Scan for Proxy": "プロキシを検索",
+      "Scan for proxy": "プロキシを検索",
+      "Scanning…": "検索中…"
     },
     "ko": {
       "*.blackmagicdesign.com": "*.blackmagicdesign.com",
@@ -2488,7 +2515,10 @@
       "Identify which app made each connection (shows in Connections)": "각 연결을 수행한 앱 식별(연결에 표시)",
       "Modify system DNS to route through Lux": "Lux를 통해 라우팅하도록 시스템 DNS 수정",
       "Re-enable Windows": "Windows를 다시 활성화합니다.",
-      "Start Lux when you log in": "로그인 시 Lux 시작"
+      "Start Lux when you log in": "로그인 시 Lux 시작",
+      "Scan for Proxy": "프록시 검색",
+      "Scan for proxy": "프록시 검색",
+      "Scanning…": "검색 중…"
     },
     "zh-CN": {
       "General": "通用",

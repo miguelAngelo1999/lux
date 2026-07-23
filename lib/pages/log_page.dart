@@ -195,8 +195,8 @@ class _LogPageState extends State<LogPage> {
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search logs...',
+                  decoration: InputDecoration(
+                    hintText: tl(context, 'Search logs...'),
                     isDense: true,
                     prefixIcon: Icon(Icons.search, size: 16),
                     border: OutlineInputBorder(),

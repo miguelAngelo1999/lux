@@ -537,8 +537,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       (
         category: 'SSL & MITM',
         items: [
-          e('Setup Wizard', 'loopback uwp node electron cert install corporate proxy fix env vars',
-              _setupWizardTile()),
+          e('Install SSL Certificate', 'cert install corporate proxy CA trust browser firefox python',
+              _installCertTile()),
+          e('Environment Variables', 'node electron npm git curl proxy cert env vars NODE_TLS',
+              _envVarsTile()),
+          e('App Compatibility', 'MITM app list corporate proxy fix kiro davinci windsurf',
+              _appCompatTile()),
           e('SSL Inspection', 'certificate corporate proxy intercept trust CA cert',
               _sslInspectionSection()),
           if (Platform.isWindows)
@@ -553,6 +557,10 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         items: [
           e('Check for Updates', 'update version upgrade latest',
               _checkForUpdatesTile()),
+          e('Update Server', 'appcast url update server gdrive github custom',
+              _appcastUrlTile()),
+          e('Connectivity Test URL', 'health check url test ping connectivity',
+              _connectivityTestUrlTile()),
           e('Config File', 'open configuration json file path',
               _configFileTile()),
           e('Reset Network', 'clear system proxy env vars stuck internet crash',
@@ -1050,6 +1058,163 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
   }
 
+  Widget _connectivityTestUrlTile() {
+    return FutureBuilder<Setting>(
+      future: widget.coreManager.getSetting(),
+      builder: (ctx, snap) {
+        final current = snap.data?.healthCheckUrl ?? '';
+        final ctrl = TextEditingController(text: current);
+        return ListTile(
+          dense: true,
+          leading: const Icon(Icons.network_check, size: 20),
+          title: TText('Connectivity Test URL', style: TextStyle(fontSize: 14)),
+          subtitle: Text(
+            current.isNotEmpty ? current : 'Default (msftconnecttest.com)',
+            style: const TextStyle(fontSize: 11),
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: const Icon(Icons.edit, size: 16),
+          onTap: () async {
+            ctrl.text = current;
+            await showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Connectivity Test URL'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: ctrl,
+                      decoration: const InputDecoration(
+                        hintText: 'http://... (leave blank for default)',
+                        isDense: true,
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Used by the health watchdog and proxy latency test.\nDefault: http://www.msftconnecttest.com/connecttest.txt',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        final s = await widget.coreManager.getSetting();
+                        await widget.coreManager.saveSetting(s.copyWith(
+                          healthCheckUrl: '',
+                          delayTestUrl: '',
+                        ));
+                      } catch (_) {}
+                      Navigator.of(ctx).pop();
+                      if (mounted) setState(() {});
+                    },
+                    child: const Text('Reset to Default'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () async {
+                      final url = ctrl.text.trim();
+                      try {
+                        final s = await widget.coreManager.getSetting();
+                        await widget.coreManager.saveSetting(s.copyWith(
+                          healthCheckUrl: url,
+                          delayTestUrl: url,
+                        ));
+                      } catch (_) {}
+                      Navigator.of(ctx).pop();
+                      if (mounted) setState(() {});
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _appcastUrlTile() {
+    return FutureBuilder<String?>(
+      future: readCustomAppcastUrl(),
+      builder: (ctx, snap) {
+        final current = snap.data;
+        final ctrl = TextEditingController(text: current ?? '');
+        return ListTile(
+          dense: true,
+          leading: const Icon(Icons.cloud_download_outlined, size: 20),
+          title: TText('Update Server', style: TextStyle(fontSize: 14)),
+          subtitle: Text(
+            current != null && current.isNotEmpty
+                ? current
+                : 'Default (Google Drive)',
+            style: const TextStyle(fontSize: 11),
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: const Icon(Icons.edit, size: 16),
+          onTap: () async {
+            ctrl.text = current ?? '';
+            await showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Update Server URL'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: ctrl,
+                      decoration: const InputDecoration(
+                        hintText: 'https://... (leave blank for default)',
+                        isDense: true,
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Default: Google Drive\nAlternative: raw.githubusercontent.com/…/appcast.json',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () async {
+                      await writeCustomAppcastUrl(null);
+                      Navigator.of(ctx).pop();
+                      if (mounted) setState(() {});
+                    },
+                    child: const Text('Reset to Default'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () async {
+                      await writeCustomAppcastUrl(ctrl.text.trim());
+                      Navigator.of(ctx).pop();
+                      if (mounted) setState(() {});
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _checkForUpdatesTile() {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1134,6 +1299,139 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 }
               },
         child: TText('Reset', style: TextStyle(fontSize: 12)),
+      ),
+    );
+  }
+
+  // ── Individual corporate proxy setup actions ─────────────────────────────
+
+  bool _certInstalling = false;
+  bool _envVarsApplying = false;
+  bool _appCompatApplying = false;
+
+  Widget _installCertTile() {
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.verified_user_outlined, size: 20),
+      title: TText('Install SSL Certificate', style: TextStyle(fontSize: 14)),
+      subtitle: Text(
+        'Trust your network proxy CA in system keychain, Firefox, Python, and other stores',
+        style: const TextStyle(fontSize: 12),
+      ),
+      trailing: FilledButton.icon(
+        icon: _certInstalling
+            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.download, size: 16),
+        label: TText(_certInstalling ? 'Installing…' : 'Install'),
+        onPressed: _certInstalling ? null : () async {
+          setState(() => _certInstalling = true);
+          try {
+            final ssl = await widget.coreManager.getSslBumpStatus(fresh: true);
+            if (!ssl.detected || !ssl.hasCert) {
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: TText('No SSL certificate detected — connect to your proxy first')));
+              return;
+            }
+            final pem = await widget.coreManager.getSslBumpCert();
+            if (pem == null || pem.isEmpty) {
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: TText('Certificate not available — try again after connecting')));
+              return;
+            }
+            final result = await CertInstaller.install(pem);
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(result.success
+                  ? 'Certificate installed successfully'
+                  : 'Partial install — check individual stores below'),
+              backgroundColor: result.success ? Colors.green.shade700 : Colors.orange.shade700,
+              duration: const Duration(seconds: 4),
+            ));
+          } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed: $e')));
+          } finally {
+            if (mounted) setState(() => _certInstalling = false);
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _envVarsTile() {
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.terminal, size: 20),
+      title: TText('Environment Variables', style: TextStyle(fontSize: 14)),
+      subtitle: Text(
+        Platform.isWindows
+            ? 'Set NODE_TLS_REJECT_UNAUTHORIZED=0 and NODE_EXTRA_CA_CERTS so npm, git, and Electron apps work'
+            : 'Set proxy cert path for npm, git, curl, and Electron-based apps',
+        style: const TextStyle(fontSize: 12),
+      ),
+      trailing: FilledButton.icon(
+        icon: _envVarsApplying
+            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.tune, size: 16),
+        label: TText(_envVarsApplying ? 'Applying…' : 'Apply'),
+        onPressed: _envVarsApplying ? null : () async {
+          setState(() => _envVarsApplying = true);
+          try {
+            // Run just the env var step from the wizard logic inline
+            final ssl = await widget.coreManager.getSslBumpStatus(fresh: true);
+            if (!mounted) return;
+            await showDialog<void>(
+              context: context,
+              builder: (_) => SetupWizard(
+                coreManager: widget.coreManager,
+                sslStatus: ssl,
+                initialStep: 1, // env vars step
+              ),
+            );
+          } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed: $e')));
+          } finally {
+            if (mounted) setState(() => _envVarsApplying = false);
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _appCompatTile() {
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.apps, size: 20),
+      title: TText('App Compatibility', style: TextStyle(fontSize: 14)),
+      subtitle: const Text(
+        'Fix certificate errors in Kiro, DaVinci Resolve, Windsurf and other apps with Go-based backends',
+        style: TextStyle(fontSize: 12),
+      ),
+      trailing: FilledButton.icon(
+        icon: _appCompatApplying
+            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.build, size: 16),
+        label: TText(_appCompatApplying ? 'Applying…' : 'Configure'),
+        onPressed: _appCompatApplying ? null : () async {
+          setState(() => _appCompatApplying = true);
+          try {
+            final ssl = await widget.coreManager.getSslBumpStatus(fresh: true);
+            if (!mounted) return;
+            await showDialog<void>(
+              context: context,
+              builder: (_) => SetupWizard(
+                coreManager: widget.coreManager,
+                sslStatus: ssl,
+                initialStep: 2, // app compat / MITM step
+              ),
+            );
+          } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed: $e')));
+          } finally {
+            if (mounted) setState(() => _appCompatApplying = false);
+          }
+        },
       ),
     );
   }

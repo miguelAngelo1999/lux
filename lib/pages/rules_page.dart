@@ -330,8 +330,8 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search rules...',
+                  decoration: InputDecoration(
+                    hintText: tl(context, 'Search rules...'),
                     isDense: true,
                     prefixIcon: Icon(Icons.search, size: 16),
                     border: OutlineInputBorder(),

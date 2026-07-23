@@ -289,9 +289,11 @@ class SetupWizard extends StatefulWidget {
   final CoreManager coreManager;
   final SslBumpStatus sslStatus;
   final VoidCallback? onComplete;
+  /// If set, the wizard opens directly at this step index (0=cert, 1=env, 2=mitm)
+  final int? initialStep;
 
   const SetupWizard({super.key, required this.coreManager,
-      required this.sslStatus, this.onComplete});
+      required this.sslStatus, this.onComplete, this.initialStep});
 
   static Future<void> show(BuildContext context, CoreManager coreManager,
       SslBumpStatus sslStatus) async {
@@ -325,18 +327,12 @@ class SetupWizard extends StatefulWidget {
       if (allDone.every((d) => d)) return;
     }
     if (!context.mounted) return;
-    // Ensure window is visible — wizard may be triggered while window is hidden
-    await windowManager.show();
-    await windowManager.focus();
+    // No forced window focus — called from Settings, window is already visible
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => SetupWizard(coreManager: coreManager, sslStatus: sslStatus),
     );
-    // Keep window visible after wizard closes — don't let it go back to tray
-    if (context.mounted) {
-      await windowManager.show();
-    }
   }
 
   @override
@@ -363,6 +359,10 @@ class _SetupWizardState extends State<SetupWizard> {
   @override
   void initState() {
     super.initState();
+    // If opened from a specific settings action, jump to that step
+    if (widget.initialStep != null) {
+      _step = widget.initialStep!.clamp(0, 2);
+    }
     _loadApps();
   }
 

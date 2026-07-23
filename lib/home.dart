@@ -457,18 +457,23 @@ class _HomeState extends State<Home>
       // Case 2: Proxy known + cert installed → nothing left to do
       if (proxyAlreadyAdded && certAlreadyInstalled) return;
 
-      // Case 3: Proxy known + cert NOT installed → skip proxy dialog, go straight to cert
+      // Case 3: Proxy known + cert NOT installed → show a non-intrusive snackbar
+      // instead of forcing the wizard popup. User can install from Settings → SSL & MITM.
       if (proxyAlreadyAdded && hasBump && !certAlreadyInstalled) {
-        if (!mounted) return;
-        _lastDetectedCertFingerprint = certFp;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || _wizardShowing) return;
-          _wizardShowing = true;
-          _showWindow();
-          SetupWizard.show(context, coreManager!, sslStatus).whenComplete(() {
-            _wizardShowing = false;
-          });
-        });
+        appLog('NET', 'cert not installed — notifying via snackbar');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: TText('Proxy CA certificate available to install'),
+            action: SnackBarAction(
+              label: 'Install',
+              onPressed: () {
+                // Navigate to SSL & MITM settings
+                // Just show a brief hint — user opens settings manually
+              },
+            ),
+            duration: const Duration(seconds: 6),
+          ));
+        }
         return;
       }
 
@@ -632,14 +637,13 @@ class _HomeState extends State<Home>
           }
           if (await InstalledCertsStore.isFullyInstalled(fp)) return;
           _lastDetectedCertFingerprint = fp;
-          // Show setup wizard instead of just cert dialog
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || _wizardShowing) return;
-            _wizardShowing = true;
-            SetupWizard.show(context, coreManager!, freshSsl).whenComplete(() {
-              _wizardShowing = false;
-            });
-          });
+          // Notify via snackbar instead of forcing wizard popup
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: TText('Proxy CA certificate ready to install — see Settings → SSL & MITM'),
+              duration: const Duration(seconds: 6),
+            ));
+          }
         } else if (freshSsl.error != null && freshSsl.error!.contains('407')) {          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: TText('Proxy still requires auth — check credentials and try again from Settings → SSL Inspection'),
             duration: Duration(seconds: 5)));
@@ -870,7 +874,7 @@ class _HomeState extends State<Home>
                     const SizedBox(width: 4),
                     // Scan button — re-runs proxy detection and fills server/port
                     Tooltip(
-                      message: 'Scan for proxy',
+                      message: tl(context, 'Scan for proxy'),
                       child: SizedBox(
                         width: 36, height: 36,
                         child: scanning

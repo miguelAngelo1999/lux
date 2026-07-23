@@ -152,8 +152,8 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search connections...',
+                  decoration: InputDecoration(
+                    hintText: tl(context, 'Search connections...'),
                     isDense: true,
                     prefixIcon: Icon(Icons.search, size: 16),
                     border: OutlineInputBorder(),

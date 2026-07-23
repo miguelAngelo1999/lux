@@ -129,13 +129,15 @@ class ProxyConfigurator {
 
   static Future<void> _runAdminScript(File script, String prompt) async {
     await Process.run('chmod', ['+x', script.path]);
-    // Try sudo -n first (NOPASSWD — instant after first-launch setup)
-    final sudoResult = await Process.run('sudo', ['-n', 'bash', script.path]);
+    // Use /bin/bash to match the NOPASSWD sudoers rule exactly:
+    // "NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/.../lux_proxy_*.sh"
+    // Previously used 'bash' which didn't match and always fell through to osascript.
+    final sudoResult = await Process.run('sudo', ['-n', '/bin/bash', script.path]);
     if (sudoResult.exitCode == 0) {
       await script.delete().catchError((_) => script);
       return;
     }
-    // Fall back to osascript — macOS shows Touch ID if available, else password
+    // NOPASSWD not configured yet — fall back to osascript (shows Touch ID if available)
     await Process.run('/usr/bin/osascript', ['-e',
       "do shell script \"bash '${script.path}'\" "
       "with prompt \"$prompt\" "

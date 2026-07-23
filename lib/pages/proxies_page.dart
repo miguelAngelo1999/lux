@@ -648,7 +648,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                         width: 14, height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.wifi_find, size: 16),
-                label: Text(_isScanningProxy ? 'Scanning…' : 'Scan for Proxy'),
+                label: Text(tl(context, _isScanningProxy ? 'Scanning…' : 'Scan for Proxy')),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   textStyle: const TextStyle(fontSize: 12),
