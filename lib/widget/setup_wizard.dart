@@ -526,7 +526,7 @@ class _SetupWizardState extends State<SetupWizard> {
       title: Row(children: [
         Icon(stepIcons[_step], size: 20, color: Theme.of(context).colorScheme.primary),
         const SizedBox(width: 8),
-        Expanded(child: Text(stepTitles[_step], style: const TextStyle(fontSize: 16))),
+        Expanded(child: TText(stepTitles[_step], style: const TextStyle(fontSize: 16))),
         Text('${_step+1}/$_totalSteps',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
       ]),
@@ -557,12 +557,12 @@ class _SetupWizardState extends State<SetupWizard> {
       ))),
       actions: [
         TextButton(onPressed: _busy ? null : _nextStep,
-            child: Text(_step == _totalSteps-1 ? 'Finish' : 'Skip')),
+            child: TText(_step == _totalSteps-1 ? 'Finish' : 'Skip')),
         FilledButton(
           onPressed: _busy ? null : _applyAndNext,
           child: _busy
               ? const SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white))
-              : Text(_step==0 ? 'Install' : _step==1 ? 'Apply' : _selectedApps.isEmpty ? 'Skip' : 'Enable'),
+              : TText(_step==0 ? 'Install' : _step==1 ? 'Apply' : _selectedApps.isEmpty ? 'Skip' : 'Enable'),
         ),
       ],
     );
@@ -580,7 +580,7 @@ class _SetupWizardState extends State<SetupWizard> {
   Widget _buildSslStep() {
     final cert = widget.sslStatus.certInfo;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Your network proxy inspects HTTPS traffic. Install its certificate '
+      const TText('Your network proxy inspects HTTPS traffic. Install its certificate '
           'so your browser, git, npm, and curl trust it.',
           style: TextStyle(fontSize: 13)),
       if (cert != null) ...[
@@ -629,7 +629,7 @@ class _SetupWizardState extends State<SetupWizard> {
       ]);
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Configure your system so Electron apps, Node.js tools, and '
+      const TText('Configure your system so Electron apps, Node.js tools, and '
           'terminal programs work correctly through the network proxy.',
           style: TextStyle(fontSize: 13)),
       const SizedBox(height: 12),
@@ -655,7 +655,7 @@ class _SetupWizardState extends State<SetupWizard> {
 
   Widget _buildMitmStep() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('The following apps were detected on your computer. Select any that '
+      const TText('The following apps were detected on your computer. Select any that '
           'have trouble connecting — they will be routed through a local proxy '
           'that adds missing certificate information.',
           style: TextStyle(fontSize: 13)),
@@ -687,8 +687,8 @@ class _SetupWizardState extends State<SetupWizard> {
                 Icon(app.icon, size:18, color: sel?Theme.of(context).colorScheme.primary:Colors.grey),
                 const SizedBox(width:8),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children:[
-                  Text(app.name, style: const TextStyle(fontSize:13, fontWeight:FontWeight.w500)),
-                  Text(app.reason, style: TextStyle(fontSize:11, color:Colors.grey.shade600)),
+                  TText(app.name, style: const TextStyle(fontSize:13, fontWeight:FontWeight.w500)),
+                  TText(app.reason, style: TextStyle(fontSize:11, color:Colors.grey.shade600)),
                 ])),
               ])),
           );
@@ -703,8 +703,8 @@ class _SetupWizardState extends State<SetupWizard> {
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact),
       const SizedBox(width:4),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize:13)),
-        Text(subtitle, style: TextStyle(fontSize:11, color:Colors.grey.shade600)),
+        TText(title, style: const TextStyle(fontSize:13)),
+        TText(subtitle, style: TextStyle(fontSize:11, color:Colors.grey.shade600)),
       ])),
     ]);
   }
@@ -716,7 +716,7 @@ class _SetupWizardState extends State<SetupWizard> {
         Icon(_statusOk?Icons.check_circle_outline:Icons.error_outline, size:14,
             color: _statusOk?Colors.green:Colors.red),
         const SizedBox(width:6),
-        Expanded(child: Text(_statusMsg!, style: TextStyle(fontSize:12,
+        Expanded(child: TText(_statusMsg!, style: TextStyle(fontSize:12,
             color: _statusOk?Colors.green:Colors.red))),
       ]));
   }

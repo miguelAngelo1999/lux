@@ -1441,7 +1441,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       dense: true,
       leading: const Icon(Icons.auto_fix_high, size: 20),
       title: TText('Setup Wizard', style: TextStyle(fontSize: 14)),
-      subtitle: Text(
+      subtitle: TText(
         Platform.isWindows
             ? 'Install cert, set Node/Electron env vars, UWP loopback, app compatibility'
             : 'Install cert, configure proxy CA trust, app compatibility',
@@ -1472,7 +1472,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     return ListTile(
       dense: true,
       title: TText('Reset Setup Wizard', style: TextStyle(fontSize: 14)),
-      subtitle: const Text(
+      subtitle: const TText(
           'Re-enable all "Don\'t ask again" wizard steps for re-configuration',
           style: TextStyle(fontSize: 12)),
       trailing: TextButton(
