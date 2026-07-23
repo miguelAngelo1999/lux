@@ -1,15 +1,15 @@
 {
   "version": "1.44.85",
   "channel": "stable",
-  "notes": "fix: updater uses sudo -n -l to check NOPASSWD without running script \u2014 avoids false auth failure from non-zero script exit",
+  "notes": "fix: update check URL (merge conflict resolved); proxy list auto-refresh; Enter key blank UI; SSL cert cache; proxy detect",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "ab4443ce7abd98708b9c0c4d3a1a88bdbf00fcb1a26268d642c2ea00a4688890",
     "size": 44972272
   },
   "windows": {
-    "url": "",
-    "sha256": "",
-    "size": 0
+    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
+    "sha256": "c99edfae4afcf486700edcb127ba3ccf4b5db3f341ffec38ae1a6e9975816d15",
+    "size": 33356151
   }
 }
