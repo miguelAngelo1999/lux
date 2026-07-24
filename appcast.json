@@ -1,11 +1,11 @@
 {
-  "version": "1.44.89",
+  "version": "1.44.90",
   "channel": "stable",
-  "notes": "fix: use launchctl asuser open (not osascript Finder) for post-update relaunch so window appears",
+  "notes": "fix: use su - for post-update relaunch so Lux appears after update",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "8f5b81f461057cb25f3eb3fa2c4039ff25ab09ef76955a5995b2662e507462b7",
-    "size": 44973923
+    "sha256": "29425476faf9409a22b58729d2cc2ef876a1662eed04d30b8dac25b92525dcb9",
+    "size": 44973932
   },
   "windows": {
     "url": "",
