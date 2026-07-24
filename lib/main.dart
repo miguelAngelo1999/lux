@@ -22,6 +22,17 @@ void main(List<String> args) async {
 
   PlatformDispatcher.instance.onError = (error, stack) {
     if (error is DioException) {
+      // Silence connection errors (errno 1225 = connection refused) — these are
+      // expected during startup while lux_core is initializing its WebSocket server.
+      // Showing them as a dialog confuses users with "O computador remoto recusou…"
+      if (error.type == DioExceptionType.connectionError) {
+        final msg = error.message ?? '';
+        if (msg.contains('1225') || msg.contains('refused') ||
+            msg.contains('recusou') || msg.contains('connection error')) {
+          debugPrint('[startup] suppressed connection error: $msg');
+          return true; // handled — don't show to user
+        }
+      }
       if (error.response?.data is Map<String, dynamic>) {
         final coreHttpError = CoreHttpError.fromJson(error.response?.data);
         if (coreHttpError.code == coreHttpErrorNotElevatedCode) {
@@ -29,6 +40,14 @@ void main(List<String> args) async {
         } else {
           notifier.show(coreHttpError.message);
         }
+        return true;
+      }
+    }
+    // Also silence SocketException connection refused at the global level
+    if (error is SocketException) {
+      final msg = error.message;
+      if (msg.contains('1225') || msg.contains('refused') || msg.contains('recusou')) {
+        debugPrint('[startup] suppressed SocketException: $msg');
         return true;
       }
     }
