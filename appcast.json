@@ -1,15 +1,15 @@
 {
   "version": "1.44.85",
   "channel": "stable",
-  "notes": "fix: update check URL (merge conflict resolved); proxy list auto-refresh; Enter key blank UI; SSL cert cache; proxy detect",
+  "notes": "fix: errno 1225 connection dialog suppressed; wizard i18n; proxy list refresh; update check URL fix",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "ab4443ce7abd98708b9c0c4d3a1a88bdbf00fcb1a26268d642c2ea00a4688890",
-    "size": 44972272
+    "sha256": "2ea7b49995d45eaaf42c48ddc61f5965012ac5b6a8c269816bded24dabd112bf",
+    "size": 44974063
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "c99edfae4afcf486700edcb127ba3ccf4b5db3f341ffec38ae1a6e9975816d15",
-    "size": 33356151
+    "sha256": "2ecd88107a68fd0b12bb571e2e394f5d8709a9e2bc95c79ac4d987efa822aefb",
+    "size": 33360598
   }
 }
