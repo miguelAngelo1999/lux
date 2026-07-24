@@ -1,7 +1,7 @@
 {
   "version": "1.44.85",
   "channel": "stable",
-  "notes": "fix: errno 1225 connection dialog suppressed; wizard i18n; proxy list refresh; update check URL fix",
+  "notes": "fix: errno 1225 suppressed; wizard i18n",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "2ea7b49995d45eaaf42c48ddc61f5965012ac5b6a8c269816bded24dabd112bf",
