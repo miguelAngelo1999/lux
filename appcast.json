@@ -1,15 +1,15 @@
 {
-  "version": "1.44.85",
+  "version": "1.44.88",
   "channel": "stable",
-  "notes": "fix: errno 1225 suppressed; wizard i18n",
+  "notes": "fix: sudo no-password on proxy apply (single arg), reconnect debounce+guard prevents thrashing",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "2ea7b49995d45eaaf42c48ddc61f5965012ac5b6a8c269816bded24dabd112bf",
-    "size": 44974063
+    "sha256": "b05a06ce051e05aee3ef36ef891ce6fd7bd9c15862c19ffd55c4ba986d884523",
+    "size": 44974428
   },
   "windows": {
-    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "2ecd88107a68fd0b12bb571e2e394f5d8709a9e2bc95c79ac4d987efa822aefb",
-    "size": 33360598
+    "url": "",
+    "sha256": "",
+    "size": 0
   }
 }
