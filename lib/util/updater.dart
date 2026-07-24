@@ -370,10 +370,17 @@ Future<void> downloadAndInstall(
 
       // Try NOPASSWD sudo first — use /bin/bash to match sudoers rule exactly:
       // "NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/.../lux_updater.sh"
-      final sudoResult = await Process.run(
-          'sudo', ['-n', '/bin/bash', scriptToRun], runInShell: false);
-      if (sudoResult.exitCode == 0) {
-        // Ran successfully via NOPASSWD — nothing more to do
+      // Use sudo -l (list) to check if NOPASSWD is configured WITHOUT running the script.
+      // The script itself may exit non-zero (e.g. waiting for Lux to quit), so we can't
+      // use the script's exit code to determine if sudo auth succeeded.
+      final sudoCheck = await Process.run(
+          'sudo', ['-n', '-l', '/bin/bash', scriptToRun], runInShell: false);
+      final nopasswd = sudoCheck.exitCode == 0 &&
+          !sudoCheck.stderr.toString().contains('password');
+      if (nopasswd) {
+        // NOPASSWD active — launch script detached so it outlives this process
+        await Process.run(
+            'sudo', ['/bin/bash', scriptToRun], runInShell: false);
       } else {
         // Fall back to osascript — uses Touch ID if pam_tid.so is configured, else password
         final osaResult = await Process.run('/usr/bin/osascript', ['-e',
