@@ -1,15 +1,15 @@
 {
   "version": "1.44.90",
   "channel": "stable",
-  "notes": "fix: use su - for post-update relaunch so Lux appears after update",
+  "notes": "v1.44.90 Windows: errno 1225 fix, update URL fix, wizard i18n, proxy refresh",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "29425476faf9409a22b58729d2cc2ef876a1662eed04d30b8dac25b92525dcb9",
     "size": 44973932
   },
   "windows": {
-    "url": "",
-    "sha256": "",
-    "size": 0
+    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
+    "sha256": "0e5d82fe14354681267fe6c5e3d462b1604430e8247bd68184d5a441c6892757",
+    "size": 33366892
   }
 }
