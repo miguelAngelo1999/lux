@@ -1,11 +1,11 @@
 {
-  "version": "1.45.0",
+  "version": "1.45.1",
   "channel": "stable",
-  "notes": "1.45.0 feat/stable: load balancer removed, Go watchdog removed, NetworkDetector rewritten, updater relaunch fixed, MITM removed",
+  "notes": "1.45.1: automated tests + structured debug logging; -debug flag for verbose lux_core output; NetworkDetector fully logged",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "93ab3cad9485342051e1e9d28f2c18fb3f85b8f84b2b5323866dd4539df89b23",
-    "size": 44748077
+    "sha256": "17bd3c7a4b6cb933d5c894708f5f3055795ffb4fbd69cebc290fe4f041a71c66",
+    "size": 44750887
   },
   "windows": {
     "url": "",
