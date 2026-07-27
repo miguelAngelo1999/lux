@@ -40,9 +40,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   InstallResult? _installResult;
   // Network tools state
   String? _networkToolStatus;
-  // MITM CA install state
-  bool _mitmCaInstalling = false;
-
+  // MITM removed
   List<String> _interfaces = [];
 
   // DNS server lists (loaded from raw config)
@@ -404,10 +402,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   'Hide IP addresses and proxy names in UI',
                   s.sensitiveInfoMode ?? false,
                   (v) => _save(s.copyWith(sensitiveInfoMode: v)))),
-          e('Reset Dismissed Proxies', 'wizard dismissed prompts',
-              _resetDismissedProxiesTile()),
-          if (Platform.isWindows)
-            e('Clear Saved Proxy', 'windows saved credentials',
+          e('Clear Saved Proxy', 'windows saved credentials',
                 _clearSavedProxyTile()),
         ],
       ),
@@ -2164,6 +2159,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         'SSL Inspection (MITM) has been removed in this version.',
         style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
       ),
+    );
+  }
 
   Widget _clearSavedProxyTile() {
     return ListTile(

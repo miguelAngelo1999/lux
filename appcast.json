@@ -1,0 +1,15 @@
+{
+  "version": "1.45.0",
+  "channel": "stable",
+  "notes": "1.45.0 feat/stable: load balancer removed, Go watchdog removed, NetworkDetector rewritten, updater relaunch fixed, MITM removed",
+  "macOS": {
+    "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
+    "sha256": "93ab3cad9485342051e1e9d28f2c18fb3f85b8f84b2b5323866dd4539df89b23",
+    "size": 44748077
+  },
+  "windows": {
+    "url": "",
+    "sha256": "",
+    "size": 0
+  }
+}
