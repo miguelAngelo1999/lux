@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:lux/const/const.dart';
+import 'package:lux/util/app_log.dart';
 
 /// Configures proxy environment variables for CLI tools and desktop apps.
 /// macOS: calls static root-owned scripts with proxy addr as argument.
@@ -11,15 +12,17 @@ class ProxyConfigurator {
   static const _helperDir = '/Library/PrivilegedHelperTools/com.github.igoogolx.lux';
 
   static Future<void> apply(String proxyAddr) async {
+    appLog('PROXY-CFG', 'applying proxy: $proxyAddr');
     if (Platform.isMacOS) await _applyMacOS(proxyAddr);
     else if (Platform.isWindows) await _applyWindows(proxyAddr);
-    debugPrint('[ProxyConfigurator] Applied: $proxyAddr');
+    appLog('PROXY-CFG', 'apply complete');
   }
 
   static Future<void> clear() async {
+    appLog('PROXY-CFG', 'clearing proxy settings');
     if (Platform.isMacOS) await _clearMacOS();
     else if (Platform.isWindows) await _clearWindows();
-    debugPrint('[ProxyConfigurator] Cleared');
+    appLog('PROXY-CFG', 'clear complete');
   }
 
   // ── macOS ──────────────────────────────────────────────────────────────
@@ -58,11 +61,15 @@ class ProxyConfigurator {
   // ── Admin runner ───────────────────────────────────────────────────────
 
   static Future<void> _runAdminCommand(List<String> cmd, String prompt) async {
+    appLog('PROXY-CFG', 'sudo -n ${cmd.join(' ')}');
     // Try sudo -n first — matches NOPASSWD rule exactly.
     final sudoResult = await Process.run(
         'sudo', ['-n', ...cmd], runInShell: false);
-    if (sudoResult.exitCode == 0) return;
-
+    if (sudoResult.exitCode == 0) {
+      appLog('PROXY-CFG', 'sudo -n succeeded');
+      return;
+    }
+    appLog('PROXY-CFG', 'sudo -n failed (exit ${sudoResult.exitCode}) — falling back to osascript (Touch ID)');
     // Fall back to osascript (Touch ID if pam_tid configured, else password)
     final shellCmd = cmd.map((a) => "'$a'").join(' ');
     await Process.run('/usr/bin/osascript', ['-e',

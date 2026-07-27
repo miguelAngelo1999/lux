@@ -180,22 +180,26 @@ class CoreManager {
   }
 
   Future<void> stop() async {
+    appLog('CORE', 'stop() called');
     await dio.post('$baseHttpUrl/manager/stop',
         options: Options(
           sendTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         ));
+    appLog('CORE', 'stop() complete');
     // Clear proxy settings for CLI tools when disconnecting
     ProxyConfigurator.clear();
   }
 
   Future<void> start() async {
+    appLog('CORE', 'start() called');
     await dio.post('$baseHttpUrl/manager/start',
         options: Options(
           sendTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         ));
     _lastStartTime = DateTime.now();
+    appLog('CORE', 'start() complete — lux_core connected');
     // Set proxy settings for CLI tools when connecting
     try {
       final setting = await getSetting();
