@@ -5,7 +5,7 @@
 # Usage: bash scripts/test_update_cycle.sh
 # NOTE: This test actually installs the update. Run on a test machine or when you want to test the full cycle.
 
-set -euo pipefail
+set -uo pipefail
 
 APPCAST_URL=$(python3 -c "
 import sys; sys.path.insert(0, 'scripts')
@@ -80,8 +80,8 @@ pass "version comparison completed"
 echo ""
 
 # ── Test 4: SHA256 of local DMG matches appcast ────────────────────────────
-echo "Test 4: DMG integrity (SHA256 if local DMG exists)"
-LOCAL_DMG=$(ls /Users/*/Library/Caches/com.github.igoogolx.lux/Lux-*.dmg 2>/dev/null | sort | tail -1 || echo "")
+echo "Test 4: DMG integrity (SHA256 if local DMG matches appcast version)"
+LOCAL_DMG=$(ls ~/Library/Caches/com.github.igoogolx.lux/Lux-${APPCAST_VERSION}.dmg 2>/dev/null || echo "")
 if [ -n "$LOCAL_DMG" ] && [ -f "$LOCAL_DMG" ]; then
   ACTUAL_SHA=$(shasum -a 256 "$LOCAL_DMG" | awk '{print $1}')
   if [ "$ACTUAL_SHA" = "$APPCAST_SHA256" ]; then
@@ -92,8 +92,8 @@ if [ -n "$LOCAL_DMG" ] && [ -f "$LOCAL_DMG" ]; then
     echo "  actual:   $ACTUAL_SHA"
   fi
 else
-  echo "  (no local DMG cache found — skipping SHA256 check)"
-  pass "SHA256 check skipped (no cached DMG)"
+  echo "  (no cached DMG for v$APPCAST_VERSION — skipping SHA256 check)"
+  pass "SHA256 check skipped (no cached DMG for current version)"
 fi
 echo ""
 

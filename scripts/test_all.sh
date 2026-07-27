@@ -2,7 +2,7 @@
 # Run all Lux tests: Go unit tests + Flutter unit tests + connectivity simulation
 # Usage: bash scripts/test_all.sh [--skip-connectivity] [--skip-update]
 
-set -euo pipefail
+set -uo pipefail
 
 SKIP_CONNECTIVITY=0
 SKIP_UPDATE=0

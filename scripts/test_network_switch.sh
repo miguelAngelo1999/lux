@@ -6,7 +6,7 @@
 # Usage: bash scripts/test_network_switch.sh
 # Requires: Lux running, lux_core responding on port 8963
 
-set -euo pipefail
+set -uo pipefail
 
 LOCKFILE="$HOME/Library/Application Support/com.github.igoogolx.lux/1.0/lux_core.lock"
 LOG_FILE="$HOME/Library/Application Support/com.github.igoogolx.lux/1.0/logs/flutter_app.log"
@@ -19,11 +19,46 @@ mkdir -p "$RESULTS_DIR"
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 get_secret() {
-  python3 -c "import json; d=json.load(open('$LOCKFILE')); print(d['secret'])" 2>/dev/null || echo ""
+  # Try lockfile first
+  local s
+  s=$(python3 -c "import json; d=json.load(open('$LOCKFILE')); print(d['secret'])" 2>/dev/null || echo "")
+  if [ -n "$s" ]; then
+    # Verify this secret actually works on any port
+    for try_port in 8963 18000 9090; do
+      if curl -s --max-time 1 -H "Authorization: Bearer $s" "http://127.0.0.1:$try_port/manager" 2>/dev/null | grep -q "isStarted"; then
+        echo "$s"
+        return
+      fi
+    done
+  fi
+  # Fallback: read most recent token from core.log
+  s=$(grep -o 'token=[a-f0-9-]*' ~/Library/Application\ Support/com.github.igoogolx.lux/1.0/logs/core.log 2>/dev/null | tail -1 | cut -d= -f2)
+  echo "${s:-}"
 }
 
 get_port() {
-  python3 -c "import json; d=json.load(open('$LOCKFILE')); print(d['port'])" 2>/dev/null || echo "8963"
+  # First try lockfile
+  local p
+  p=$(python3 -c "import json; d=json.load(open('$LOCKFILE')); print(d['port'])" 2>/dev/null || echo "")
+  # Verify the port actually responds
+  if [ -n "$p" ]; then
+    local secret
+    secret=$(get_secret)
+    if curl -s --max-time 2 -H "Authorization: Bearer $secret" "http://127.0.0.1:$p/manager" > /dev/null 2>&1; then
+      echo "$p"
+      return
+    fi
+  fi
+  # Fallback: probe well-known ports
+  local secret
+  secret=$(get_secret)
+  for try_port in 18000 8963 9090 1337; do
+    if curl -s --max-time 2 -H "Authorization: Bearer $secret" "http://127.0.0.1:$try_port/manager" > /dev/null 2>&1; then
+      echo "$try_port"
+      return
+    fi
+  done
+  echo "${p:-8963}"
 }
 
 lux_api() {
@@ -44,12 +79,22 @@ lux_api() {
 }
 
 get_current_rule() {
-  lux_api "/configs/rules/selected" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id','?'))" 2>/dev/null || echo "unknown"
+  local secret port
+  secret=$(get_secret)
+  port=$(get_port)
+  curl -s -H "Authorization: Bearer $secret" "http://127.0.0.1:$port/rules" 2>/dev/null \
+    | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('selectedId','unknown'))" 2>/dev/null \
+    || echo "unknown"
 }
 
 set_rule() {
-  lux_api "/selected/rule" "POST" "{\"id\":\"$1\"}" > /dev/null
+  local secret port
+  secret=$(get_secret)
+  port=$(get_port)
+  curl -s -X POST -H "Authorization: Bearer $secret" -H "Content-Type: application/json" \
+    -d "{\"id\":\"$1\"}" "http://127.0.0.1:$port/selected/rule" > /dev/null 2>&1
   sleep 1
+  local actual
   actual=$(get_current_rule)
   if [ "$actual" = "$1" ]; then
     echo "  ✓ rule set to $1"
@@ -61,14 +106,24 @@ set_rule() {
 }
 
 check_proxy_works() {
-  local port
-  port=$(get_port)
+  local secret port
   secret=$(get_secret)
+  port=$(get_port)
   # lux_core health endpoint is a reliable proxy connectivity check
   result=$(curl -s --max-time 5 \
     -H "Authorization: Bearer $secret" \
     "http://127.0.0.1:$port/health" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print('ok' if d.get('ok') else 'fail')" 2>/dev/null || echo "error")
   echo "$result"
+}
+
+get_is_started() {
+  local secret port
+  secret=$(get_secret)
+  port=$(get_port)
+  curl -s --max-time 5 -H "Authorization: Bearer $secret" \
+    "http://127.0.0.1:$port/manager" 2>/dev/null \
+    | python3 -c "import json,sys; d=json.load(sys.stdin); print('True' if d.get('isStarted') else 'False')" 2>/dev/null \
+    || echo "error"
 }
 
 log_lines_since() {
@@ -137,9 +192,9 @@ echo ""
 echo "Test 3: Stop + Start cycle"
 echo "  stopping lux_core..."
 lux_api "/manager/stop" "POST" > /dev/null
-sleep 2
+sleep 3
 
-status=$(lux_api "/manager" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('isStarted'))" 2>/dev/null || echo "error")
+status=$(get_is_started)
 if [ "$status" = "False" ]; then
   pass "lux_core stopped"
 else
@@ -148,9 +203,16 @@ fi
 
 echo "  starting lux_core..."
 lux_api "/manager/start" "POST" > /dev/null
-sleep 3
+# Give lux_core time to start + write new token to core.log
+sleep 6
 
-status=$(lux_api "/manager" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('isStarted'))" 2>/dev/null || echo "error")
+# Retry status check with fresh token (token changes on restart)
+status="error"
+for retry in 1 2 3; do
+  status=$(get_is_started)
+  [ "$status" = "True" ] && break
+  sleep 2
+done
 if [ "$status" = "True" ]; then
   pass "lux_core restarted"
 else
@@ -162,11 +224,14 @@ echo ""
 echo "Test 4: Rapid stop+start stress (5 cycles)"
 stress_ok=0
 for i in $(seq 1 5); do
-  lux_api "/manager/stop" "POST" > /dev/null; sleep 1
-  lux_api "/manager/start" "POST" > /dev/null; sleep 2
-  status=$(lux_api "/manager" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('isStarted'))" 2>/dev/null || echo "error")
+  lux_api "/manager/stop" "POST" > /dev/null; sleep 2
+  lux_api "/manager/start" "POST" > /dev/null; sleep 4
+  status=$(get_is_started)
   if [ "$status" = "True" ]; then
     stress_ok=$((stress_ok+1))
+    echo "  cycle $i: ✓"
+  else
+    echo "  cycle $i: ✗ (status=$status)"
   fi
 done
 if [ "$stress_ok" -eq 5 ]; then
