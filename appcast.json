@@ -1,11 +1,11 @@
 {
-  "version": "1.45.2",
+  "version": "1.45.3",
   "channel": "stable",
-  "notes": "fix: sudoers lux_proxy_apply.sh missing wildcard \u2014 caused password prompt on every connect",
+  "notes": "fix: NetworkDetector skips during TUN startup \u2014 prevents false bypass_all switch when proxy probe times out mid-start",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "c428325895c10d61a9f8d2af3a758e86dc234b4865c8f62d7a58d3f8d2dff323",
-    "size": 44750749
+    "sha256": "c22db6e53d997cc1e559746d133fecaf1f250da4b7333764c0a89747ac2afdd5",
+    "size": 44750322
   },
   "windows": {
     "url": "",
