@@ -117,32 +117,53 @@ except: print('unknown')
 info "Active proxy: $ACTIVE_PROXY"
 echo ""
 
-# ── F2: Rule switching actually changes traffic path ──────────────────────
-echo "F2: bypass_all → direct internet (not through corporate proxy)"
+# ── F2: Verify rule matches network state (read-only — no switching) ────────
+echo "F2: Rule matches current network state"
 CURRENT_RULE=$(lux_api "/rules" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('selectedId','unknown'))" 2>/dev/null || echo "unknown")
+CORP_PROXY_HOST=$(lux_api "/proxies" 2>/dev/null | python3 -c "
+import json,sys
+try:
+  d=json.load(sys.stdin); proxies=d.get('proxies',[]); sel=d.get('id','')
+  for p in proxies:
+    if p.get('id')==sel and p.get('type') not in ('direct',):
+      print(p.get('server','')); break
+except: pass
+" 2>/dev/null || echo "")
+CORP_PORT=$(lux_api "/proxies" 2>/dev/null | python3 -c "
+import json,sys
+try:
+  d=json.load(sys.stdin); proxies=d.get('proxies',[]); sel=d.get('id','')
+  for p in proxies:
+    if p.get('id')==sel and p.get('type') not in ('direct',):
+      print(p.get('port',8080)); break
+except: print(8080)
+" 2>/dev/null || echo "8080")
+
 info "Current rule: $CURRENT_RULE"
 
-# Switch to bypass_all
-SECRET=$(get_secret); PORT=$(get_port)
-curl -s -X POST -H "Authorization: Bearer $SECRET" -H "Content-Type: application/json" \
-  -d '{"id":"bypass_all"}' "http://127.0.0.1:$PORT/selected/rule" > /dev/null 2>&1
-sleep 2
+if [ -n "$CORP_PROXY_HOST" ] && [ "$CORP_PROXY_HOST" != "" ]; then
+  PROXY_REACHABLE=$(python3 -c "
+import socket
+try:
+  s = socket.create_connection(('$CORP_PROXY_HOST', $CORP_PORT), timeout=3)
+  s.close(); print('yes')
+except: print('no')
+" 2>/dev/null || echo "unknown")
 
-# In bypass mode, traffic should go DIRECT (not through proxy)
-# Test: connect to 1.1.1.1 directly without proxy config
-DIRECT_RESULT=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 \
-  --proxy http://127.0.0.1:$PROXY_PORT https://1.1.1.1 2>/dev/null || echo "000")
-if [ "$DIRECT_RESULT" = "200" ]; then
-  pass "bypass_all: direct internet works (1.1.1.1 → 200)"
+  if [ "$PROXY_REACHABLE" = "yes" ] && [ "$CURRENT_RULE" = "proxy_all" ]; then
+    pass "Rule=proxy_all, corporate proxy reachable ✓"
+  elif [ "$PROXY_REACHABLE" = "no" ] && [ "$CURRENT_RULE" = "bypass_all" ]; then
+    pass "Rule=bypass_all, proxy unreachable ✓ (home network)"
+  elif [ "$PROXY_REACHABLE" = "yes" ] && [ "$CURRENT_RULE" = "bypass_all" ]; then
+    fail "Rule=bypass_all but proxy IS reachable — should be proxy_all (NetworkDetector missed it)"
+  elif [ "$PROXY_REACHABLE" = "no" ] && [ "$CURRENT_RULE" = "proxy_all" ]; then
+    warn "Rule=proxy_all but proxy unreachable — may still be switching (wait 10s and retry)"
+  else
+    pass "Rule=$CURRENT_RULE (proxy reachability: $PROXY_REACHABLE)"
+  fi
 else
-  warn "bypass_all: direct internet check returned $DIRECT_RESULT (may be normal if corp proxy blocks 1.1.1.1)"
+  warn "No corporate proxy configured — skipping rule accuracy check"
 fi
-
-# Restore rule
-curl -s -X POST -H "Authorization: Bearer $SECRET" -H "Content-Type: application/json" \
-  -d "{\"id\":\"$CURRENT_RULE\"}" "http://127.0.0.1:$PORT/selected/rule" > /dev/null 2>&1
-sleep 1
-info "Restored rule: $CURRENT_RULE"
 echo ""
 
 # ── F3: System proxy settings set correctly ───────────────────────────────
@@ -307,7 +328,7 @@ echo ""
 
 # ── F7: Proxy credentials work (no 407 in recent traffic) ─────────────────
 echo "F7: Proxy authentication (no recent 407 errors)"
-RECENT_407=$(grep "407\|auth.*fail\|proxy_auth_failed\|Proxy-Auth" "$LOG_FILE" 2>/dev/null | \
+RECENT_407=$(grep "proxy_auth_failed\|HTTP 407\|\[407\]" "$LOG_FILE" 2>/dev/null | \
   grep "$(date '+%Y-%m-%d')" | wc -l | tr -d ' ')
 if [ "$RECENT_407" -eq 0 ]; then
   pass "No 407 auth failures today"
@@ -316,49 +337,18 @@ else
 fi
 echo ""
 
-# ── F8: NetworkDetector switches correctly on network change ──────────────
-echo "F8: NetworkDetector rule accuracy"
-CURRENT_RULE=$(lux_api "/rules" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('selectedId','unknown'))" 2>/dev/null || echo "unknown")
-CORP_PROXY_HOST=$(lux_api "/proxies" 2>/dev/null | python3 -c "
-import json,sys
-try:
-  d=json.load(sys.stdin)
-  proxies=d.get('proxies',[])
-  sel=d.get('id','')
-  for p in proxies:
-    if p.get('id')==sel and p.get('type') not in ('direct',):
-      print(p.get('server',''))
-      break
-except: pass
-" 2>/dev/null || echo "")
-
-if [ -n "$CORP_PROXY_HOST" ] && [ "$CORP_PROXY_HOST" != "" ]; then
-  # Probe proxy reachability directly
-  PROXY_REACHABLE=$(python3 -c "
-import socket
-CORP_PORT=$(lux_api '/proxies' 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); proxies=d.get('proxies',[]); sel=d.get('id',''); [print(p.get('port',8080)) for p in proxies if p.get('id')==sel]" 2>/dev/null || echo "8080")
-try:
-  s = socket.create_connection(('$CORP_PROXY_HOST', CORP_PORT), timeout=3)
-  s.close()
-  print('yes')
-except:
-  print('no')
-" 2>/dev/null || echo "unknown")
-
-  if [ "$PROXY_REACHABLE" = "yes" ] && [ "$CURRENT_RULE" = "proxy_all" ]; then
-    pass "Proxy reachable + rule=proxy_all ✓ (correct for corporate network)"
-  elif [ "$PROXY_REACHABLE" = "no" ] && [ "$CURRENT_RULE" = "bypass_all" ]; then
-    pass "Proxy unreachable + rule=bypass_all ✓ (correct for home network)"
-  elif [ "$PROXY_REACHABLE" = "yes" ] && [ "$CURRENT_RULE" = "bypass_all" ]; then
-    fail "Proxy reachable but rule=bypass_all (NetworkDetector should have switched to proxy_all)"
-  elif [ "$PROXY_REACHABLE" = "no" ] && [ "$CURRENT_RULE" = "proxy_all" ]; then
-    warn "Proxy unreachable but rule=proxy_all (NetworkDetector may not have run yet)"
-  else
-    info "proxy_reachable=$PROXY_REACHABLE rule=$CURRENT_RULE"
-    pass "NetworkDetector state recorded"
-  fi
+# ── F8: Verify proxy is actually routing (not just running) ───────────────
+echo "F8: End-to-end connectivity (real request through full stack)"
+E2E=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+  --proxy http://127.0.0.1:$PROXY_PORT https://www.google.com 2>/dev/null || echo "000")
+if [ "$E2E" = "200" ]; then
+  pass "End-to-end: HTTPS to google.com through Lux → 200"
+elif [ "$E2E" = "407" ]; then
+  fail "End-to-end: proxy requires re-authentication (407)"
+elif [ "$E2E" = "000" ]; then
+  fail "End-to-end: no response (proxy not routing)"
 else
-  warn "No corporate proxy configured — skipping NetworkDetector accuracy check"
+  warn "End-to-end: unexpected HTTP $E2E"
 fi
 echo ""
 
