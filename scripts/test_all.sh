@@ -59,6 +59,18 @@ else
 fi
 echo ""
 
+# ── Functional tests ───────────────────────────────────────────────────────
+echo "── Functional tests ───────────────────────"
+FUNC_OUT=$(bash "$ROOT/scripts/test_functional.sh" 2>&1)
+FUNC_FAIL=$(echo "$FUNC_OUT" | grep -c "❌ FAIL:" || true)
+echo "$FUNC_OUT" | grep -E "✅|❌|⚠️|TOTAL|PASS:|FAIL:" | head -20
+if [ "${FUNC_FAIL:-0}" -eq 0 ]; then
+  pass "Functional tests: 0 failures"
+else
+  fail "Functional tests: $FUNC_FAIL failure(s)"
+fi
+echo ""
+
 # ── Connectivity simulation ────────────────────────────────────────────────
 if [ "$SKIP_CONNECTIVITY" -eq 0 ]; then
   echo "── Connectivity simulation ────────────────"
