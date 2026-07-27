@@ -29,10 +29,11 @@ class ProxyConfigurator {
     final host = parts[0];
     final port = parts.length > 1 ? parts[1] : '1090';
 
-    // Call static root-owned script with proxy addr as argument.
+    // Call static root-owned script with proxy addr as the sole argument.
+    // no_proxy is hardcoded in the script — single arg matches sudoers wildcard.
     // Sudoers: NOPASSWD: /bin/bash .../lux_proxy_apply.sh *
     await _runAdminCommand(
-      ['/bin/bash', '$_helperDir/lux_proxy_apply.sh', proxyAddr, _noProxy],
+      ['/bin/bash', '$_helperDir/lux_proxy_apply.sh', proxyAddr],
       'Lux needs admin access to configure proxy environment',
     );
 

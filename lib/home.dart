@@ -409,6 +409,8 @@ class _HomeState extends State<Home>
 
   // Debounce for _checkForNetworkProxy — don't re-run within 60s of last run
   DateTime? _lastProxyCheck;
+  bool _reconnectInProgress = false;
+  DateTime? _lastReconnectAttempt;
   // Guard against running check while wizard is already showing
   bool _wizardShowing = false;
   // Guard against showing the proxy dialog twice simultaneously
@@ -1290,6 +1292,23 @@ class _HomeState extends State<Home>
   /// is not running, silently start it so internet is restored automatically.
   Future<void> _reconnectIfNeeded() async {
     if (!mounted || coreManager == null) return;
+    // Debounce: ignore if a reconnect ran within the last 10 seconds
+    final now = DateTime.now();
+    if (_lastReconnectAttempt != null &&
+        now.difference(_lastReconnectAttempt!).inSeconds < 10) return;
+    // Guard: only one reconnect loop at a time
+    if (_reconnectInProgress) return;
+    _reconnectInProgress = true;
+    _lastReconnectAttempt = now;
+    try {
+      await _doReconnectIfNeeded();
+    } finally {
+      _reconnectInProgress = false;
+    }
+  }
+
+  Future<void> _doReconnectIfNeeded() async {
+    if (!mounted || coreManager == null) return;
     try {
       final isStarted = await coreManager!.getIsStarted().timeout(
           const Duration(seconds: 5));
@@ -1453,7 +1472,18 @@ class _HomeState extends State<Home>
         failCount++;
         appLog('WATCHDOG', 'health FAILED ($failCount): ${health.error}');
         if (failCount == 2) {
-          // Two consecutive failures — soft reconnect (stop+start)
+          // Two consecutive failures — first try network detection (may be home network)
+          appLog('WATCHDOG', 'triggering network detection after $failCount health failures');
+          if (_networkDetector != null) {
+            final isCorpNetwork = await _networkDetector!.detect();
+            if (!isCorpNetwork) {
+              // Switched to bypass — don't stop+start, NetworkDetector handles it
+              appLog('WATCHDOG', 'switched to bypass mode — skipping stop+start');
+              failCount = 0;
+              return mounted;
+            }
+          }
+          // Still on corp network — soft reconnect (stop+start)
           appLog('WATCHDOG', 'soft reconnect after $failCount health failures');
           try {
             await coreManager!.stop();
@@ -1721,8 +1751,10 @@ class _HomeState extends State<Home>
       if (!result.contains(ConnectivityResult.none)) {
         appLog('NET', 'connectivity changed: $result — scheduling proxy check in 3s');
         Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) _checkForNetworkProxy();
-          // If lux was connected before and autoConnect is on, reconnect silently
+          if (mounted) {
+            _checkForNetworkProxy();
+            _networkDetector?.detect();
+          }
           _reconnectIfNeeded();
         });
       } else {

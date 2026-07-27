@@ -537,12 +537,12 @@ if [ \$? -ne 0 ]; then
   rm -rf "\$DEST.new"
   # Relaunch the existing app so the user is not left with nothing
   LOGGED_USER=\$(stat -f '%Su' /dev/console)
-  LOGGED_UID=\$(id -u "\$LOGGED_USER" 2>/dev/null || echo "")
+  LOGGED_UID=\$(id -u "\$LOGGED_USER" 2>/dev/null)
   echo "Relaunching existing Lux after failed update..."
   if [ -n "\$LOGGED_UID" ]; then
-    launchctl asuser "\$LOGGED_UID" /usr/bin/open /Applications/Lux.app
+    launchctl asuser "\$LOGGED_UID" /usr/bin/open -a /Applications/Lux.app 2>/dev/null &
   else
-    sudo -u "\$LOGGED_USER" open /Applications/Lux.app
+    su - "\$LOGGED_USER" -c "open -a /Applications/Lux.app" 2>/dev/null &
   fi
   exit 1
 fi
@@ -589,16 +589,14 @@ echo "Detaching DMG..."
 hdiutil detach "$mountPoint" -quiet -force 2>/dev/null || true
 
 # Relaunch Lux as the logged-in user (not as root)
+# launchctl asuser is Apple's documented method for launching GUI apps from root
 echo "Relaunching Lux..."
 LOGGED_USER=\$(stat -f '%Su' /dev/console)
-LOGGED_UID=\$(id -u "\$LOGGED_USER" 2>/dev/null || echo "")
+LOGGED_UID=\$(id -u "\$LOGGED_USER" 2>/dev/null)
 if [ -n "\$LOGGED_UID" ]; then
-  # Use osascript to open via Finder — avoids macOS background app throttling
-  # that affects launchctl asuser open (can delay 5+ minutes)
-  launchctl asuser "\$LOGGED_UID" /usr/bin/osascript -e 'tell application "Finder" to open POSIX file "/Applications/Lux.app"' 2>/dev/null || \
-  launchctl asuser "\$LOGGED_UID" /usr/bin/open -a /Applications/Lux.app
+  launchctl asuser "\$LOGGED_UID" /usr/bin/open -a /Applications/Lux.app 2>/dev/null &
 else
-  sudo -u "\$LOGGED_USER" open -a /Applications/Lux.app
+  su - "\$LOGGED_USER" -c "open -a /Applications/Lux.app" 2>/dev/null &
 fi
 
 echo "Update complete at \$(date)"
