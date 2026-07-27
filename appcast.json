@@ -1,11 +1,11 @@
 {
-  "version": "1.45.3",
+  "version": "1.45.4",
   "channel": "stable",
-  "notes": "fix: NetworkDetector skips during TUN startup \u2014 prevents false bypass_all switch when proxy probe times out mid-start",
+  "notes": "fix: NetworkDetector uses PAC URL as primary probe \u2014 works on any corporate network worldwide, not just this proxy",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "c22db6e53d997cc1e559746d133fecaf1f250da4b7333764c0a89747ac2afdd5",
-    "size": 44750322
+    "sha256": "c7f334453fc88dc930144e23d0f77398684d257b7271115555bb58e1f07016f6",
+    "size": 44765165
   },
   "windows": {
     "url": "",
