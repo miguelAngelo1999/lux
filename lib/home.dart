@@ -411,6 +411,26 @@ class _HomeState extends State<Home>
   DateTime? _lastProxyCheck;
   bool _reconnectInProgress = false;
   DateTime? _lastReconnectAttempt;
+
+  /// Run NetworkDetector.detect() only when lux_core has been stable for
+  /// at least 10 seconds. Prevents false bypass_all switches during startup
+  /// when TUN interface is still coming up and the proxy probe times out.
+  /// Returns true if on corporate network, false if bypassed/unknown.
+  Future<bool> _safeDetect() async {
+    if (_networkDetector == null || !mounted) return false;
+    if (!isCoreReady.value) {
+      appLog('NET-DETECT', 'skipping detect — lux_core not ready yet');
+      return false;
+    }
+    // Wait for TUN to stabilize after startup
+    final lastStart = coreManager?.lastStartTime;
+    if (lastStart != null &&
+        DateTime.now().difference(lastStart).inSeconds < 10) {
+      appLog('NET-DETECT', 'skipping detect — lux_core started <10s ago (TUN stabilizing)');
+      return false;
+    }
+    return await _networkDetector!.detect();
+  }
   // Guard against running check while wizard is already showing
   bool _wizardShowing = false;
   // Guard against showing the proxy dialog twice simultaneously
@@ -1475,7 +1495,7 @@ class _HomeState extends State<Home>
           // Two consecutive failures — first try network detection (may be home network)
           appLog('WATCHDOG', 'triggering network detection after $failCount health failures');
           if (_networkDetector != null) {
-            final isCorpNetwork = await _networkDetector!.detect();
+            final isCorpNetwork = await _safeDetect();
             if (!isCorpNetwork) {
               // Switched to bypass — don't stop+start, NetworkDetector handles it
               appLog('WATCHDOG', 'switched to bypass mode — skipping stop+start');
@@ -1557,7 +1577,7 @@ class _HomeState extends State<Home>
       if (mounted) await _checkForNetworkProxy(force: true);
     });
     // Detect corporate vs home network and switch rules accordingly
-    Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
+    Future.delayed(const Duration(seconds: 3), () { _safeDetect(); });
     // On Windows: silently apply UWP loopback exemption in the background.
     // This ensures Windows Store apps can route through lux without requiring the setup wizard.
     if (Platform.isWindows) {
@@ -1753,7 +1773,7 @@ class _HomeState extends State<Home>
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
             _checkForNetworkProxy();
-            _networkDetector?.detect();
+            _safeDetect();
           }
           _reconnectIfNeeded();
         });
@@ -1896,7 +1916,7 @@ class _HomeState extends State<Home>
       return;
     }
     // Re-detect network after wake (may have switched networks during sleep)
-    Future.delayed(const Duration(seconds: 3), () { _networkDetector?.detect(); });
+    Future.delayed(const Duration(seconds: 3), () { _safeDetect(); });
     if (needRestart) {
       needRestart = false;
       final List<ConnectivityResult> connectivityResult =

@@ -56,6 +56,7 @@ class CoreManager {
   WebSocketChannel? _eventChannel;
 
   DateTime? _lastStartTime;
+  DateTime? get lastStartTime => _lastStartTime;
 
   CoreManager(
     this.baseUrl,
