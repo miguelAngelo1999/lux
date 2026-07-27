@@ -1,11 +1,11 @@
 {
-  "version": "1.45.1",
+  "version": "1.45.2",
   "channel": "stable",
-  "notes": "1.45.1: automated tests + structured debug logging; -debug flag for verbose lux_core output; NetworkDetector fully logged",
+  "notes": "fix: sudoers lux_proxy_apply.sh missing wildcard \u2014 caused password prompt on every connect",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "17bd3c7a4b6cb933d5c894708f5f3055795ffb4fbd69cebc290fe4f041a71c66",
-    "size": 44750887
+    "sha256": "c428325895c10d61a9f8d2af3a758e86dc234b4865c8f62d7a58d3f8d2dff323",
+    "size": 44750749
   },
   "windows": {
     "url": "",
