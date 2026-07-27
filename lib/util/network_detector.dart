@@ -8,11 +8,11 @@ import 'package:lux/util/app_log.dart';
 /// Stateless — no timers, no in-memory state. Rule selection is persisted
 /// in config.json by lux_core so state survives restarts.
 ///
-/// Call detect() on every network change. It probes the upstream proxy TCP
-/// port directly (bypassing TUN) and switches rule accordingly:
-///   - Proxy reachable  → selectRule('proxy_all')   — corporate network
-///   - Proxy unreachable + direct works → selectRule('bypass_all') — home
-///   - Both unreachable → no change (transient outage / VPN drop)
+/// Detection strategy (in order):
+///   1. If a PAC URL is active → probe the PAC server (most universal)
+///   2. If no PAC → probe the configured proxy server directly
+///
+/// This works for any corporate network worldwide — no hardcoded addresses.
 class NetworkDetector {
   final CoreManager coreManager;
 
@@ -20,11 +20,43 @@ class NetworkDetector {
 
   void dispose() {}
 
-  /// Probe the upstream proxy and switch rules if the network changed.
+  /// Probe the network and switch rules if needed.
   /// Returns true if on corporate network, false if on home/direct network.
   Future<bool> detect() async {
-    appLog('NET-DETECT', 'starting proxy reachability probe');
+    appLog('NET-DETECT', 'starting network detection');
     try {
+      // ── Strategy 1: Use PAC URL if available ─────────────────────────────
+      // The PAC server is on the corporate LAN — reachable only on corp network.
+      // This works regardless of which proxy server is configured.
+      final pacStatus = await coreManager.getPacStatus();
+      final pacUrl = pacStatus['url'] as String? ?? '';
+      final pacActive = pacStatus['active'] as bool? ?? false;
+
+      if (pacUrl.isNotEmpty) {
+        appLog('NET-DETECT', 'probing PAC server: $pacUrl');
+        final pacReachable = await _probePacUrl(pacUrl);
+
+        if (pacReachable) {
+          appLog('NET-DETECT', 'PAC server reachable → corporate network');
+          await _ensureRule('proxy_all');
+          return true;
+        } else {
+          appLog('NET-DETECT', 'PAC server unreachable → not on corporate network');
+          // Confirm direct internet works before switching
+          final directWorks = await _probeDirectConnectivity();
+          if (directWorks) {
+            appLog('NET-DETECT', 'direct internet works → switching to bypass_all');
+            await _ensureRule('bypass_all');
+            return false;
+          } else {
+            appLog('NET-DETECT', 'PAC unreachable + direct also unreachable → transient outage, no change');
+            return false;
+          }
+        }
+      }
+
+      // ── Strategy 2: No PAC — probe the configured proxy server directly ──
+      appLog('NET-DETECT', 'no PAC URL active — falling back to proxy server probe');
       final proxyList = await coreManager.getProxyList();
       final selected = proxyList.proxies.firstWhere(
         (p) => p.id == proxyList.id,
@@ -36,51 +68,71 @@ class NetworkDetector {
         return false;
       }
 
-      appLog('NET-DETECT', 'probing ${selected.server}:${selected.port ?? 8080}');
+      appLog('NET-DETECT', 'probing proxy server: ${selected.server}:${selected.port ?? 8080}');
       final proxyReachable = await _probe(selected.server!, selected.port ?? 8080);
 
       if (proxyReachable) {
-        // Corporate network — ensure proxy_all rule is active
-        final ruleList = await coreManager.getRuleList();
-        if (ruleList.selectedId != 'proxy_all') {
-          appLog('NET-DETECT', 'proxy reachable, was ${ruleList.selectedId} → switching to proxy_all');
-          await coreManager.selectRule('proxy_all');
-          // Ensure lux_core is started
-          if (!await coreManager.getIsStarted()) {
-            appLog('NET-DETECT', 'lux_core not started — calling start()');
-            await coreManager.start();
-          }
-        } else {
-          appLog('NET-DETECT', 'proxy reachable, already on proxy_all — no change');
-        }
+        appLog('NET-DETECT', 'proxy server reachable → corporate network');
+        await _ensureRule('proxy_all');
         return true;
-      }
-
-      appLog('NET-DETECT', 'proxy unreachable — probing direct connectivity');
-      // Proxy unreachable — check if direct internet works
-      final directWorks = await _probeDirectConnectivity();
-      if (directWorks) {
-        final ruleList = await coreManager.getRuleList();
-        if (ruleList.selectedId != 'bypass_all') {
-          appLog('NET-DETECT', 'direct works, was ${ruleList.selectedId} → switching to bypass_all');
-          await coreManager.selectRule('bypass_all');
-        } else {
-          appLog('NET-DETECT', 'direct works, already on bypass_all — no change');
+      } else {
+        final directWorks = await _probeDirectConnectivity();
+        if (directWorks) {
+          appLog('NET-DETECT', 'proxy unreachable + direct works → bypass_all');
+          await _ensureRule('bypass_all');
+          return false;
         }
+        appLog('NET-DETECT', 'proxy + direct both unreachable → transient outage, no change');
         return false;
       }
-
-      // Both unreachable — transient outage, don't change anything
-      appLog('NET-DETECT', 'both proxy and direct unreachable — transient outage, no rule change');
-      return false;
     } catch (e) {
-      appLog('NET-DETECT', 'error during detection: $e');
+      appLog('NET-DETECT', 'error: $e');
       debugPrint('[NetworkDetector] error: $e');
       return false;
     }
   }
 
-  /// TCP probe — bypasses TUN by connecting directly via the OS stack.
+  /// Switch rule only if it's not already set.
+  Future<void> _ensureRule(String rule) async {
+    try {
+      final ruleList = await coreManager.getRuleList();
+      if (ruleList.selectedId != rule) {
+        appLog('NET-DETECT', 'was ${ruleList.selectedId} → switching to $rule');
+        await coreManager.selectRule(rule);
+        // On corporate → ensure lux_core is started
+        if (rule == 'proxy_all' && !await coreManager.getIsStarted()) {
+          appLog('NET-DETECT', 'lux_core not started — calling start()');
+          await coreManager.start();
+        }
+      } else {
+        appLog('NET-DETECT', 'already on $rule — no change');
+      }
+    } catch (e) {
+      appLog('NET-DETECT', 'rule switch error: $e');
+    }
+  }
+
+  /// Probe a PAC/WPAD URL via HTTP. The PAC server is on the corporate LAN.
+  /// Reachable only when on corporate network.
+  Future<bool> _probePacUrl(String pacUrl,
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    try {
+      // Extract host:port from URL
+      final uri = Uri.tryParse(pacUrl);
+      if (uri == null) return false;
+      final host = uri.host;
+      final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
+      final socket = await Socket.connect(host, port, timeout: timeout);
+      socket.destroy();
+      appLog('NET-DETECT', 'PAC probe $host:$port ✓');
+      return true;
+    } catch (e) {
+      appLog('NET-DETECT', 'PAC probe failed: $e');
+      return false;
+    }
+  }
+
+  /// TCP probe — direct socket connection bypassing TUN.
   Future<bool> _probe(String host, int port,
       {Duration timeout = const Duration(seconds: 3)}) async {
     try {
@@ -103,7 +155,7 @@ class NetworkDetector {
         appLog('NET-DETECT', 'direct probe $host:$port ✗');
       }
     }
-    appLog('NET-DETECT', 'direct connectivity: $ok/2 succeeded');
+    appLog('NET-DETECT', 'direct connectivity: $ok/2');
     return ok >= 1;
   }
 }
