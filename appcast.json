@@ -1,11 +1,11 @@
 {
-  "version": "1.45.7",
+  "version": "1.45.8",
   "channel": "stable",
-  "notes": "fix: updater relaunch via one-shot LaunchAgent \u2014 reliable on macOS Sequoia from root context",
+  "notes": "feat: add PAC/WPAD URL proxy type \u2014 enter wpad.dat URL instead of IP:port; lux_core resolves proxy at startup",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "6b00daf9cfacd4888d86337943220a110fb4c2c4fa89f633f5c4839cca9e0dff",
-    "size": 44766945
+    "sha256": "3c9a79b40f9052e0e9edfdb82b4cbb2a3eab425344c3e47e1c6b87266a5a7130",
+    "size": 44760421
   },
   "windows": {
     "url": "",
