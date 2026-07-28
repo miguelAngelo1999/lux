@@ -1,11 +1,11 @@
 {
-  "version": "1.46.1",
+  "version": "1.46.2",
   "channel": "stable",
-  "notes": "fix: updater relaunch \u2014 detached script waits 2s after exit(0) before open -a",
+  "notes": "feat: tray menu shows version + connection status + active proxy name; fix hardcoded 1.41.0",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "25db4f0f2f14d2613580641b68796fe72cb297089cdbe3dc465c4acbbe04997e",
-    "size": 44761986
+    "sha256": "4a9510ba84e170922d0312e38633f38699d0bdfd348ffa134d1138bd92544f2c",
+    "size": 44761606
   },
   "windows": {
     "url": "",
