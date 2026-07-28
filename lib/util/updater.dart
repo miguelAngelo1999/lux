@@ -398,11 +398,21 @@ Future<void> downloadAndInstall(
 
       // ── Relaunch from user GUI session ────────────────────────────────────
       // We are still running as the user in the GUI session — open works here.
+      // Kill the current process first so open actually launches a new instance.
       onStatusChange?.call('Restarting Lux…');
       appLog('UPDATE', 'relaunching Lux from user session');
-      await Process.start('/usr/bin/open', ['-a', '/Applications/Lux.app'],
+      // Use a detached shell script that waits for THIS process to die before opening
+      final relaunchScript = File('/tmp/lux_reopen.sh');
+      await relaunchScript.writeAsString(
+        '#!/bin/bash\n'
+        'sleep 2\n'
+        '/usr/bin/open -a /Applications/Lux.app\n'
+        'rm -f /tmp/lux_reopen.sh\n',
+      );
+      await Process.run('chmod', ['+x', relaunchScript.path]);
+      await Process.start('bash', [relaunchScript.path],
           mode: ProcessStartMode.detached);
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 300));
       exit(0);
     } else if (Platform.isWindows) {
       // Same pattern as macOS: write a standalone updater script, launch it
