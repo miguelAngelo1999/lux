@@ -1,11 +1,11 @@
 {
-  "version": "1.45.5",
+  "version": "1.45.6",
   "channel": "stable",
-  "notes": "fix: UDP DIRECT fallback \u2014 Zoom/WhatsApp/WebRTC calls no longer converted to TCP through proxy",
+  "notes": "fix: elevate() uses sudo -n -l to check NOPASSWD (never runs binary); fix proxy_apply.sh wildcard in elevate setup script",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "4e498b91a7239a454c5e8821efbb82d4a13ed0587d694b64bb9085285b68be59",
-    "size": 44765130
+    "sha256": "318b3365f5fa903a913151d0122ed448a9bed34698738e390b342bb99d5d6410",
+    "size": 44765018
   },
   "windows": {
     "url": "",
