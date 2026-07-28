@@ -25,7 +25,8 @@ import 'package:flutter/services.dart';
 import 'package:lux/util/core_lockfile.dart';
 import 'package:lux/util/process_manager.dart';
 import 'package:lux/widget/quick_edit_window.dart';
-import 'package:lux/util/utils.dart';
+import 'package:lux/util/utils.dart' hide checkForUpdate;
+import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
 import 'package:lux/widget/progress_indicator.dart';
 import 'package:path/path.dart' as path;
 import 'package:power_monitor/power_monitor.dart';
@@ -1877,6 +1878,26 @@ class _HomeState extends State<Home>
       } else if (Platform.isWindows && coreManager != null) {
         final proxyId = key.replaceFirst('proxy_edit_', '');
         _showFlutterQuickEdit(proxyId);
+      }
+    } else if (key == 'check_update') {
+      // Open the main window first so the update dialog has a parent
+      await _showWindow();
+      try {
+        final info = await checkForUpdate();
+        if (!mounted) return;
+        if (info != null && info.hasUpdate) {
+          showUpdateDialog(context, info);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lux ${info?.currentVersion ?? ''} is up to date ✓')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Update check failed: $e')),
+          );
+        }
       }
     } else if (key == 'exit_app') {
       await coreManager?.exitCore();

@@ -86,6 +86,7 @@ Future<void> initSystemTray({
 
   items.addAll([
     MenuItem.separator(),
+    MenuItem(key: 'check_update', label: 'Check for Updates…'),
     MenuItem(key: 'open_dashboard', label: tr().trayDashboardLabel),
     MenuItem.separator(),
     MenuItem(key: 'exit_app', label: tr().exit),
