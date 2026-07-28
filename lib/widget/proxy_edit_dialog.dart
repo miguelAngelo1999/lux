@@ -34,6 +34,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
   late String _passwordMode;
   late int _passwordTTLMinutes;
   late bool _lockOnSave;
+  late String _pacUrl; // PAC URL for type='pac'
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -70,6 +71,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
     _passwordMode = iv?.raw['passwordMode'] as String? ?? 'persistent';
     _passwordTTLMinutes = (iv?.raw['passwordTTLMinutes'] as num?)?.toInt() ?? 60;
     _lockOnSave = false;
+    _pacUrl = iv?.raw['pacUrl'] as String? ?? '';
   }
 
   Future<void> _save() async {
@@ -81,13 +83,18 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
     try {
       final proxyData = <String, dynamic>{
         'name': _name,
-        'server': _server,
-        'port': _port,
-        'username': _username,
-        'password': _password,
         'type': _type,
         'passwordMode': _passwordMode,
       };
+
+      if (_type == 'pac') {
+        proxyData['pacUrl'] = _pacUrl;
+      } else {
+        proxyData['server'] = _server;
+        proxyData['port'] = _port;
+        proxyData['username'] = _username;
+        proxyData['password'] = _password;
+      }
 
       if (_passwordMode == 'timed') {
         proxyData['passwordTTLMinutes'] = _passwordTTLMinutes;
@@ -150,6 +157,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                             DropdownMenuItem(value: 'http', child: TText('HTTP')),
                             DropdownMenuItem(value: 'socks5', child: TText('SOCKS5')),
                             DropdownMenuItem(value: 'ss', child: TText('Shadowsocks')),
+                            DropdownMenuItem(value: 'pac', child: TText('PAC / WPAD URL')),
                           ],
                           onChanged: isEditing ? null : (v) => setState(() => _type = v!),
                         ),
@@ -161,88 +169,108 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           onSaved: (v) => _name = v ?? '',
                         ),
                         const SizedBox(height: 12),
-                        // Server
-                        TextFormField(
-                          initialValue: _server,
-                          decoration: const InputDecoration(labelText: 'Server'),
-                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                          onSaved: (v) => _server = v ?? '',
-                        ),
-                        const SizedBox(height: 12),
-                        // Port
-                        TextFormField(
-                          initialValue: _port.toString(),
-                          decoration: const InputDecoration(labelText: 'Port'),
-                          keyboardType: TextInputType.number,
-                          validator: (v) {
-                            final p = int.tryParse(v ?? '');
-                            if (p == null || p < 1 || p > 65535) return 'Invalid port';
-                            return null;
-                          },
-                          onSaved: (v) => _port = int.tryParse(v ?? '') ?? 1080,
-                        ),
-                        const SizedBox(height: 12),
-                        // Username
-                        TextFormField(
-                          initialValue: _username,
-                          decoration: const InputDecoration(labelText: 'Username (optional)'),
-                          onSaved: (v) => _username = v ?? '',
-                        ),
-                        const SizedBox(height: 12),
-                        // Password
-                        TextFormField(
-                          initialValue: _password,
-                          decoration: InputDecoration(
-                            labelText: 'Password (optional)',
-                            suffixIcon: (_passwordMode == 'one-time' || _passwordMode == 'timed')
-                                ? const Tooltip(
-                                    message: 'Password cannot be revealed in this mode',
-                                    child: Icon(Icons.lock, size: 20, color: Colors.grey),
-                                  )
-                                : IconButton(
-                                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                                    onPressed: () async {
-                                      if (_obscurePassword) {
-                                        final ok = await _authenticateToReveal();
-                                        if (ok) setState(() => _obscurePassword = false);
-                                      } else {
-                                        setState(() => _obscurePassword = true);
-                                      }
-                                    },
-                                  ),
-                          ),
-                          obscureText: _obscurePassword || _passwordMode == 'one-time' || _passwordMode == 'timed',
-                          onSaved: (v) => _password = v ?? '',
-                        ),
-                        const SizedBox(height: 16),
-                        // Password Mode
-                        DropdownButtonFormField<String>(
-                          value: _passwordMode,
-                          decoration: const InputDecoration(labelText: 'Password Mode'),
-                          items: const [
-                            DropdownMenuItem(value: 'persistent', child: TText('Persistent')),
-                            DropdownMenuItem(value: 'one-time', child: Text('One-time (clears on switch)')),
-                            DropdownMenuItem(value: 'timed', child: Text('Timed (auto-expires)')),
-                          ],
-                          onChanged: (v) => setState(() => _passwordMode = v!),
-                        ),
-                        if (_passwordMode == 'timed') ...[
-                          const SizedBox(height: 12),
+                        if (_type == 'pac') ...[
+                          // PAC URL field
                           TextFormField(
-                            initialValue: _passwordTTLMinutes.toString(),
+                            initialValue: _pacUrl,
                             decoration: const InputDecoration(
-                              labelText: 'Expires after (minutes)',
+                              labelText: 'PAC / WPAD URL',
+                              hintText: 'http://192.168.1.1/wpad.dat',
+                              helperText: 'Lux fetches this URL at startup to discover your proxy server',
                             ),
-                            keyboardType: TextInputType.number,
+                            keyboardType: TextInputType.url,
                             validator: (v) {
-                              final m = int.tryParse(v ?? '');
-                              if (m == null || m < 1) return 'Must be at least 1 minute';
+                              if (v == null || v.isEmpty) return 'Required';
+                              final uri = Uri.tryParse(v);
+                              if (uri == null || !uri.hasScheme) return 'Enter a valid URL';
                               return null;
                             },
-                            onSaved: (v) => _passwordTTLMinutes = int.tryParse(v ?? '') ?? 60,
+                            onSaved: (v) => _pacUrl = v ?? '',
                           ),
+                        ] else ...[
+                          // Server
+                          TextFormField(
+                            initialValue: _server,
+                            decoration: const InputDecoration(labelText: 'Server'),
+                            validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                            onSaved: (v) => _server = v ?? '',
+                          ),
+                          const SizedBox(height: 12),
+                          // Port
+                          TextFormField(
+                            initialValue: _port.toString(),
+                            decoration: const InputDecoration(labelText: 'Port'),
+                            keyboardType: TextInputType.number,
+                            validator: (v) {
+                              final p = int.tryParse(v ?? '');
+                              if (p == null || p < 1 || p > 65535) return 'Invalid port';
+                              return null;
+                            },
+                            onSaved: (v) => _port = int.tryParse(v ?? '') ?? 1080,
+                          ),
+                          const SizedBox(height: 12),
+                          // Username
+                          TextFormField(
+                            initialValue: _username,
+                            decoration: const InputDecoration(labelText: 'Username (optional)'),
+                            onSaved: (v) => _username = v ?? '',
+                          ),
+                          const SizedBox(height: 12),
+                          // Password
+                          TextFormField(
+                            initialValue: _password,
+                            decoration: InputDecoration(
+                              labelText: 'Password (optional)',
+                              suffixIcon: (_passwordMode == 'one-time' || _passwordMode == 'timed')
+                                  ? const Tooltip(
+                                      message: 'Password cannot be revealed in this mode',
+                                      child: Icon(Icons.lock, size: 20, color: Colors.grey),
+                                    )
+                                  : IconButton(
+                                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                                      onPressed: () async {
+                                        if (_obscurePassword) {
+                                          final ok = await _authenticateToReveal();
+                                          if (ok) setState(() => _obscurePassword = false);
+                                        } else {
+                                          setState(() => _obscurePassword = true);
+                                        }
+                                      },
+                                    ),
+                            ),
+                            obscureText: _obscurePassword || _passwordMode == 'one-time' || _passwordMode == 'timed',
+                            onSaved: (v) => _password = v ?? '',
+                          ),
+                          const SizedBox(height: 16),
+                          // Password Mode
+                          DropdownButtonFormField<String>(
+                            value: _passwordMode,
+                            decoration: const InputDecoration(labelText: 'Password Mode'),
+                            items: const [
+                              DropdownMenuItem(value: 'persistent', child: TText('Persistent')),
+                              DropdownMenuItem(value: 'one-time', child: Text('One-time (clears on switch)')),
+                              DropdownMenuItem(value: 'timed', child: Text('Timed (auto-expires)')),
+                            ],
+                            onChanged: (v) => setState(() => _passwordMode = v!),
+                          ),
+                          if (_passwordMode == 'timed') ...[
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              initialValue: _passwordTTLMinutes.toString(),
+                              decoration: const InputDecoration(
+                                labelText: 'Expires after (minutes)',
+                              ),
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                final m = int.tryParse(v ?? '');
+                                if (m == null || m < 1) return 'Must be at least 1 minute';
+                                return null;
+                              },
+                              onSaved: (v) => _passwordTTLMinutes = int.tryParse(v ?? '') ?? 60,
+                            ),
+                          ],
                         ],
-                        if (isEditing) ...[
+                        if (isEditing && _type != 'pac') ...[
                           const SizedBox(height: 12),
                           CheckboxListTile(
                             value: _lockOnSave,
