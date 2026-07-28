@@ -1,11 +1,11 @@
 {
-  "version": "1.46.2",
+  "version": "1.46.3",
   "channel": "stable",
-  "notes": "feat: tray menu shows version + connection status + active proxy name; fix hardcoded 1.41.0",
+  "notes": "fix: relaunch waits for PID to exit before open (2s sleep was not enough \u2014 process outlived the sleep)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "4a9510ba84e170922d0312e38633f38699d0bdfd348ffa134d1138bd92544f2c",
-    "size": 44761606
+    "sha256": "a9de624c50118dd20ed8c63a2710f8dc3d7137a172ab023c8a71c941d09760dd",
+    "size": 44761883
   },
   "windows": {
     "url": "",
