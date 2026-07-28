@@ -402,10 +402,16 @@ Future<void> downloadAndInstall(
       onStatusChange?.call('Restarting Lux…');
       appLog('UPDATE', 'relaunching Lux from user session');
       // Use a detached shell script that waits for THIS process to die before opening
+      final myPid = pid; // current Dart process PID
       final relaunchScript = File('/tmp/lux_reopen.sh');
       await relaunchScript.writeAsString(
         '#!/bin/bash\n'
-        'sleep 2\n'
+        '# Wait for old Lux process ($myPid) to fully exit\n'
+        'for i in \$(seq 1 20); do\n'
+        '  kill -0 $myPid 2>/dev/null || break\n'
+        '  sleep 0.5\n'
+        'done\n'
+        'sleep 1\n'
         '/usr/bin/open -a /Applications/Lux.app\n'
         'rm -f /tmp/lux_reopen.sh\n',
       );
