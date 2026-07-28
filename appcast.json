@@ -1,11 +1,11 @@
 {
-  "version": "1.46.3",
+  "version": "1.46.4",
   "channel": "stable",
-  "notes": "fix: relaunch waits for PID to exit before open (2s sleep was not enough \u2014 process outlived the sleep)",
+  "notes": "fix: elevate() always uses canonical /Applications path for sudoers \u2014 prevents osascript prompt after updates",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a9de624c50118dd20ed8c63a2710f8dc3d7137a172ab023c8a71c941d09760dd",
-    "size": 44761883
+    "sha256": "3af9262772f0aaece299b4d52484fa03b71a58621d35463fa6b16faf10793b61",
+    "size": 44761762
   },
   "windows": {
     "url": "",
