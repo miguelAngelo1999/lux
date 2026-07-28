@@ -27,17 +27,15 @@ Future<String?> getFileOwner(String path) async {
 Future<bool> _isSudoersConfigured(String corePath) async {
   final sudoersFile = File('/etc/sudoers.d/lux_core');
   if (!await sudoersFile.exists()) return false;
-  // Verify the proxy scripts are covered — use sudo -n on a whitelisted command
-  // rather than 'sudo -n true' (which requires a blanket ALL entry).
-  final dir = File(corePath).parent.path;
-  final realPath = '$dir/lux_core_real';
+  // Always check the canonical installed path — not the build/derived path.
+  // Using the derived path fails when running from a dev build or after an update.
+  const canonicalReal = '/Applications/Lux.app/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core_real';
   try {
-    // Use sudo -n -l to check if NOPASSWD is configured — doesn't run the binary
-    final result = await Process.run('sudo', ['-n', '-l', realPath],
+    final result = await Process.run('sudo', ['-n', '-l', canonicalReal],
         runInShell: false).timeout(const Duration(seconds: 3));
     return result.exitCode == 0;
   } catch (_) {
-    return true; // assume ok on timeout/error
+    return true;
   }
 }
 
@@ -62,6 +60,9 @@ Future<int> elevate(String path, message) async {
   final dir = File(path).parent.path;
   final realPath = '$dir/lux_core_real';
   final user = Platform.environment['USER'] ?? 'root';
+  // Always use the canonical /Applications path for sudoers — never the build path.
+  // The build path changes on every build; the installed path is stable.
+  const canonicalReal = '/Applications/Lux.app/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core_real';
 
   // Write the setup script to a temp file to avoid quoting hell in osascript
   final scriptFile = File('/tmp/lux_elevate_setup.sh');
@@ -83,7 +84,7 @@ chmod 770 "\$REAL"
 mkdir -p /Library/PrivilegedHelperTools/com.github.igoogolx.lux
 chown "\$USER_NAME":staff /Library/PrivilegedHelperTools/com.github.igoogolx.lux
 chmod 755 /Library/PrivilegedHelperTools/com.github.igoogolx.lux
-echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *" > /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: $canonicalReal *" > /etc/sudoers.d/lux_core
 echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_proxy_apply.sh *" >> /etc/sudoers.d/lux_core
 echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_proxy_clear.sh" >> /etc/sudoers.d/lux_core
 echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_cert_install.sh" >> /etc/sudoers.d/lux_core
