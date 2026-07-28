@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/tr.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:tray_manager/tray_manager.dart';
 
 Future<void> initSystemTray({
@@ -12,6 +13,28 @@ Future<void> initSystemTray({
   await trayManager.setIcon(
     Platform.isWindows ? 'assets/app_icon.ico' : 'assets/tray.icns',
   );
+
+  // Get current version
+  String version = '';
+  try {
+    final info = await PackageInfo.fromPlatform();
+    version = info.version;
+  } catch (_) {}
+
+  // Find active proxy name
+  final activeProxy = proxies.firstWhere(
+    (p) => p.id == selectedProxyId,
+    orElse: () => ProxyItem('', '', null, null, null, 'direct'),
+  );
+  final proxyLabel = (isConnected && activeProxy.type != 'direct' && activeProxy.name.isNotEmpty)
+      ? '${activeProxy.name}'
+      : '';
+
+  // Status line: "Lux 1.46.0 · Connected via Arautos" or "Lux 1.46.0 · Disconnected"
+  final statusLabel = isConnected
+      ? (proxyLabel.isNotEmpty ? '● $proxyLabel' : '● Connected')
+      : '○ Disconnected';
+  final versionLabel = version.isNotEmpty ? 'Lux $version' : 'Lux';
 
   // Build proxy switcher submenu
   final proxyItems = proxies.map((p) {
@@ -35,7 +58,8 @@ Future<void> initSystemTray({
       .toList();
 
   final items = <MenuItem>[
-    MenuItem(key: 'lux', label: 'Lux 1.41.0', disabled: true),
+    MenuItem(key: 'lux_version', label: versionLabel, disabled: true),
+    MenuItem(key: 'lux_status', label: statusLabel, disabled: true),
     MenuItem.separator(),
     MenuItem(
       key: isConnected ? 'disconnect' : 'connect',
@@ -77,5 +101,8 @@ Future<void> initSystemTray({
   }
 
   await trayManager.setContextMenu(Menu(items: items));
-  await trayManager.setToolTip(isConnected ? 'Lux — Connected' : 'Lux — Disconnected');
+  final tooltip = isConnected
+      ? (proxyLabel.isNotEmpty ? 'Lux — $proxyLabel' : 'Lux — Connected')
+      : 'Lux — Disconnected';
+  await trayManager.setToolTip(tooltip);
 }
