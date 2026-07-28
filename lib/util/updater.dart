@@ -289,10 +289,9 @@ Future<void> downloadAndInstall(
       onStatusChange?.call('Mounting DMG…');
       // Remove quarantine attribute added by macOS to internet-downloaded files.
       await Process.run('xattr', ['-d', 'com.apple.quarantine', file.path]);
-      appLog('UPDATE', 'quarantine removed, mounting DMG and installing');
+      appLog('UPDATE', 'quarantine removed, mounting DMG');
 
-      // Detach ALL previously mounted Lux volumes to avoid stale mounts
-      // being picked up by the find command below.
+      // Detach ALL previously mounted Lux volumes to avoid stale mounts.
       final volDir = Directory('/Volumes');
       if (await volDir.exists()) {
         final luxVols = volDir.listSync().whereType<Directory>().where(
@@ -319,7 +318,7 @@ Future<void> downloadAndInstall(
         return;
       }
 
-      // Find the mounted volume containing Lux.app
+      // Find Lux.app in the mounted volume
       final volumesResult = await Process.run('find', [
         '/Volumes', '-maxdepth', '2', '-name', 'Lux.app', '-type', 'd'
       ]);
@@ -339,72 +338,71 @@ Future<void> downloadAndInstall(
         return;
       }
 
-      // Derive the volume mount point (parent dir of Lux.app inside /Volumes)
       final mountPoint = appPath.substring(0, appPath.lastIndexOf('/'));
-      appLog('UPDATE', 'found app at $appPath mount=$mountPoint — installing');
+      appLog('UPDATE', 'found app at $appPath — installing as user');
 
-      // Write a standalone installer script that runs OUTSIDE this process.
-      // Flow: Lux writes script → launches it detached → Lux exits →
-      //       script waits → kills lux_core → installs → relaunches Lux.
-      final installerScript = File('/tmp/lux_updater.sh');
-      await installerScript.writeAsString(_buildInstallerScript(appPath, mountPoint));
-      await Process.run('chmod', ['+x', installerScript.path]);
+      // ── User-space install ────────────────────────────────────────────────
+      // /Applications/Lux.app is owned by the user — no root needed to replace it.
+      // We install directly from Dart in the user's GUI session, then relaunch
+      // from the same session. This is the key fix for post-update relaunch on Sequoia.
 
-      onStatusChange?.call('Installing… Lux will restart');
-      appLog('UPDATE', 'launching external installer and exiting');
+      onStatusChange?.call('Installing…');
 
-      // Write installer to the fixed helper dir so sudoers NOPASSWD covers it.
-      // The helper dir is user-owned (set up during elevation), so Flutter can write there.
-      const helperDir = '/Library/PrivilegedHelperTools/com.github.igoogolx.lux';
-      final installerInHelper = File('$helperDir/lux_updater.sh');
-      try {
-        await installerInHelper.writeAsString(await installerScript.readAsString());
-        await Process.run('chmod', ['+x', installerInHelper.path]);
-      } catch (_) {
-        // Helper dir not writable yet — fall back to /tmp path
-      }
-
-      final scriptToRun = await installerInHelper.exists()
-          ? installerInHelper.path
-          : installerScript.path;
-
-      // Try NOPASSWD sudo first — use /bin/bash to match sudoers rule exactly:
-      // "NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/.../lux_updater.sh"
-      // Use sudo -l (list) to check if NOPASSWD is configured WITHOUT running the script.
-      // The script itself may exit non-zero (e.g. waiting for Lux to quit), so we can't
-      // use the script's exit code to determine if sudo auth succeeded.
-      final sudoCheck = await Process.run(
-          'sudo', ['-n', '-l', '/bin/bash', scriptToRun], runInShell: false);
-      final nopasswd = sudoCheck.exitCode == 0 &&
-          !sudoCheck.stderr.toString().contains('password');
-      if (nopasswd) {
-        // NOPASSWD active — launch script detached so it outlives this process
-        await Process.run(
-            'sudo', ['/bin/bash', scriptToRun], runInShell: false);
-      } else {
-        // Fall back to osascript — uses Touch ID if pam_tid.so is configured, else password
-        final osaResult = await Process.run('/usr/bin/osascript', ['-e',
-          'do shell script "/bin/bash \'$scriptToRun\'" '
-          'with administrator privileges',
-        ]);
-        if (osaResult.exitCode != 0) {
-          appLog('UPDATE', 'osascript failed: ${osaResult.stderr}');
-          await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(
-                osaResult.stderr.toString().contains('cancel')
-                    ? 'Update cancelled.'
-                    : 'Install failed: ${osaResult.stderr}',
-              )),
-            );
-          }
-          return;
-        }
-      }
-
-      // Give the script a moment to start, then exit gracefully
+      // Kill lux_core before replacing the bundle (wrapper script would be overwritten)
+      await Process.run('sudo', ['-n', 'pkill', '-9', '-f', 'lux_core_real'],
+          runInShell: false);
       await Future.delayed(const Duration(seconds: 1));
+
+      const dest = '/Applications/Lux.app';
+      final destNew = '$dest.new';
+
+      // Atomic install: ditto to .new, then mv
+      await Process.run('rm', ['-rf', destNew]);
+      final dittoResult = await Process.run('ditto', [appPath, destNew]);
+      if (dittoResult.exitCode != 0) {
+        appLog('UPDATE', 'ditto failed: ${dittoResult.stderr}');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Install failed: ${dittoResult.stderr}')),
+          );
+        }
+        await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
+        return;
+      }
+
+      await Process.run('rm', ['-rf', dest]);
+      await Process.run('mv', [destNew, dest]);
+      appLog('UPDATE', 'app installed to $dest');
+
+      // Detach DMG
+      await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
+
+      // ── Elevation setup (root needed, uses existing NOPASSWD) ────────────
+      // Set up lux_core_real setuid + sudoers — uses the existing helper script
+      const helperDir = '/Library/PrivilegedHelperTools/com.github.igoogolx.lux';
+      final elevScript = File('$helperDir/lux_updater.sh');
+
+      // Write a minimal elevation-only script (no install, no relaunch)
+      final elevScriptContent = _buildElevationScript();
+      try {
+        await elevScript.writeAsString(elevScriptContent);
+        await Process.run('chmod', ['+x', elevScript.path]);
+        appLog('UPDATE', 'elevation script written, running via sudo -n');
+        await Process.run('sudo', ['-n', '/bin/bash', elevScript.path],
+            runInShell: false);
+        appLog('UPDATE', 'elevation setup complete');
+      } catch (e) {
+        appLog('UPDATE', 'elevation setup failed (non-fatal): $e');
+        // Non-fatal — lux_core will prompt for elevation on next start
+      }
+
+      // ── Relaunch from user GUI session ────────────────────────────────────
+      // We are still running as the user in the GUI session — open works here.
+      onStatusChange?.call('Restarting Lux…');
+      appLog('UPDATE', 'relaunching Lux from user session');
+      await Process.start('/usr/bin/open', ['-a', '/Applications/Lux.app'],
+          mode: ProcessStartMode.detached);
+      await Future.delayed(const Duration(milliseconds: 500));
       exit(0);
     } else if (Platform.isWindows) {
       // Same pattern as macOS: write a standalone updater script, launch it
@@ -495,6 +493,52 @@ String _buildWindowsUpdaterScript(String installerPath) {
 }
 
 // ── macOS install helpers ──────────────────────────────────────────────────────
+
+/// Builds a minimal elevation-only script that sets up lux_core_real with
+/// setuid root + NOPASSWD sudoers. No install, no relaunch — just elevation.
+/// The install itself is now done in-process by Flutter as the user.
+String _buildElevationScript() {
+  return r'''
+#!/bin/bash
+exec >> /tmp/lux_elevation.log 2>&1
+echo "Elevation setup started at $(date)"
+
+DEST="/Applications/Lux.app"
+BIN="$DEST/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core"
+REAL="${BIN}_real"
+HELPER_DIR="/Library/PrivilegedHelperTools/com.github.igoogolx.lux"
+USER_NAME=$(stat -f '%Su' /dev/console 2>/dev/null || echo "$SUDO_USER")
+
+# Set up wrapper + setuid if not already done
+if [ -f "$BIN" ] && ! grep -q "exec sudo" "$BIN" 2>/dev/null; then
+  mv "$BIN" "$REAL"
+  printf '#!/bin/bash\nexec sudo "%s" "$@"\n' "$REAL" > "$BIN"
+  chmod 755 "$BIN"
+fi
+if [ -f "$REAL" ]; then
+  chown root:wheel "$REAL"
+  chmod 770 "$REAL"
+  chmod u+s "$REAL"
+fi
+
+# Update sudoers
+if [ -n "$USER_NAME" ] && [ -f "$REAL" ]; then
+  mkdir -p "$HELPER_DIR"
+  {
+    echo "$USER_NAME ALL=(root) NOPASSWD: $REAL *"
+    echo "$USER_NAME ALL=(root) NOPASSWD: /bin/bash $HELPER_DIR/lux_proxy_apply.sh *"
+    echo "$USER_NAME ALL=(root) NOPASSWD: /bin/bash $HELPER_DIR/lux_proxy_clear.sh"
+    echo "$USER_NAME ALL=(root) NOPASSWD: /bin/bash $HELPER_DIR/lux_cert_install.sh"
+    echo "$USER_NAME ALL=(root) NOPASSWD: /bin/bash $HELPER_DIR/lux_network_reset.sh"
+    echo "$USER_NAME ALL=(root) NOPASSWD: /bin/bash $HELPER_DIR/lux_updater.sh"
+  } > /etc/sudoers.d/lux_core
+  chmod 0440 /etc/sudoers.d/lux_core
+  visudo -c -f /etc/sudoers.d/lux_core 2>/dev/null || rm -f /etc/sudoers.d/lux_core
+fi
+
+echo "Elevation setup complete at $(date)"
+''';
+}
 
 /// Builds a standalone installer script that runs independently of the Lux process.
 /// It waits for Lux to exit, installs the new app, sets up elevation, and relaunches.
