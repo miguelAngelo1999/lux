@@ -6,6 +6,7 @@ import 'package:lux/widget/setup_wizard.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/model/app.dart';
@@ -556,6 +557,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               _appcastUrlTile()),
           e('Connectivity Test URL', 'health check url test ping connectivity',
               _connectivityTestUrlTile()),
+          e('Copy Proxy Env Vars', 'terminal shell curl git npm HTTP_PROXY copy clipboard',
+              _copyProxyEnvTile()),
           e('Config File', 'open configuration json file path',
               _configFileTile()),
           e('Reset Network', 'clear system proxy env vars stuck internet crash',
@@ -1049,6 +1052,47 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 )
               : null,
         );
+      },
+    );
+  }
+
+  Widget _copyProxyEnvTile() {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      leading: const Icon(Icons.copy, size: 20),
+      title: TText('Copy Proxy Env Vars', style: TextStyle(fontSize: 14)),
+      subtitle: const Text(
+        'Copies export HTTP_PROXY=... for use in terminals',
+        style: TextStyle(fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right, size: 20),
+      onTap: () async {
+        try {
+          final setting = await widget.coreManager.getSetting();
+          final port = setting.localServerPort;
+          final proxy = 'http://127.0.0.1:$port';
+          const noProxy = 'localhost,127.0.0.1,10.255.0.1,*.local';
+          final text = [
+            'export HTTP_PROXY="$proxy"',
+            'export HTTPS_PROXY="$proxy"',
+            'export http_proxy="$proxy"',
+            'export https_proxy="$proxy"',
+            'export NO_PROXY="$noProxy"',
+            'export no_proxy="$noProxy"',
+          ].join('\n');
+          await Clipboard.setData(ClipboardData(text: text));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: TText('Proxy env vars copied to clipboard')),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed: $e')),
+            );
+          }
+        }
       },
     );
   }
