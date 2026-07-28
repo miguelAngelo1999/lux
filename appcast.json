@@ -1,11 +1,11 @@
 {
-  "version": "1.46.4",
+  "version": "1.46.5",
   "channel": "stable",
-  "notes": "fix: elevate() always uses canonical /Applications path for sudoers \u2014 prevents osascript prompt after updates",
+  "notes": "feat: Check for Updates in tray menu (macOS + Windows); fix elevate() canonical path",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "3af9262772f0aaece299b4d52484fa03b71a58621d35463fa6b16faf10793b61",
-    "size": 44761762
+    "sha256": "3701bb9860c0b867ca118135dee3e96e1fe0ea27ceec3d188ac38d5ac6c5fb6c",
+    "size": 44763167
   },
   "windows": {
     "url": "",
