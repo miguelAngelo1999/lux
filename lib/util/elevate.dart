@@ -32,13 +32,10 @@ Future<bool> _isSudoersConfigured(String corePath) async {
   final dir = File(corePath).parent.path;
   final realPath = '$dir/lux_core_real';
   try {
-    // Try running lux_core_real with sudo -n — if it works, NOPASSWD is active
-    final result = await Process.run('sudo', ['-n', realPath, '--help'],
+    // Use sudo -n -l to check if NOPASSWD is configured — doesn't run the binary
+    final result = await Process.run('sudo', ['-n', '-l', realPath],
         runInShell: false).timeout(const Duration(seconds: 3));
-    if (result.exitCode == 0) return true;
-    // Also check for proxy scripts in sudoers by reading the file as the user
-    // (file is 0440 root:wheel, so user can't read — check existence is enough)
-    return true; // file exists — assume configured
+    return result.exitCode == 0;
   } catch (_) {
     return true; // assume ok on timeout/error
   }
@@ -87,7 +84,7 @@ mkdir -p /Library/PrivilegedHelperTools/com.github.igoogolx.lux
 chown "\$USER_NAME":staff /Library/PrivilegedHelperTools/com.github.igoogolx.lux
 chmod 755 /Library/PrivilegedHelperTools/com.github.igoogolx.lux
 echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *" > /etc/sudoers.d/lux_core
-echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_proxy_apply.sh" >> /etc/sudoers.d/lux_core
+echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_proxy_apply.sh *" >> /etc/sudoers.d/lux_core
 echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_proxy_clear.sh" >> /etc/sudoers.d/lux_core
 echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_cert_install.sh" >> /etc/sudoers.d/lux_core
 echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash /Library/PrivilegedHelperTools/com.github.igoogolx.lux/lux_network_reset.sh" >> /etc/sudoers.d/lux_core
