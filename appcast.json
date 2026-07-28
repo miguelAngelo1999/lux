@@ -1,11 +1,11 @@
 {
-  "version": "1.46.0",
+  "version": "1.46.1",
   "channel": "stable",
-  "notes": "feat: Copy Proxy Env Vars in Settings \u2192 Advanced; user-space updater fix",
+  "notes": "fix: updater relaunch \u2014 detached script waits 2s after exit(0) before open -a",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "5a094588b09fa54e044394734959f3c5cadeb681b24b7954dc0e51048137b289",
-    "size": 44760565
+    "sha256": "25db4f0f2f14d2613580641b68796fe72cb297089cdbe3dc465c4acbbe04997e",
+    "size": 44761986
   },
   "windows": {
     "url": "",
