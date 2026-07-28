@@ -1,11 +1,11 @@
 {
-  "version": "1.45.6",
+  "version": "1.45.7",
   "channel": "stable",
-  "notes": "fix: elevate() uses sudo -n -l to check NOPASSWD (never runs binary); fix proxy_apply.sh wildcard in elevate setup script",
+  "notes": "fix: updater relaunch via one-shot LaunchAgent \u2014 reliable on macOS Sequoia from root context",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "318b3365f5fa903a913151d0122ed448a9bed34698738e390b342bb99d5d6410",
-    "size": 44765018
+    "sha256": "6b00daf9cfacd4888d86337943220a110fb4c2c4fa89f633f5c4839cca9e0dff",
+    "size": 44766945
   },
   "windows": {
     "url": "",
