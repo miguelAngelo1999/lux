@@ -535,14 +535,21 @@ ditto "\$SRC" "\$DEST.new"
 if [ \$? -ne 0 ]; then
   echo "ERROR: ditto failed — aborting install, keeping old app"
   rm -rf "\$DEST.new"
-  # Relaunch the existing app so the user is not left with nothing
+  # Relaunch the existing app via one-shot LaunchAgent
   LOGGED_USER=\$(stat -f '%Su' /dev/console)
   LOGGED_UID=\$(id -u "\$LOGGED_USER" 2>/dev/null)
   echo "Relaunching existing Lux after failed update..."
   if [ -n "\$LOGGED_UID" ]; then
-    launchctl asuser "\$LOGGED_UID" /usr/bin/open -a /Applications/Lux.app 2>/dev/null &
-  else
-    su - "\$LOGGED_USER" -c "open -a /Applications/Lux.app" 2>/dev/null &
+    PLIST="/Users/\$LOGGED_USER/Library/LaunchAgents/io.github.lux.relaunch.plist"
+    sudo -u "\$LOGGED_USER" tee "\$PLIST" > /dev/null << 'PLIST_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>Label</key><string>io.github.lux.relaunch</string><key>ProgramArguments</key><array><string>/usr/bin/open</string><string>-a</string><string>/Applications/Lux.app</string></array><key>RunAtLoad</key><true/></dict></plist>
+PLIST_EOF
+    launchctl asuser "\$LOGGED_UID" launchctl load -w "\$PLIST" 2>/dev/null || true
+    sleep 2
+    launchctl asuser "\$LOGGED_UID" launchctl unload "\$PLIST" 2>/dev/null || true
+    sudo -u "\$LOGGED_USER" rm -f "\$PLIST" 2>/dev/null || true
   fi
   exit 1
 fi
@@ -574,7 +581,7 @@ if [ -n "\$USER_NAME" ] && [ -f "\$REAL" ]; then
   chmod 755 "\$HELPER_DIR"
   {
     echo "\$USER_NAME ALL=(root) NOPASSWD: \$REAL *"
-    echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash \$HELPER_DIR/lux_proxy_apply.sh"
+    echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash \$HELPER_DIR/lux_proxy_apply.sh *"
     echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash \$HELPER_DIR/lux_proxy_clear.sh"
     echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash \$HELPER_DIR/lux_cert_install.sh"
     echo "\$USER_NAME ALL=(root) NOPASSWD: /bin/bash \$HELPER_DIR/lux_network_reset.sh"
@@ -588,15 +595,28 @@ fi
 echo "Detaching DMG..."
 hdiutil detach "$mountPoint" -quiet -force 2>/dev/null || true
 
-# Relaunch Lux as the logged-in user (not as root)
-# launchctl asuser is Apple's documented method for launching GUI apps from root
+# Relaunch Lux via a one-shot LaunchAgent — only reliable method from root on Sequoia
 echo "Relaunching Lux..."
 LOGGED_USER=\$(stat -f '%Su' /dev/console)
 LOGGED_UID=\$(id -u "\$LOGGED_USER" 2>/dev/null)
 if [ -n "\$LOGGED_UID" ]; then
-  launchctl asuser "\$LOGGED_UID" /usr/bin/open -a /Applications/Lux.app 2>/dev/null &
-else
-  su - "\$LOGGED_USER" -c "open -a /Applications/Lux.app" 2>/dev/null &
+  PLIST="/Users/\$LOGGED_USER/Library/LaunchAgents/io.github.lux.relaunch.plist"
+  sudo -u "\$LOGGED_USER" tee "\$PLIST" > /dev/null << 'PLIST_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.github.lux.relaunch</string>
+  <key>ProgramArguments</key>
+  <array><string>/usr/bin/open</string><string>-a</string><string>/Applications/Lux.app</string></array>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+PLIST_EOF
+  launchctl asuser "\$LOGGED_UID" launchctl load -w "\$PLIST" 2>/dev/null || true
+  sleep 3
+  launchctl asuser "\$LOGGED_UID" launchctl unload "\$PLIST" 2>/dev/null || true
+  sudo -u "\$LOGGED_USER" rm -f "\$PLIST" 2>/dev/null || true
 fi
 
 echo "Update complete at \$(date)"
