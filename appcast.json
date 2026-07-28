@@ -1,11 +1,11 @@
 {
-  "version": "1.45.8",
+  "version": "1.45.9",
   "channel": "stable",
-  "notes": "feat: add PAC/WPAD URL proxy type \u2014 enter wpad.dat URL instead of IP:port; lux_core resolves proxy at startup",
+  "notes": "fix: updater installs as user (no root) then relaunches from GUI session \u2014 fixes post-update relaunch on Sequoia permanently",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "3c9a79b40f9052e0e9edfdb82b4cbb2a3eab425344c3e47e1c6b87266a5a7130",
-    "size": 44760421
+    "sha256": "dd7107e5d75b23b1de2e5f5947d428c5983b3f94c6471efe5242a575238a5275",
+    "size": 44757641
   },
   "windows": {
     "url": "",
