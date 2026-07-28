@@ -47,14 +47,18 @@
 
 ### 🟠 Updater / Relaunch
 
-#### Updater relaunch using one-shot LaunchAgent — v1.45.7
-**Problem:** Every relaunch method tried from root context failed on macOS Sequoia:
-- `launchctl asuser $UID open -a Lux.app` — silent failure, app never appeared
-- `su - user -c "open -a Lux.app"` — worked in testing but unreliable in practice
-- `osascript tell Finder to open` — failed from launchctl context
-**Root cause:** macOS Sequoia requires apps to be launched from a proper user GUI session. Root daemon context doesn't have one.
-**Fix:** Write a temporary `io.github.lux.relaunch.plist` to the user's LaunchAgents directory, `launchctl load -w` it (fires immediately with `RunAtLoad=true`), wait 3s, then unload and delete. Confirmed working in test.
-**Note:** This is non-standard but functional. The proper fix would be to make the updater run as the user (not root), like Sparkle does. Left as a future improvement.
+#### Updater relaunch — SOLVED in v1.46.3
+**History of attempts:**
+- `launchctl asuser $UID open -a Lux.app` — silent failure on Sequoia from root context
+- `su - user -c "open -a Lux.app"` — unreliable
+- One-shot LaunchAgent plist — fired correctly but `open` found old process still alive, focused it instead of launching new instance
+- `sleep 2; open -a Lux.app` — 2 seconds not enough, old process outlived the sleep
+- **FINAL FIX (v1.46.3):** Install entirely in-process as user (no root needed since user owns `/Applications/Lux.app`), then launch a detached script that polls `kill -0 $OLD_PID` every 0.5s until the process is confirmed dead, then calls `open -a`. Works reliably.
+
+**Root causes that made this hard:**
+1. Updater was running as root (made relaunch from GUI session impossible)
+2. `open -a` with old process still alive just focuses the existing instance
+3. `exit(0)` in Dart is not instant — the process lingers for 1-3 seconds after the call
 
 #### Updater lux_updater.sh volume name hardcoded — v1.45.7
 **Problem:** The installed `lux_updater.sh` had `SRC="/Volumes/Lux 1.45.6/Lux.app"` hardcoded. Every subsequent update failed with `ditto: Cannot get the real path`.
@@ -84,8 +88,18 @@
 2. Reactive check: if `ListenPacketContext` returns `"no support"` error, fall back to DIRECT.
 Zoom UDP now flows direct to Propulsão gateway, bypassing Squid.
 
-#### PAC-based network detection — v1.45.4
-NetworkDetector probes the WPAD/PAC URL instead of the proxy server IP. More universal — works for any corporate network, not just the current one.
+#### PAC URL proxy type — v1.45.8
+Users can now add a proxy by entering a WPAD/PAC URL (e.g. `http://192.168.1.1/wpad.dat`) instead of requiring a specific IP:port. lux_core fetches the PAC at startup, extracts the first `PROXY host:port` entry, and uses that. Falls back to DIRECT if PAC is unreachable or returns only DIRECT entries.
+
+#### Tray menu version + status — v1.46.2
+The tray menu now shows:
+- Real version number (was hardcoded `1.41.0` since day one)
+- `● Arautos do Evangelho` when connected with proxy name
+- `○ Disconnected` when not connected
+- Tooltip also updated with proxy name
+
+#### Copy Proxy Env Vars — v1.46.0
+Settings → Advanced → Copy Proxy Env Vars: copies `export HTTP_PROXY=...` etc. to clipboard for pasting into terminals.
 
 #### Automated test suite — v1.45.1
 - `bash scripts/test_all.sh` — runs all tests safely without disrupting proxy
@@ -118,20 +132,17 @@ Started from personal/all-features with targeted Go-side cuts:
 
 ### 🔴 Critical / High Priority
 
-#### Updater architecture (proper fix)
-**Current state:** Updater runs as root (because lux_core setup needs root). This makes post-install relaunch inherently difficult.
-**Proper fix:** Separate concerns. The update installation (replacing `/Applications/Lux.app`) doesn't need root — the user owns the app. Only lux_core elevation needs root. The updater should run as the user and call the privileged helper only for the elevation step.
-**Why not done yet:** Requires refactoring the updater to have a user-space install path separate from the elevation path.
+~~#### Updater architecture — DONE in v1.46.3~~
+
+### 🟡 Medium Priority
 
 #### `!` negation in exclusion rules (Preproxy parity)
 **What:** Allow `*.example.com, !gw.example.com` in the bypass list — exclude all subdomains except one specific host.
 **Why needed:** Preproxy v1.5.1 has this. Common need in corporate environments where you want to bypass proxy for an internal domain but not its gateway.
 **Scope:** Rules page UI + Go-side rule matching.
 
-#### Proxy via PAC URL (add proxy from wpad.dat instead of IP)
-**What:** Allow adding a proxy by entering a PAC URL instead of requiring an explicit IP:port. lux_core fetches the PAC, finds the proxy address, and uses it.
-**Why needed:** Many corporate environments publish the proxy address only via WPAD/PAC. Users shouldn't need to know the IP.
-**Scope:** proxy_edit_dialog.dart (new "PAC URL" proxy type) + Go-side proxy handling.
+#### ~~Proxy via PAC URL~~ — DONE in v1.45.8
+Users can now add a proxy by entering a WPAD/PAC URL. See FIXED section above.
 
 #### NTLM authentication
 **What:** Authenticate to the upstream proxy using NTLM (Windows domain authentication).
@@ -172,8 +183,8 @@ If the upstream proxy drops the connection mid-authentication handshake, retry g
 
 | Branch | Version | Purpose |
 |--------|---------|---------|
-| `personal/all-features` | 1.45.7 | Production — users get updates from here |
-| `feat/stable` | 1.45.7 | Clean branch with all fixes, matches production |
+| `personal/all-features` | 1.46.3 | Production — users get updates from here |
+| `feat/stable` | 1.46.3 | Clean branch with all fixes, matches production |
 | `feat/native-ui-clean` | 1.45.1 | igoogolx PR candidate — needs sync with latest fixes |
 
 ## How to Release
