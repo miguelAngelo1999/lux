@@ -1,11 +1,11 @@
 {
-  "version": "1.45.9",
+  "version": "1.46.0",
   "channel": "stable",
-  "notes": "fix: updater installs as user (no root) then relaunches from GUI session \u2014 fixes post-update relaunch on Sequoia permanently",
+  "notes": "feat: Copy Proxy Env Vars in Settings \u2192 Advanced; user-space updater fix",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "dd7107e5d75b23b1de2e5f5947d428c5983b3f94c6471efe5242a575238a5275",
-    "size": 44757641
+    "sha256": "5a094588b09fa54e044394734959f3c5cadeb681b24b7954dc0e51048137b289",
+    "size": 44760565
   },
   "windows": {
     "url": "",
