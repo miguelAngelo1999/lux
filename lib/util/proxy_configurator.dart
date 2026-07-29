@@ -13,9 +13,40 @@ class ProxyConfigurator {
 
   static Future<void> apply(String proxyAddr) async {
     appLog('PROXY-CFG', 'applying proxy: $proxyAddr');
-    if (Platform.isMacOS) await _applyMacOS(proxyAddr);
-    else if (Platform.isWindows) await _applyWindows(proxyAddr);
+    if (Platform.isMacOS) {
+      // Guard: don't overwrite HTTP_PROXY if it's already pointing at an
+      // upstream proxy (i.e. not a Lux localhost address). This prevents Lux
+      // from clobbering tools like Preproxy that set HTTP_PROXY to their own
+      // upstream address and read the env var to find it again.
+      final existing = await _getUserLaunchctlEnv('HTTP_PROXY');
+      if (existing != null && existing.isNotEmpty) {
+        final uri = Uri.tryParse(existing);
+        final host = uri?.host ?? '';
+        final isLux = host == '127.0.0.1' || host == 'localhost';
+        if (!isLux) {
+          appLog('PROXY-CFG',
+              'HTTP_PROXY already set to $existing (non-localhost) — skipping apply to avoid clobbering upstream');
+          return;
+        }
+      }
+      await _applyMacOS(proxyAddr);
+    } else if (Platform.isWindows) {
+      await _applyWindows(proxyAddr);
+    }
     appLog('PROXY-CFG', 'apply complete');
+  }
+
+  /// Read a single env var from the *user* launchd session (not root).
+  static Future<String?> _getUserLaunchctlEnv(String name) async {
+    try {
+      final result = await Process.run('launchctl', ['getenv', name],
+          runInShell: false)
+          .timeout(const Duration(seconds: 2));
+      final val = (result.stdout as String).trim();
+      return val.isEmpty ? null : val;
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<void> clear() async {
