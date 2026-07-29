@@ -1,11 +1,11 @@
 {
-  "version": "1.46.8",
+  "version": "1.46.9",
   "channel": "stable",
-  "notes": "fix: TCP keepalive idle=60s on upstream proxy connections \u2014 reduces Squid per-user connection count from 144 to manageable levels; prevents preproxy connection starvation",
+  "notes": "fix: sync checksum.dart with 1.46.8 lux_core (TCP keepalive fix binary)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "57b75feaf7ded5d2f5f28dc44800556cad602a45fbbf490d649ca713bbc54742",
-    "size": 44765087
+    "sha256": "78baa5541ba62508f4375b828ba1d67ab7a8400c1bdf650efce6df7a95a74e05",
+    "size": 44765082
   },
   "windows": {
     "url": "",
