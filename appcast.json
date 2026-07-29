@@ -1,11 +1,11 @@
 {
-  "version": "1.46.6",
+  "version": "1.46.7",
   "channel": "stable",
-  "notes": "fix: Lux no longer interferes with upstream proxy tools (Preproxy, etc.) when reconnecting",
+  "notes": "fix: Lux no longer overwrites macOS system proxy when an upstream proxy tool (Preproxy, etc.) is already configured",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "0d4a72256bdc5ab98d77f99c788fe8368d93c65355e898af1c36e42536f43f42",
-    "size": 44760062
+    "sha256": "fddef432b05b58bcaa18a82ec471587e7f54e8bad8e3fa29aaae24b90950a8a4",
+    "size": 44764473
   },
   "windows": {
     "url": "",
