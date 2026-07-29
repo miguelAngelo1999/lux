@@ -1,11 +1,11 @@
 {
-  "version": "1.46.9",
+  "version": "1.47.0",
   "channel": "stable",
-  "notes": "fix: sync checksum.dart with 1.46.8 lux_core (TCP keepalive fix binary)",
+  "notes": "fix: Gatekeeper cmd removes quarantine before installing; add README in DMG; TCP keepalive fix for Squid connection limit",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "78baa5541ba62508f4375b828ba1d67ab7a8400c1bdf650efce6df7a95a74e05",
-    "size": 44765082
+    "sha256": "b1b5f7db2845f884ddc33f03fbcff9d3545be1dce5ab3b13d89087a24ceadc77",
+    "size": 44765018
   },
   "windows": {
     "url": "",
