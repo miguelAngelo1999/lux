@@ -1,11 +1,11 @@
 {
-  "version": "1.46.5",
+  "version": "1.46.6",
   "channel": "stable",
-  "notes": "feat: Check for Updates in tray menu (macOS + Windows); fix elevate() canonical path",
+  "notes": "fix: Lux no longer interferes with upstream proxy tools (Preproxy, etc.) when reconnecting",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "3701bb9860c0b867ca118135dee3e96e1fe0ea27ceec3d188ac38d5ac6c5fb6c",
-    "size": 44763167
+    "sha256": "0d4a72256bdc5ab98d77f99c788fe8368d93c65355e898af1c36e42536f43f42",
+    "size": 44760062
   },
   "windows": {
     "url": "",
