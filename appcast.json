@@ -1,11 +1,11 @@
 {
-  "version": "1.46.7",
+  "version": "1.46.8",
   "channel": "stable",
-  "notes": "fix: Lux no longer overwrites macOS system proxy when an upstream proxy tool (Preproxy, etc.) is already configured",
+  "notes": "fix: TCP keepalive idle=60s on upstream proxy connections \u2014 reduces Squid per-user connection count from 144 to manageable levels; prevents preproxy connection starvation",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "fddef432b05b58bcaa18a82ec471587e7f54e8bad8e3fa29aaae24b90950a8a4",
-    "size": 44764473
+    "sha256": "57b75feaf7ded5d2f5f28dc44800556cad602a45fbbf490d649ca713bbc54742",
+    "size": 44765087
   },
   "windows": {
     "url": "",
