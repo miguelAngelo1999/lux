@@ -1,11 +1,11 @@
 {
-  "version": "1.47.0",
+  "version": "1.47.1",
   "channel": "stable",
-  "notes": "fix: 10s TCP connect timeout in TUN \u2014 ends AnyDesk connection storm in 10s not 75s; calm the storm",
+  "notes": "wpad pac bypass with js evaluator",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "7f5862d1729b09c93825d74da7856caeb441cc06d5f5fd62b74264651d73c432",
-    "size": 44765221
+    "sha256": "3b0e616eff13bbf6e5df1f0bbc696198320c911d4a44c02ea3acdb1c57ae0be2",
+    "size": 44806130
   },
   "windows": {
     "url": "",
