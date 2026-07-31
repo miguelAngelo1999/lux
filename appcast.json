@@ -1,11 +1,11 @@
 {
   "version": "1.47.1",
   "channel": "stable",
-  "notes": "wpad pac bypass with js evaluator",
+  "notes": "feat: anonymous telemetry \u2014 consent dialog, UUID in Settings, 3 levels (full/no domains/off)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "3b0e616eff13bbf6e5df1f0bbc696198320c911d4a44c02ea3acdb1c57ae0be2",
-    "size": 44806130
+    "sha256": "a61b9c7bfe072b43d4723368171b4f89b6a1da90542acd47fbf10b52f39a2909",
+    "size": 44806267
   },
   "windows": {
     "url": "",
