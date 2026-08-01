@@ -1,11 +1,11 @@
 {
-  "version": "1.47.7",
+  "version": "1.47.8",
   "channel": "stable",
-  "notes": "feat: .pkg installer in DMG \u2014 double-click install, no internet needed, sets up elevation+sudoers automatically",
+  "notes": "fix: data dir ownership restored after install; LaunchAgent reloaded; sudoers uses real console user; pkg installer in DMG",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "7b23229bc480fb543806bc7bebcbc56b02925bb4960af27fd94039d8ec4d599a",
-    "size": 89738350
+    "sha256": "5e76696489a284119ebcf9e7eb462f21fb75d026dff0813226be82bd4d2537ba",
+    "size": 89737002
   },
   "windows": {
     "url": "",
