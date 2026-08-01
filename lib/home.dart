@@ -11,11 +11,11 @@ import 'package:lux/const/const.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/util/app_log.dart';
-import 'package:lux/util/telemetry.dart';
 import 'package:lux/util/cert_installer.dart';
 import 'package:lux/util/installed_certs_store.dart';
 import 'package:lux/util/network_detector.dart';
 import 'package:lux/util/network_reset.dart';
+import 'package:lux/widget/setup_wizard.dart';
 import 'package:lux/dashboard.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
@@ -38,6 +38,7 @@ import 'package:version/version.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'core/core_config.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
 
@@ -70,7 +71,6 @@ class _HomeState extends State<Home>
   var needRestart = false;
   dynamic coreError;
   bool _quickEditMode = false;
-  bool _eventLoopStarted = false;
   String? _lastDetectedCertFingerprint;
   VoidCallback? _proxyListRefresh; // set by Dashboard, called after adding a proxy
   final _quickEditChannel = const MethodChannel('lux_quick_edit');
@@ -215,6 +215,9 @@ class _HomeState extends State<Home>
     // Fall back to lux_core detection after it starts
   }
 
+  // -- Proxy address detected at startup --
+  String? _detectedProxyAddr;
+
   /// Silently applies UWP loopback exemption for all installed Windows Store apps.
   /// This allows apps like Teams, Slack, etc. to route through lux as system proxy.
   /// Also sets NODE_TLS_REJECT_UNAUTHORIZED and NODE_EXTRA_CA_CERTS if not already set.
@@ -358,6 +361,7 @@ class _HomeState extends State<Home>
     if (coreManager == null || !mounted) return;
 
     // Fake cert info — realistic-looking corporate proxy CA
+    const fakeFp = 'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99';
     const fakeFpClean = 'AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899';
 
     if (alreadyInstalled) {
@@ -533,6 +537,7 @@ class _HomeState extends State<Home>
           if (mounted && !_proxyDialogShowing) _showProxyAndCertDialog(syntheticProxy, finalSsl);
         });
       } else {
+        _detectedProxyAddr = detected.address;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && !_proxyDialogShowing) _showProxyAndCertDialog(detected, finalSsl);
         });
@@ -1193,9 +1198,6 @@ class _HomeState extends State<Home>
     var curHomeDir = await getHomeDir();
     await initAppLog(curHomeDir);
     appLog('APP', 'init started homeDir=$curHomeDir');
-
-    // ── Telemetry init (non-blocking — must not delay core startup) ─────────
-    _initTelemetry(); // intentionally not awaited
     final Version currentVersion = Version.parse(await getAppVersion());
 
     // ── LaunchAgent fast path (macOS only) ──────────────────────────────────
@@ -1225,10 +1227,6 @@ class _HomeState extends State<Home>
           process = null; // no process to manage — LaunchAgent owns it
         } else {
           appLog('CORE', 'lockfile found but lux_core not responding — will relaunch');
-          // Kill any stale lux_core that may be holding the port
-          await Process.run('sudo', ['pkill', '-9', '-x', 'lux_core_real'],
-              runInShell: false).catchError((_) => ProcessResult(0, 0, '', ''));
-          await Future.delayed(const Duration(milliseconds: 500));
           await deleteLockfile(curHomeDir);
           port = luxCoreFixedPort;
           secret = const Uuid().v4();
@@ -1240,10 +1238,6 @@ class _HomeState extends State<Home>
         }
       } else {
         // No lockfile — LaunchAgent not installed yet or first launch.
-        // Kill any orphaned lux_core that may be holding the port.
-        await Process.run('sudo', ['pkill', '-9', '-x', 'lux_core_real'],
-            runInShell: false).catchError((_) => ProcessResult(0, 0, '', ''));
-        await Future.delayed(const Duration(milliseconds: 500));
         // Use fixed port so lockfile written here is valid for future LaunchAgent starts.
         port = luxCoreFixedPort;
         secret = const Uuid().v4();
@@ -1590,37 +1584,40 @@ class _HomeState extends State<Home>
     if (Platform.isWindows) {
       Future.delayed(const Duration(seconds: 5), _ensureUwpLoopback);
     }
-    // Start the event channel reconnect loop — guarded so it only starts once,
-    // even if _onCoreReady fires again after a lux_core restart.
-    if (!_eventLoopStarted) {
-      _eventLoopStarted = true;
-      _connectEventChannel(appState);
-    }
-  }
-
-  /// Permanent reconnect loop for the event channel (theme/language/exit/proxy events).
-  /// Mirrors the gold-standard while(mounted) pattern from app_bottom_bar.dart.
-  Future<void> _connectEventChannel(AppStateModel appState) async {
-    while (mounted) {
-      // Wait until lux_core is ready before attempting the WS connection.
-      if (!isCoreReady.value) {
-        await Future.delayed(const Duration(seconds: 2));
-        continue;
-      }
-      try {
-        final channel = await coreManager?.getEventChannel();
-        if (channel == null) {
-          await Future.delayed(const Duration(seconds: 3));
-          continue;
+    if (eventChannel == null) {
+      coreManager?.getEventChannel().then((channel) async {
+        if (channel == null) return;
+        // Retry connection — on Windows lux_core's WS server may not be ready
+        // immediately after HTTP ping succeeds (errno 1225 = connection refused)
+        WebSocketChannel current = channel;
+        for (int attempt = 0; attempt < 5; attempt++) {
+          try {
+            await current.ready;
+            break; // connected
+          } catch (_) {
+            if (attempt < 4) {
+              await Future.delayed(Duration(seconds: attempt + 1));
+              coreManager?.clearEventChannel();
+              final fresh = await coreManager?.getEventChannel();
+              if (fresh == null) return;
+              current = fresh;
+            } else {
+              return; // give up — non-critical, app works without event channel
+            }
+          }
         }
-        await channel.ready;
-        eventChannel = channel;
-        await for (final rawData in channel.stream) {
-          if (!mounted) return;
-          if (rawData is! String) continue;
+        eventChannel = current;
+        eventChannel?.stream.listen((rawData) async {
+          if (rawData is! String) {
+            return;
+          }
           final message = json.decode(rawData);
-          if (message is! Map<String, dynamic>) continue;
-          if (!(message.containsKey('type') && message['type'] is String)) continue;
+          if (message is! Map<String, dynamic>) {
+            return;
+          }
+          if (!(message.containsKey('type') && message['type'] is String)) {
+            return;
+          }
 
           switch (message['type']) {
             case "set_theme":
@@ -1763,13 +1760,8 @@ class _HomeState extends State<Home>
                 );
               }
           }
-        }
-      } catch (_) {
-        // channel closed or connection refused — clear cache and retry
-      }
-      eventChannel = null;
-      coreManager?.clearEventChannel();
-      if (mounted) await Future.delayed(const Duration(seconds: 3));
+        });
+      });
     }
   }
 
@@ -1813,68 +1805,6 @@ class _HomeState extends State<Home>
     // NetworkDetector has no resources to dispose
     _networkDetector = null;
     super.dispose();
-  }
-
-  // ── Telemetry ──────────────────────────────────────────────────────────────
-
-  Future<void> _initTelemetry() async {
-    try {
-      final uuid = await readOrCreateTelemetryUuid();
-      final storedLevel = await readTelemetryLevel();
-
-      // First run — save default level immediately (don't block startup with dialog)
-      // Show a non-blocking notification after core connects
-      if (storedLevel == null) {
-        await writeTelemetryLevel('full');
-        await initTelemetry(uuid: uuid, level: TelemetryLevel.full);
-        // Show consent banner after a short delay (once UI is ready)
-        Future.delayed(const Duration(seconds: 8), () async {
-          if (!mounted) return;
-          _showTelemetryConsentBanner(uuid);
-        });
-        return;
-      }
-
-      final level = telemetryLevelFromString(storedLevel);
-      await initTelemetry(uuid: uuid, level: level);
-    } catch (e) {
-      debugPrint('[Telemetry] init error: $e');
-    }
-  }
-
-  Future<void> _showTelemetryConsentDialog(String uuid) async {
-    if (!mounted) return;
-    final result = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _TelemetryConsentDialog(uuid: uuid),
-    );
-    final chosen = result ?? 'full';
-    await writeTelemetryLevel(chosen);
-    setTelemetryLevel(telemetryLevelFromString(chosen));
-    appLog('APP', 'telemetry consent: $chosen');
-  }
-
-  void _showTelemetryConsentBanner(String uuid) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      duration: const Duration(seconds: 30),
-      content: Row(children: [
-        const Icon(Icons.analytics_outlined, size: 16, color: Colors.white),
-        const SizedBox(width: 8),
-        const Expanded(
-          child: Text('Lux can send anonymous diagnostics to help fix bugs. You can change this in Settings → Advanced.', style: TextStyle(fontSize: 12)),
-        ),
-      ]),
-      action: SnackBarAction(
-        label: 'Turn off',
-        onPressed: () async {
-          await writeTelemetryLevel('off');
-          setTelemetryLevel(TelemetryLevel.off);
-          appLog('APP', 'telemetry consent: off (banner)');
-        },
-      ),
-    ));
   }
 
   @override
@@ -2101,118 +2031,5 @@ class _HomeState extends State<Home>
     return Dashboard(homeDir, baseUrl, urlStr, coreManager!,
         onConnected: () {},
         onRegisterProxyRefresh: (cb) => _proxyListRefresh = cb);
-  }
-}
-
-// ── Telemetry consent dialog ───────────────────────────────────────────────────
-
-class _TelemetryConsentDialog extends StatefulWidget {
-  final String uuid;
-  const _TelemetryConsentDialog({required this.uuid});
-
-  @override
-  State<_TelemetryConsentDialog> createState() => _TelemetryConsentDialogState();
-}
-
-class _TelemetryConsentDialogState extends State<_TelemetryConsentDialog> {
-  String _choice = 'full';
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Row(children: [
-        Icon(Icons.analytics_outlined, size: 20),
-        SizedBox(width: 8),
-        Text('Help improve Lux'),
-      ]),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Lux can send anonymous diagnostic reports to help fix bugs '
-              'and improve reliability. No personal data, passwords, or '
-              'browsing history is ever sent.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            // Your ID
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(children: [
-                const Text('Your ID:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.uuid,
-                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 14),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Copy ID',
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: widget.uuid));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('ID copied'), duration: Duration(seconds: 1)),
-                    );
-                  },
-                ),
-              ]),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Quote this ID when reporting issues so we can find your logs.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 16),
-            // Level selector
-            RadioListTile<String>(
-              dense: true,
-              value: 'full',
-              groupValue: _choice,
-              title: const Text('Full diagnostics', style: TextStyle(fontSize: 13)),
-              subtitle: const Text('App events + anonymized connection destinations', style: TextStyle(fontSize: 11)),
-              onChanged: (v) => setState(() => _choice = v!),
-            ),
-            RadioListTile<String>(
-              dense: true,
-              value: 'ops',
-              groupValue: _choice,
-              title: const Text('App events only', style: TextStyle(fontSize: 13)),
-              subtitle: const Text('Start/stop, errors, updates — no domain names', style: TextStyle(fontSize: 11)),
-              onChanged: (v) => setState(() => _choice = v!),
-            ),
-            RadioListTile<String>(
-              dense: true,
-              value: 'off',
-              groupValue: _choice,
-              title: const Text('Off', style: TextStyle(fontSize: 13)),
-              subtitle: const Text('No data sent', style: TextStyle(fontSize: 11)),
-              onChanged: (v) => setState(() => _choice = v!),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop('off'),
-          child: const Text('No thanks'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_choice),
-          child: const Text('Confirm'),
-        ),
-      ],
-    );
   }
 }

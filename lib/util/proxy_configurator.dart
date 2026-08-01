@@ -1,5 +1,6 @@
 import 'dart:io';
-
+import 'package:flutter/foundation.dart';
+import 'package:lux/const/const.dart';
 import 'package:lux/util/app_log.dart';
 
 /// Configures proxy environment variables for CLI tools and desktop apps.

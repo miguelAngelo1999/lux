@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
+import 'package:lux/tray.dart';
 import 'package:lux/widget/password_peek_dialog.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/widget/proxy_list_card.dart';
@@ -109,12 +110,28 @@ class _AppBodyState extends State<AppBody> with WindowListener {
     super.initState();
     windowManager.addListener(this);
     refreshData();
+    // Listen for tray "Edit" action
+    editProxyFromTray.addListener(_onTrayEditRequested);
   }
 
   @override
   void dispose() {
     super.dispose();
     windowManager.removeListener(this);
+    editProxyFromTray.removeListener(_onTrayEditRequested);
+  }
+
+  void _onTrayEditRequested() {
+    final proxyId = editProxyFromTray.value;
+    if (proxyId != null && proxyId.isNotEmpty && mounted) {
+      editProxyFromTray.value = null;
+      // Find the proxy in our list and open edit dialog
+      final proxy = proxyListGroup.allProxies.firstWhere(
+        (p) => p.id == proxyId,
+        orElse: () => proxyListGroup.allProxies.first,
+      );
+      _handleEditItem(proxy);
+    }
   }
 
   bool getIsCollapsed(ProxyList item) {
