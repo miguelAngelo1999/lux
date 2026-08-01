@@ -1,11 +1,11 @@
 {
-  "version": "1.47.6",
+  "version": "1.47.7",
   "channel": "stable",
-  "notes": "fix: telemetry consent no longer blocks startup \u2014 shown as dismissible banner after core connects",
+  "notes": "feat: .pkg installer in DMG \u2014 double-click install, no internet needed, sets up elevation+sudoers automatically",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "c097e61ea844c123ba201627d98d275a189bb15849e040d3cc9286891d2143d5",
-    "size": 44809441
+    "sha256": "7b23229bc480fb543806bc7bebcbc56b02925bb4960af27fd94039d8ec4d599a",
+    "size": 89738350
   },
   "windows": {
     "url": "",
