@@ -1,11 +1,11 @@
 {
-  "version": "1.47.9",
+  "version": "1.48.0",
   "channel": "stable",
-  "notes": "fix: pkg installer always named Lux-macOS.pkg (stable filename, no version number)",
+  "notes": "fix: telemetry bypasses SSL inspection \u2014 data now reaches sheet from corporate networks",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "28f59c3397212ec02fec7a7b7719329c7caeb364882b7d507f9369a446742ea1",
-    "size": 89738426
+    "sha256": "7e606fa142f81e2396425b1cc7a07c48166d8b87e413cf464ceaae1c2492680e",
+    "size": 89736373
   },
   "windows": {
     "url": "",
