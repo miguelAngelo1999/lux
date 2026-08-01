@@ -1,11 +1,11 @@
 {
-  "version": "1.48.0",
+  "version": "1.48.1",
   "channel": "stable",
-  "notes": "fix: telemetry bypasses SSL inspection \u2014 data now reaches sheet from corporate networks",
+  "notes": "wpad pac bypass: js evaluator, per-connection FindProxyForURL, PAC URL setting",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "7e606fa142f81e2396425b1cc7a07c48166d8b87e413cf464ceaae1c2492680e",
-    "size": 89736373
+    "sha256": "06125f30324bf4d6cfe2b6b19665d3c743e4d03bcb51b2a827ac296c252dec7b",
+    "size": 89821228
   },
   "windows": {
     "url": "",
