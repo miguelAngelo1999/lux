@@ -1,11 +1,11 @@
 {
-  "version": "1.47.8",
+  "version": "1.47.9",
   "channel": "stable",
-  "notes": "fix: data dir ownership restored after install; LaunchAgent reloaded; sudoers uses real console user; pkg installer in DMG",
+  "notes": "fix: pkg installer always named Lux-macOS.pkg (stable filename, no version number)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "5e76696489a284119ebcf9e7eb462f21fb75d026dff0813226be82bd4d2537ba",
-    "size": 89737002
+    "sha256": "28f59c3397212ec02fec7a7b7719329c7caeb364882b7d507f9369a446742ea1",
+    "size": 89738426
   },
   "windows": {
     "url": "",
