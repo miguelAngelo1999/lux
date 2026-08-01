@@ -1,11 +1,11 @@
 {
-  "version": "1.47.3",
+  "version": "1.47.4",
   "channel": "stable",
   "notes": "fix: kill orphaned lux_core on startup \u2014 prevents spinning when two Lux instances run simultaneously",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "30b3a31419f4e08db8db8f659f77a94e23a090d2c087e7417f192e44afe319e0",
-    "size": 44817470
+    "sha256": "8d5fc164d395eba176e4a10ae973bc51a6ea16e6999bff8ca3bd4eef8c28067d",
+    "size": 44817427
   },
   "windows": {
     "url": "",
