@@ -1,11 +1,11 @@
 {
   "version": "1.48.3",
   "channel": "stable",
-  "notes": "fix: chown preserves lux_core_real setuid; all uploads via curl",
+  "notes": "fix: remove LaunchAgent \u2014 Flutter owns lux_core; no more port conflict; all uploads via curl",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "2319af75516d550cdd94ad7539778513a726eea5c07e0cca41946f9acaa2e2c7",
-    "size": 89788408
+    "sha256": "3d8742b806842d430e8dfc9295af89f586eb8fac31705b7a551ec63549af0ffb",
+    "size": 89788194
   },
   "windows": {
     "url": "",
