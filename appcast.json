@@ -1,11 +1,11 @@
 {
   "version": "1.47.4",
   "channel": "stable",
-  "notes": "fix: kill orphaned lux_core on startup \u2014 prevents spinning when two Lux instances run simultaneously",
+  "notes": "fix: detect stale lux_core with wrong secret \u2014 kill and recover instead of spinning forever",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "8d5fc164d395eba176e4a10ae973bc51a6ea16e6999bff8ca3bd4eef8c28067d",
-    "size": 44817427
+    "sha256": "6868bd5b31f93a0029bb533aa1d484e97f0090f3b5a5a31be5451eb672a5a49c",
+    "size": 44816516
   },
   "windows": {
     "url": "",
