@@ -152,18 +152,27 @@ class CoreManager {
     // On Windows, lux_core may need to wait for UAC elevation — use a longer timeout
     // On macOS, stale utun cleanup + monitor restart can take extra time
     final timeoutMs = Platform.isWindows ? 120000 : 60000;
+    int authFailCount = 0;
 
     while (stopwatch.elapsedMilliseconds < timeoutMs) {
       try {
         final response = await dio.get(url);
 
-        // Check if the request was successful
         if (response.statusCode == 200) {
-          return; // Exit the function if the request succeeds
+          return;
+        } else if (response.statusCode == 401 || response.statusCode == 403) {
+          // Wrong secret — a stale lux_core with different credentials is running
+          authFailCount++;
+          if (authFailCount >= 3) {
+            // Give up — caller will handle by killing and relaunching
+            throw CoreRunError('stale_lux_core: auth failed ${response.statusCode}');
+          }
+          await Future.delayed(const Duration(milliseconds: 500));
         } else {
-          await makeRequestUntilSuccess(url);
+          await Future.delayed(const Duration(milliseconds: 150));
         }
       } catch (e) {
+        if (e is CoreRunError) rethrow;
         await Future.delayed(const Duration(milliseconds: 150));
         debugPrint("fail to connect to core, retry...");
       }
@@ -343,7 +352,6 @@ class CoreManager {
       // LaunchAgent owns lux_core — kick it via launchctl kickstart
       appLog('CORE', 'restart() — LaunchAgent mode, using launchctl kickstart');
       try {
-        final user = Platform.environment['USER'] ?? '';
         final uid = (await Process.run('id', ['-u'])).stdout.toString().trim();
         await Process.run('launchctl', [
           'kickstart', '-k',
@@ -362,9 +370,29 @@ class CoreManager {
     if (coreProcess == null) {
       // lux_core pre-started by LaunchAgent — just ping to confirm it's ready
       appLog('CORE', 'run() — LaunchAgent mode, pinging existing lux_core...');
-      await ping();
-      appLog('CORE', 'ping succeeded — calling onReady');
-      onReady();
+      try {
+        await ping();
+        appLog('CORE', 'ping succeeded — calling onReady');
+        onReady();
+      } catch (e) {
+        if (e.toString().contains('stale_lux_core')) {
+          // Old lux_core running with wrong secret — kill it and relaunch
+          appLog('CORE', 'stale lux_core detected — killing and relaunching');
+          await _killStaleLuxCore();
+          // Re-ping after kill — if LaunchAgent restarts it with correct secret it will succeed
+          try {
+            await Future.delayed(const Duration(seconds: 2));
+            await ping();
+            appLog('CORE', 'post-kill ping succeeded');
+            onReady();
+          } catch (_) {
+            appLog('CORE', 'post-kill ping failed — will show error');
+            rethrow;
+          }
+        } else {
+          rethrow;
+        }
+      }
       return;
     }
     appLog('CORE', 'coreProcess.run() starting');
@@ -373,6 +401,16 @@ class CoreManager {
     await ping();
     appLog('CORE', 'ping succeeded — calling onReady');
     onReady();
+  }
+
+  Future<void> _killStaleLuxCore() async {
+    try {
+      await Process.run('sudo', ['pkill', '-9', '-x', 'lux_core_real'], runInShell: false);
+    } catch (_) {}
+    try {
+      await Process.run('pkill', ['-9', '-x', 'lux_core'], runInShell: false);
+    } catch (_) {}
+    await Future.delayed(const Duration(milliseconds: 800));
   }
 
   Future<WebSocketChannel?> getTrafficChannel() async {
@@ -516,6 +554,9 @@ class CoreManager {
 
     if (setting.healthCheckUrl != null) raw['healthCheckUrl'] = setting.healthCheckUrl;
     if (setting.delayTestUrl != null) raw['delayTestUrl'] = setting.delayTestUrl;
+
+    // PAC URL — always write (empty string clears it on the backend)
+    raw['pacUrl'] = setting.pacUrl ?? '';
 
     await dio.put('$baseHttpUrl/setting', data: raw);
   }

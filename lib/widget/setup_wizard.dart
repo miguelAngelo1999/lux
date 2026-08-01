@@ -1,7 +1,6 @@
-import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/util/cert_installer.dart';

@@ -35,6 +35,7 @@ class UpdateInfo {
 /// [proxyPort] is the local Lux proxy port (default 1090) — needed because
 /// Dart's HttpClient doesn't pick up the system proxy in TUN/Mixed mode.
 Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
+  HttpClient? client;
   try {
     final pkg = await PackageInfo.fromPlatform();
     final current = pkg.version;
@@ -44,15 +45,15 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
     final baseUrl = (customUrl != null && customUrl.isNotEmpty) ? customUrl : appcastUrl;
 
     // Use Dart's HttpClient directly with proxy + SSL bypass
-    final client = HttpClient();
+    client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
     client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
 
     // Add cache-busting only for GDrive URLs (query param approach)
-    final cacheBust = appcastUrl.contains('?') ? '&_t=' : '?_t=';
-    final fetchUrl = appcastUrl.contains('drive.usercontent.google.com')
-        ? Uri.parse('$appcastUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}')
-        : Uri.parse(appcastUrl);
+    final cacheBust = baseUrl.contains('?') ? '&_t=' : '?_t=';
+    final fetchUrl = baseUrl.contains('drive.usercontent.google.com')
+        ? Uri.parse('$baseUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}')
+        : Uri.parse(baseUrl);
 
     final request = await client.getUrl(fetchUrl);
     request.followRedirects = true;
@@ -65,19 +66,20 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
       debugPrint('[Updater] HTTP ${response.statusCode}');
       // Try without proxy (DIRECT) as fallback
       client.findProxy = (_) => 'DIRECT';
-      final req2 = await client.getUrl(Uri.parse(appcastUrl));
+      final req2 = await client.getUrl(Uri.parse(baseUrl));
       req2.followRedirects = true;
       final resp2 = await req2.close().timeout(const Duration(seconds: 10));
       if (resp2.statusCode != 200) return null;
       final body2 = await resp2.transform(const SystemEncoding().decoder).join();
       return _parseAppcast(body2, current);
     }
-    client.close();
     appLog('UPDATE', 'appcast fetched status=${response.statusCode} body=${body.substring(0, body.length.clamp(0, 200))}');
     return _parseAppcast(body, current);
   } catch (e) {
     debugPrint('[Updater] check failed: $e');
     return null;
+  } finally {
+    client?.close();
   }
 }
 
@@ -295,7 +297,7 @@ Future<void> downloadAndInstall(
       final volDir = Directory('/Volumes');
       if (await volDir.exists()) {
         final luxVols = volDir.listSync().whereType<Directory>().where(
-          (d) => d.path.contains('/Volumes/Lux ')
+          (d) => d.path == '/Volumes/Lux' || d.path.startsWith('/Volumes/Lux ')
         ).toList();
         for (final vol in luxVols) {
           appLog('UPDATE', 'detaching stale Lux volume: ${vol.path}');

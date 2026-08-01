@@ -8,7 +8,6 @@ import 'package:lux/pages/proxies_page.dart';
 import 'package:lux/pages/rules_page.dart';
 import 'package:lux/pages/settings_page.dart';
 import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
-import 'package:lux/util/utils.dart' hide checkForUpdate;
 import 'package:lux/widget/app_bottom_bar.dart';
 import 'package:lux/widget/app_header_bar.dart';
 import 'package:window_manager/window_manager.dart';

@@ -30,7 +30,6 @@ class NetworkDetector {
       // This works regardless of which proxy server is configured.
       final pacStatus = await coreManager.getPacStatus();
       final pacUrl = pacStatus['url'] as String? ?? '';
-      final pacActive = pacStatus['active'] as bool? ?? false;
 
       if (pacUrl.isNotEmpty) {
         appLog('NET-DETECT', 'probing PAC server: $pacUrl');
