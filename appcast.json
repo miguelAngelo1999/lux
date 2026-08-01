@@ -1,11 +1,11 @@
 {
   "version": "1.48.3",
   "channel": "stable",
-  "notes": "fix: revert buggy agent changes; chmod 4755 for lux_core_real; stable baseline restored",
+  "notes": "fix: chown preserves lux_core_real setuid; all uploads via curl",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "7c2b86e052972fd726c0dd1320d7e45404ea7184a220e81b21d34a6452e7d2b7",
-    "size": 89791016
+    "sha256": "2319af75516d550cdd94ad7539778513a726eea5c07e0cca41946f9acaa2e2c7",
+    "size": 89788408
   },
   "windows": {
     "url": "",
