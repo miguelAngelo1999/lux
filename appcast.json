@@ -1,11 +1,11 @@
 {
   "version": "1.47.1",
   "channel": "stable",
-  "notes": "feat: anonymous telemetry \u2014 consent dialog, UUID in Settings, 3 levels (full/no domains/off)",
+  "notes": "fix: DMG volume always named 'Lux' \u2014 installer works on all macOS versions",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a61b9c7bfe072b43d4723368171b4f89b6a1da90542acd47fbf10b52f39a2909",
-    "size": 44806267
+    "sha256": "2d1c9a0fe788999937e360a5c0c85d9cd7f16bdf8d27cd946e4a7f2ed9c9486a",
+    "size": 44807005
   },
   "windows": {
     "url": "",
