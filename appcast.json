@@ -1,11 +1,11 @@
 {
-  "version": "1.47.2",
+  "version": "1.47.3",
   "channel": "stable",
   "notes": "fix: telemetry consent dialog no longer blocks core startup \u2014 spinning circle on first launch fixed",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "64eca4ba0aabbdd1e7f7f40ba88b7c7f17735c79a939c629e4379bbff2688a5b",
-    "size": 44806898
+    "sha256": "bb906c30f9d4a4ff41d3bf2a061d614136c3ded342238a68cca177f46349692e",
+    "size": 44806841
   },
   "windows": {
     "url": "",
