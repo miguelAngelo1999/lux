@@ -1,11 +1,11 @@
 {
   "version": "1.47.2",
   "channel": "stable",
-  "notes": "fix: DMG volume always named Lux \u2014 installer works reliably on all macOS versions; fix stale volume detection in updater",
+  "notes": "fix: telemetry consent dialog no longer blocks core startup \u2014 spinning circle on first launch fixed",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "bffdada5a51b52808d088738b14ae67c0dcbc1ce6cc82c9714a0c07372832999",
-    "size": 44807009
+    "sha256": "64eca4ba0aabbdd1e7f7f40ba88b7c7f17735c79a939c629e4379bbff2688a5b",
+    "size": 44806898
   },
   "windows": {
     "url": "",
