@@ -1,11 +1,11 @@
 {
-  "version": "1.47.4",
+  "version": "1.47.5",
   "channel": "stable",
   "notes": "fix: detect stale lux_core with wrong secret \u2014 kill and recover instead of spinning forever",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "6868bd5b31f93a0029bb533aa1d484e97f0090f3b5a5a31be5451eb672a5a49c",
-    "size": 44816516
+    "sha256": "b98f172ce6e554e443f7fe263992c29b3551148ccc3ca46f3358f13b4ef3dca8",
+    "size": 44816515
   },
   "windows": {
     "url": "",
