@@ -1,11 +1,11 @@
 {
-  "version": "1.48.1",
+  "version": "1.48.3",
   "channel": "stable",
-  "notes": "wpad pac bypass: js evaluator, per-connection FindProxyForURL, PAC URL setting",
+  "notes": "fix: revert buggy agent changes; chmod 4755 for lux_core_real; stable baseline restored",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "06125f30324bf4d6cfe2b6b19665d3c743e4d03bcb51b2a827ac296c252dec7b",
-    "size": 89821228
+    "sha256": "7c2b86e052972fd726c0dd1320d7e45404ea7184a220e81b21d34a6452e7d2b7",
+    "size": 89791016
   },
   "windows": {
     "url": "",
