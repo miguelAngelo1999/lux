@@ -1,11 +1,11 @@
 {
-  "version": "1.47.5",
+  "version": "1.47.6",
   "channel": "stable",
-  "notes": "fix: detect stale lux_core with wrong secret \u2014 kill and recover instead of spinning forever",
+  "notes": "fix: telemetry consent no longer blocks startup \u2014 shown as dismissible banner after core connects",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "b98f172ce6e554e443f7fe263992c29b3551148ccc3ca46f3358f13b4ef3dca8",
-    "size": 44816515
+    "sha256": "c097e61ea844c123ba201627d98d275a189bb15849e040d3cc9286891d2143d5",
+    "size": 44809441
   },
   "windows": {
     "url": "",
