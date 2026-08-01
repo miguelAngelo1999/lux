@@ -1,11 +1,11 @@
 {
   "version": "1.48.4",
   "channel": "stable",
-  "notes": "fix: remove LaunchAgent \u2014 Flutter owns lux_core directly; no port conflict; stable",
+  "notes": "fix: correct lux_core binary; remove LaunchAgent; chmod 4755",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "4428299846c570cf2fa1547f7257632a717c63822ed3354ae7c2d01e748de6e3",
-    "size": 89788104
+    "sha256": "436355101a9fb8b0bf2d31cf88fd0ca2d949cdc00ce9c9d986047f2194fa7004",
+    "size": 89711268
   },
   "windows": {
     "url": "",
