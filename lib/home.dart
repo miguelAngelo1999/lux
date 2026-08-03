@@ -2030,6 +2030,7 @@ class _HomeState extends State<Home>
     }
     return Dashboard(homeDir, baseUrl, urlStr, coreManager!,
         onConnected: () {},
-        onRegisterProxyRefresh: (cb) => _proxyListRefresh = cb);
+        onRegisterProxyRefresh: (cb) => _proxyListRefresh = cb,
+        onRefreshTray: _refreshTray);
   }
 }

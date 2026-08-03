@@ -22,6 +22,8 @@ class AppHeaderBar extends StatefulWidget {
   final VoidCallback? onConnected;
   /// Called after a proxy is added/edited so the proxies page can refresh.
   final VoidCallback? onProxyListChanged;
+  /// Called whenever the connection state changes — used to refresh tray menu.
+  final VoidCallback? onConnectionStateChanged;
   /// Extra widgets appended to the AppBar actions (used for window controls).
   final List<Widget>? extraActions;
 
@@ -33,6 +35,7 @@ class AppHeaderBar extends StatefulWidget {
       required this.onCurProxyInfoChange,
       this.onConnected,
       this.onProxyListChanged,
+      this.onConnectionStateChanged,
       this.extraActions});
 
   final String urlStr;
@@ -96,6 +99,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
         setState(() {
           isStarted = true;
         });
+        widget.onConnectionStateChanged?.call();
         // Trigger SSL bump check after connecting
         Future.delayed(const Duration(seconds: 5), () => widget.onConnected?.call());
       } else {
@@ -103,6 +107,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
         setState(() {
           isStarted = false;
         });
+        widget.onConnectionStateChanged?.call();
       }
     } finally {
       setState(() {
@@ -184,6 +189,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
         }
         runtimeStatusChannel?.stream.listen((message) {
           RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));
+          final wasStarted = isStarted;
           setState(() {
             if (!isLoadingSwitch) {
               isStarted = value.isStarted;
@@ -191,6 +197,10 @@ class _State extends State<AppHeaderBar> with WindowListener {
                   .updateIsStarted(value.isStarted);
             }
           });
+          // Refresh tray whenever connection state changes
+          if (value.isStarted != wasStarted) {
+            widget.onConnectionStateChanged?.call();
+          }
           WidgetsBinding.instance.scheduleFrame();
         });
       });
