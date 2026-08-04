@@ -1,11 +1,11 @@
 {
   "version": "1.48.4",
   "channel": "stable",
-  "notes": "fix: correct lux_core binary; remove LaunchAgent; chmod 4755",
+  "notes": "feat: TCP connection result logging \u2014 duration, bytes up/down after each connection closes",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "436355101a9fb8b0bf2d31cf88fd0ca2d949cdc00ce9c9d986047f2194fa7004",
-    "size": 89711268
+    "sha256": "73325785bab8f5457e290c021e65939eeae48c295821c22f2d142f8f7dc5e8ad",
+    "size": 89789866
   },
   "windows": {
     "url": "",
