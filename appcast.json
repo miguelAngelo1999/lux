@@ -1,11 +1,11 @@
 {
-  "version": "1.48.4",
+  "version": "1.48.5",
   "channel": "stable",
-  "notes": "feat: TCP connection result logging \u2014 duration, bytes up/down after each connection closes",
+  "notes": "feat: TCP connection result logging \u2014 duration and bytes after each connection closes",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "73325785bab8f5457e290c021e65939eeae48c295821c22f2d142f8f7dc5e8ad",
-    "size": 89789866
+    "sha256": "ac9cfcfd9a85ccaa9066e4400f3d7da231161e4462fbd23127bd853a969ef566",
+    "size": 89788538
   },
   "windows": {
     "url": "",
