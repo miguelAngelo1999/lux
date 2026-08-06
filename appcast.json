@@ -1,11 +1,11 @@
 {
-  "version": "1.48.5",
+  "version": "1.48.6",
   "channel": "stable",
-  "notes": "feat: anonymous telemetry \u2014 UUID in Settings \u2192 Advanced \u2192 Diagnostics; 3 levels (full/no domains/off); non-blocking banner on first run",
+  "notes": "fix: NetworkDetector no longer drops internet when proxy probe fails transiently while lux_core is running",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "e535da603cc5bed595efc1a45576760e8c76c51ef43d8b7684b4ce953736e10f",
-    "size": 89801481
+    "sha256": "9963d78a35c3abefffd181ab50442f2a3618fe144fe4af38f3eb74f2a86d6694",
+    "size": 89802532
   },
   "windows": {
     "url": "",
