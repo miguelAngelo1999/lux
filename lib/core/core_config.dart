@@ -653,6 +653,10 @@ class Setting {
   final bool? restoreAutoDetect;
   final String? healthCheckUrl;
   final String? delayTestUrl;
+  /// User-configured PAC/WPAD URL. When non-empty, lux evaluates
+  /// FindProxyForURL() per connection and routes DIRECT traffic around the proxy.
+  /// Empty string or null = disabled (auto-detect from DHCP still applies).
+  final String? pacUrl;
 
   const Setting({
     this.mode = ProxyMode.mixed,
@@ -676,6 +680,7 @@ class Setting {
     this.restoreAutoDetect,
     this.healthCheckUrl,
     this.delayTestUrl,
+    this.pacUrl,
   });
 
   Setting.fromJson(Map<String, dynamic> json)
@@ -702,7 +707,8 @@ class Setting {
         loadBalanceStrategy = (json['loadBalance'] as Map?)?['strategy'] as String? ?? 'least-conn',
         restoreAutoDetect = json['restoreAutoDetect'] as bool?,
         healthCheckUrl = json['healthCheckUrl'] as String?,
-        delayTestUrl = json['delayTestUrl'] as String?;
+        delayTestUrl = json['delayTestUrl'] as String?,
+        pacUrl = json['pacUrl'] as String?;
 
   Map<String, dynamic> toJson() => {
         'mode': mode == ProxyMode.tun ? 'tun' : mode == ProxyMode.system ? 'system' : 'mixed',
@@ -754,6 +760,7 @@ class Setting {
     bool? restoreAutoDetect,
     String? healthCheckUrl,
     String? delayTestUrl,
+    Object? pacUrl = _sentinel,
   }) =>
       Setting(
         mode: mode ?? this.mode,
@@ -777,6 +784,7 @@ class Setting {
         restoreAutoDetect: restoreAutoDetect ?? this.restoreAutoDetect,
         healthCheckUrl: healthCheckUrl ?? this.healthCheckUrl,
         delayTestUrl: delayTestUrl ?? this.delayTestUrl,
+        pacUrl: pacUrl == _sentinel ? this.pacUrl : pacUrl as String?,
       );
 
   static ProxyMode _parseMode(String s) {
@@ -811,4 +819,47 @@ class DetectedProxy {
       );
 
   String get address => '$host:$port';
+}
+
+// ── Telemetry preferences ─────────────────────────────────────────────────────
+
+/// Returns the stored telemetry level string, or null if not yet set
+/// (meaning first-run consent dialog has not been shown yet).
+Future<String?> readTelemetryLevel() async {
+  final prefs = await _readPrefs();
+  final v = prefs['telemetryLevel'];
+  return v is String ? v : null;
+}
+
+Future<void> writeTelemetryLevel(String level) async {
+  final prefs = await _readPrefs();
+  prefs['telemetryLevel'] = level;
+  await _writePrefs(prefs);
+}
+
+/// Stable anonymous device UUID. Generated once, never changes.
+Future<String> readOrCreateTelemetryUuid() async {
+  final prefs = await _readPrefs();
+  var uuid = prefs['telemetryUuid'];
+  if (uuid is String && uuid.isNotEmpty) return uuid;
+  // Generate a v4-like UUID using Dart's random
+  final r = List.generate(16, (_) => (DateTime.now().microsecondsSinceEpoch + _randomByte()) & 0xff);
+  r[6] = (r[6] & 0x0f) | 0x40; // version 4
+  r[8] = (r[8] & 0x3f) | 0x80; // variant
+  String hex(int b) => b.toRadixString(16).padLeft(2, '0');
+  uuid = '${hex(r[0])}${hex(r[1])}${hex(r[2])}${hex(r[3])}'
+      '-${hex(r[4])}${hex(r[5])}'
+      '-${hex(r[6])}${hex(r[7])}'
+      '-${hex(r[8])}${hex(r[9])}'
+      '-${hex(r[10])}${hex(r[11])}${hex(r[12])}${hex(r[13])}${hex(r[14])}${hex(r[15])}';
+  prefs['telemetryUuid'] = uuid;
+  await _writePrefs(prefs);
+  return uuid;
+}
+
+int _randomByte() {
+  // Dart doesn't have crypto random easily without dart:math import here,
+  // use microseconds XOR'd with hash for entropy.
+  final t = DateTime.now().microsecondsSinceEpoch;
+  return ((t ^ (t >> 8) ^ (t >> 16)) & 0xff);
 }

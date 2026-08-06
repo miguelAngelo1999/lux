@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:lux/util/cert_installer.dart';
 import 'package:lux/util/network_reset.dart';
+import 'package:lux/util/telemetry.dart' as telem;
+import 'package:lux/core/core_config.dart' show readTelemetryLevel, writeTelemetryLevel, readOrCreateTelemetryUuid;
 import 'package:lux/widget/setup_wizard.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -434,6 +436,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                     'Re-enable Windows "Automatically detect settings" when Lux stops',
                     s.restoreAutoDetect ?? false,
                     (v) => _save(s.copyWith(restoreAutoDetect: v)))),
+          e('PAC / WPAD URL', 'proxy auto-config wpad pac bypass corporate direct',
+              _pacUrlTile()),
           e('Auto Mode Type', 'fallback url-test fastest latency automatic',
               _dropdownTile<String>('Auto Mode Type',
                   s.autoModeType.isEmpty ? 'fallback' : s.autoModeType,
@@ -569,6 +573,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               _pacStatusTile()),
           e('Backup Restore', 'export import configuration backup',
               _importExportTile()),
+          e('Diagnostics', 'telemetry anonymous logs send report uuid id',
+              _diagnosticsTile()),
         ],
       ),
     ];
@@ -1007,6 +1013,78 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
+  // ── PAC / WPAD URL tile ────────────────────────────────────────────────────
+
+  Widget _pacUrlTile() {
+    final s = _setting!;
+    final current = s.pacUrl ?? '';
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.alt_route, size: 20),
+      title: TText('PAC / WPAD URL', style: const TextStyle(fontSize: 14)),
+      subtitle: Text(
+        current.isNotEmpty
+            ? current
+            : 'Auto-detect from network (DHCP option 252)',
+        style: const TextStyle(fontSize: 11),
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: const Icon(Icons.edit, size: 16),
+      onTap: _isSaving ? null : () async {
+        final ctrl = TextEditingController(text: current);
+        final saved = await showDialog<String?>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('PAC / WPAD URL'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: ctrl,
+                  decoration: const InputDecoration(
+                    hintText: 'http://wpad/wpad.dat (leave blank to auto-detect)',
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                  autocorrect: false,
+                  keyboardType: TextInputType.url,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'When set, Lux fetches this PAC file and calls '
+                  'FindProxyForURL() per connection. Domains returning '
+                  '"DIRECT" bypass the proxy entirely.\n\n'
+                  'Example use: route s.dnofd.com (Warsaw) DIRECT to '
+                  'avoid TCP fingerprint detection.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(null),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(''),
+                child: const Text('Clear'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        );
+        if (saved == null || !mounted) return;
+        await _save(s.copyWith(pacUrl: saved.isEmpty ? '' : saved));
+        // Refresh the PAC status tile
+        setState(() {});
+      },
+    );
+  }
+
   Widget _pacStatusTile() {
     return FutureBuilder<Map<String, dynamic>>(
       future: widget.coreManager.getPacStatus(),
@@ -1016,35 +1094,55 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         final active = data['active'] as bool? ?? false;
         final count = data['count'] as int? ?? 0;
         final url = data['url'] as String? ?? '';
+        final jsEvalActive = data['jsEvalActive'] as bool? ?? false;
         final domains = List<String>.from(data['domains'] as List? ?? []);
         final cidrs = List<String>.from(data['cidrs'] as List? ?? []);
+
+        Widget badge;
+        if (jsEvalActive) {
+          badge = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text('JS eval',
+                style: TextStyle(fontSize: 10, color: Colors.blue)),
+          );
+        } else if (active) {
+          badge = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text('$count rules',
+                style: const TextStyle(fontSize: 10, color: Colors.green)),
+          );
+        } else {
+          badge = const SizedBox.shrink();
+        }
+
+        String subtitle;
+        if (jsEvalActive) {
+          subtitle = 'From: $url\nJS eval active — FindProxyForURL() called per connection';
+        } else if (active) {
+          subtitle = 'From: $url\n'
+              'DIRECT domains: ${domains.take(3).join(", ")}${domains.length > 3 ? "…" : ""}'
+              '${cidrs.isNotEmpty ? "\nDIRECT CIDRs: ${cidrs.take(2).join(", ")}${cidrs.length > 2 ? "…" : ""}" : ""}';
+        } else {
+          subtitle = 'No PAC active on this network';
+        }
 
         return ListTile(
           dense: true,
           title: Row(children: [
-            TText('PAC Rules', style: TextStyle(fontSize: 14)),
+            TText('PAC Rules', style: const TextStyle(fontSize: 14)),
             const SizedBox(width: 8),
-            if (active)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text('$count active',
-                    style: const TextStyle(fontSize: 10, color: Colors.green)),
-              ),
+            badge,
           ]),
-          subtitle: active
-              ? Text(
-                  'From: $url\n'
-                  'DIRECT domains: ${domains.take(3).join(", ")}${domains.length > 3 ? "..." : ""}\n'
-                  'DIRECT CIDRs: ${cidrs.take(2).join(", ")}${cidrs.length > 2 ? "..." : ""}',
-                  style: const TextStyle(fontSize: 11),
-                )
-              : TText('No PAC file detected on this network',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
-          trailing: active
+          subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
+          trailing: active || jsEvalActive
               ? IconButton(
                   icon: const Icon(Icons.refresh, size: 16),
                   tooltip: 'Refresh',
@@ -2231,6 +2329,86 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         },
         child: TText('Clear', style: TextStyle(fontSize: 12)),
       ),
+    );
+  }
+
+  Widget _diagnosticsTile() {
+    return FutureBuilder<List<String>>(
+      future: Future.wait([
+        readOrCreateTelemetryUuid(),
+        readTelemetryLevel().then((v) => v ?? 'full'),
+      ]),
+      builder: (ctx, snap) {
+        final uuid = snap.data?[0] ?? '…';
+        final level = snap.data?[1] ?? 'full';
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // UUID row
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.fingerprint, size: 20),
+              title: const Text('Your Device ID', style: TextStyle(fontSize: 14)),
+              subtitle: Text(
+                uuid,
+                style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.copy, size: 16),
+                tooltip: 'Copy ID',
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: uuid));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('ID copied'), duration: Duration(seconds: 1)),
+                  );
+                },
+              ),
+            ),
+            // Level selector
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.analytics_outlined, size: 20),
+              title: const Text('Diagnostics', style: TextStyle(fontSize: 14)),
+              subtitle: const Text(
+                'Anonymous data to help diagnose issues',
+                style: TextStyle(fontSize: 12),
+              ),
+              trailing: DropdownButton<String>(
+                value: level,
+                underline: const SizedBox(),
+                items: const [
+                  DropdownMenuItem(value: 'full', child: Text('Full', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'ops',  child: Text('No domains', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'off',  child: Text('Off', style: TextStyle(fontSize: 13))),
+                ],
+                onChanged: (v) async {
+                  if (v == null) return;
+                  await writeTelemetryLevel(v);
+                  telem.setTelemetryLevel(telem.telemetryLevelFromString(v));
+                  if (mounted) setState(() {});
+                },
+              ),
+            ),
+            // Send report button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.send_outlined, size: 16),
+                label: const Text('Send Report Now', style: TextStyle(fontSize: 12)),
+                onPressed: level == 'off' ? null : () async {
+                  await telem.flushTelemetry();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Diagnostic report sent'), duration: Duration(seconds: 2)),
+                    );
+                  }
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

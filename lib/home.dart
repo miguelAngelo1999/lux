@@ -11,6 +11,7 @@ import 'package:lux/const/const.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/util/app_log.dart';
+import 'package:lux/util/telemetry.dart';
 import 'package:lux/util/cert_installer.dart';
 import 'package:lux/util/installed_certs_store.dart';
 import 'package:lux/util/network_detector.dart';
@@ -1198,6 +1199,9 @@ class _HomeState extends State<Home>
     var curHomeDir = await getHomeDir();
     await initAppLog(curHomeDir);
     appLog('APP', 'init started homeDir=$curHomeDir');
+
+    // ── Telemetry init (non-blocking — must not delay core startup) ─────────
+    _initTelemetry(); // intentionally not awaited
     final Version currentVersion = Version.parse(await getAppVersion());
 
     // ── LaunchAgent fast path (macOS only) ──────────────────────────────────
@@ -1805,6 +1809,54 @@ class _HomeState extends State<Home>
     // NetworkDetector has no resources to dispose
     _networkDetector = null;
     super.dispose();
+  }
+
+  // ── Telemetry ──────────────────────────────────────────────────────────────
+
+  Future<void> _initTelemetry() async {
+    try {
+      final uuid = await readOrCreateTelemetryUuid();
+      final storedLevel = await readTelemetryLevel();
+
+      if (storedLevel == null) {
+        // First run — default to full, show non-blocking banner after 8s
+        await writeTelemetryLevel('full');
+        await initTelemetry(uuid: uuid, level: TelemetryLevel.full);
+        Future.delayed(const Duration(seconds: 8), () {
+          if (mounted) _showTelemetryConsentBanner(uuid);
+        });
+        return;
+      }
+
+      await initTelemetry(uuid: uuid, level: telemetryLevelFromString(storedLevel));
+    } catch (e) {
+      debugPrint('[Telemetry] init error: $e');
+    }
+  }
+
+  void _showTelemetryConsentBanner(String uuid) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      duration: const Duration(seconds: 30),
+      content: const Row(children: [
+        Icon(Icons.analytics_outlined, size: 16, color: Colors.white),
+        SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Lux sends anonymous diagnostics to help fix bugs. Change in Settings → Advanced.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
+      ]),
+      action: SnackBarAction(
+        label: 'Turn off',
+        onPressed: () async {
+          await writeTelemetryLevel('off');
+          setTelemetryLevel(TelemetryLevel.off);
+          appLog('APP', 'telemetry: off (banner)');
+        },
+      ),
+    ));
   }
 
   @override
