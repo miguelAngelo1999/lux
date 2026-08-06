@@ -472,6 +472,7 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   Future<void> _nextStep() async {
+    _navigated = true; // prevent double-navigation from _applyAndNext
     // Save "don't ask again" for this step+cert combo AND machine-level
     if (_dontAskAgain) {
       final fp = widget.sslStatus.certInfo?.sha256Fingerprint ?? '';
@@ -507,16 +508,17 @@ class _SetupWizardState extends State<SetupWizard> {
       case 0: await _doInstallCert(); if (_statusOk) await _nextStep(); break;
       case 1: await _doApplyEnvVars(); if (_statusOk) await _nextStep(); break;
       case 2:
-        // _doApplyMitm calls _nextStep() internally when no apps are selected.
-        // Guard against double-navigation by checking if dialog is still mounted.
-        final wasStep2 = _step;
+        // _doApplyMitm may call _nextStep() internally (empty selection or success).
+        // Use a flag to prevent double-navigation — _nextStep() sets it.
+        _navigated = false;
         await _doApplyMitm();
-        // Only call _nextStep if _doApplyMitm didn't already navigate us away
-        // (i.e. step didn't change and we're still mounted and _statusOk)
-        if (mounted && _step == wasStep2 && _statusOk) await _nextStep();
+        if (!_navigated && mounted && _statusOk) await _nextStep();
         break;
     }
   }
+
+  // Set to true by _nextStep() so _applyAndNext doesn't call it again.
+  bool _navigated = false;
 
   @override
   Widget build(BuildContext context) {
