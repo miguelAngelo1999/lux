@@ -1,11 +1,11 @@
 {
   "version": "1.48.6",
   "channel": "stable",
-  "notes": "fix: NetworkDetector no longer drops internet when proxy probe fails transiently while lux_core is running",
+  "notes": "fix: TCP timeout 10s, telemetry, NetworkDetector stable, binary hash guard, chmod 4755, no LaunchAgent",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "9963d78a35c3abefffd181ab50442f2a3618fe144fe4af38f3eb74f2a86d6694",
-    "size": 89802532
+    "sha256": "439a30bd73decefd70442f28e8c03dd825023ab81181db7351ca449fa9af5516",
+    "size": 89802615
   },
   "windows": {
     "url": "",
