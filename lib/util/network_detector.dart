@@ -43,6 +43,12 @@ class NetworkDetector {
         } else {
           appLog('NET-DETECT', 'PAC server unreachable → not on corporate network');
           // Confirm direct internet works before switching
+          // BUT: if lux_core is actively running, don't switch — could be transient PAC hiccup
+          final isStarted = await coreManager.getIsStarted();
+          if (isStarted) {
+            appLog('NET-DETECT', 'PAC unreachable but lux_core running — treating as transient, no change');
+            return true;
+          }
           final directWorks = await _probeDirectConnectivity();
           if (directWorks) {
             appLog('NET-DETECT', 'direct internet works → switching to bypass_all');
@@ -76,6 +82,12 @@ class NetworkDetector {
         await _ensureRule('proxy_all');
         return true;
       } else {
+        // If lux_core is running, treat proxy unreachable as transient — don't switch
+        final isStarted = await coreManager.getIsStarted();
+        if (isStarted) {
+          appLog('NET-DETECT', 'proxy unreachable but lux_core running — treating as transient, no change');
+          return true;
+        }
         final directWorks = await _probeDirectConnectivity();
         if (directWorks) {
           appLog('NET-DETECT', 'proxy unreachable + direct works → bypass_all');
