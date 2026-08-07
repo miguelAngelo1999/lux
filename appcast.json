@@ -1,11 +1,11 @@
 {
-  "version": "1.48.7",
+  "version": "1.48.8",
   "channel": "stable",
-  "notes": "fix: PAC myIpAddress() returns real LAN IP not TUN IP \u2014 fixes DIRECT routing in Mixed/TUN mode",
+  "notes": "fix: PAC DIRECT override ignored when upstream proxy is configured",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "19410ab3763938504ad78cad53efe8a4b6fe097ddb82d687332f4deeedc971c8",
-    "size": 89803033
+    "sha256": "43d05c346fc7fb7857adcd89adde98ffe6abe27427a2673429b608ec62f85f25",
+    "size": 89800337
   },
   "windows": {
     "url": "",
