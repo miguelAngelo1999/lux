@@ -275,6 +275,7 @@ KNOWN_GOOD_BINARIES = {
     'afd49265cfc97686e248920342caa50e1a58a96d95ddbd4090fd4a8bdd4ad54e',  # 1.47.x
     '468657be2f35d6a63deb9aac0dae04c7c6fc1ecd76f97da14bfa99572a84a4db',  # 1.48.5+ (TCP logging)
     '0ab5a30a029b835f1ee357ef074c261290e6223798ecf83c24ff17f91446e815',  # 1.46.9
+    'c0d279901d04b318bdd46e76688ba66a0f8a92e49f94dd4b2c5db7588bae58f6',  # 1.48.7+ (PAC myIpAddress TUN fix)
 }
 BAD_BINARIES = {
     '403849f99e692dbe013066f0cfcd84123f05569dac41ef9787372d5ed77de39e',  # agent's broken binary
