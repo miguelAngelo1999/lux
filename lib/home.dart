@@ -11,6 +11,7 @@ import 'package:lux/dashboard.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/tray.dart';
+import 'package:lux/util/app_log.dart';
 import 'package:lux/util/notifier.dart';
 import 'package:flutter/services.dart';
 import 'package:lux/util/process_manager.dart';
@@ -105,6 +106,8 @@ class _HomeState extends State<Home>
     await windowManager.setPreventClose(true);
     var corePath = path.join(Paths.assetsBin.path, LuxCoreName.name);
     var curHomeDir = await getHomeDir();
+    await initAppLog(curHomeDir);
+    appLog('APP', 'init started homeDir=$curHomeDir');
     final port = await findAvailablePort(8000, 9000);
     var uuid = Uuid();
     var secret = uuid.v4();
