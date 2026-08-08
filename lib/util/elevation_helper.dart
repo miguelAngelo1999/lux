@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 /// Helper to verify the user has admin/elevated privileges before
 /// revealing sensitive data like proxy passwords.
