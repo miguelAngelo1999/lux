@@ -6,7 +6,7 @@ import 'package:lux/pages/log_page.dart';
 import 'package:lux/pages/proxies_page.dart';
 import 'package:lux/pages/rules_page.dart';
 import 'package:lux/pages/settings_page.dart';
-import 'package:lux/util/utils.dart';
+import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
 import 'package:lux/widget/app_bottom_bar.dart';
 import 'package:lux/widget/app_header_bar.dart';
 import 'package:window_manager/window_manager.dart';
@@ -42,7 +42,30 @@ class _DashboardState extends State<Dashboard> with WindowListener {
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    checkForUpdate();
+    _runUpdateCheck();
+  }
+
+  /// Checks for updates once the proxy is likely up.
+  ///
+  /// The appcast is fetched through the local proxy, so this has to wait for
+  /// lux_core to start and connect. Retries with backoff because on a cold
+  /// start the network is often not ready on the first attempt.
+  Future<void> _runUpdateCheck() async {
+    await Future.delayed(const Duration(seconds: 15));
+    if (!mounted) return;
+    for (int attempt = 0; attempt < 3; attempt++) {
+      try {
+        final info = await checkForUpdate();
+        if (info == null || !info.hasUpdate) return;
+        if (!mounted) return;
+        await showUpdateDialog(context, info);
+        return;
+      } catch (_) {
+        if (attempt < 2) {
+          await Future.delayed(Duration(seconds: 10 * (attempt + 1)));
+        }
+      }
+    }
   }
 
   @override

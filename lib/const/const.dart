@@ -60,6 +60,15 @@ const localServersGroupKey = 'local_servers';
 
 const latestReleaseUrl = 'https://github.com/igoogolx/lux/releases/latest';
 
+/// Default appcast feed describing the newest build (version, URL, sha256, size).
+/// Overridable at runtime via readCustomAppcastUrl() so a build can be pointed
+/// at a different update server without recompiling.
+const appcastUrl =
+    'https://drive.usercontent.google.com/download?id=1jf-8thv_VVPIQ3k_n83UhygzEKkydI2p&export=download&confirm=t';
+
+/// Fallback page opened when an in-app update cannot be completed.
+const releasesPageUrl = latestReleaseUrl;
+
 enum ProxyItemAction {
   edit,
   delete,

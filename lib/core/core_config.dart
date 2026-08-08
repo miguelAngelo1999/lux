@@ -1,8 +1,58 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:lux/util/utils.dart';
 import 'package:path/path.dart' as path;
 
 import '../const/const.dart';
+
+// ── Local app preferences (lux_prefs.json) ──────────────────────────────────
+// Deliberately separate from config.json, which lux_core owns and rewrites.
+// Keeping Flutter-only settings here means we can never corrupt core config
+// (notably the DNS server lists) by writing our own keys into it.
+
+Future<String> _prefsPath() async {
+  final homeDir = await getHomeDir();
+  return path.join(homeDir, 'lux_prefs.json');
+}
+
+Future<Map<String, dynamic>> _readPrefs() async {
+  try {
+    final p = await _prefsPath();
+    final f = File(p);
+    if (!f.existsSync()) return {};
+    final decoded = jsonDecode(f.readAsStringSync());
+    return decoded is Map<String, dynamic> ? decoded : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+Future<void> _writePrefs(Map<String, dynamic> prefs) async {
+  try {
+    final p = await _prefsPath();
+    File(p).writeAsStringSync(jsonEncode(prefs));
+  } catch (_) {}
+}
+
+/// Custom appcast URL — overrides [appcastUrl] when set.
+/// Stored in local prefs so it survives app updates.
+Future<String?> readCustomAppcastUrl() async {
+  final prefs = await _readPrefs();
+  final v = prefs['customAppcastUrl'];
+  return v is String && v.isNotEmpty ? v : null;
+}
+
+Future<void> writeCustomAppcastUrl(String? url) async {
+  final prefs = await _readPrefs();
+  if (url == null || url.isEmpty) {
+    prefs.remove('customAppcastUrl');
+  } else {
+    prefs['customAppcastUrl'] = url;
+  }
+  await _writePrefs(prefs);
+}
 
 Future<Map<String, dynamic>> readConfig() async {
   try {
