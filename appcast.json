@@ -1,7 +1,7 @@
 {
   "version": "1.50.2",
   "channel": "stable",
-  "notes": "release: 1.50.1 with a release path for the rebuild lineage",
+  "notes": "fix: connections were being killed mid-response by the statistics cache (fixes stalled Kiro/streaming responses); rule row delete and edit buttons were unclickable",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "5baee97704fbc6619f43b666a07939df62a320ca5580c1a83c6c4f05926d3b01",

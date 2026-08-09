@@ -104,6 +104,30 @@ def upload_in_place(svc, file_id, name, media):
         return created["id"]
 
 
+def release_notes():
+    """Subject of the newest commit that is not itself a release commit.
+
+    Taking the newest commit outright described the *previous* release, because
+    the release commit is the most recent thing on the branch by the time this
+    runs. LUX_RELEASE_NOTES overrides when the summary needs to read better than
+    a commit subject.
+    """
+    override = os.environ.get("LUX_RELEASE_NOTES", "").strip()
+    if override:
+        return override
+
+    log = subprocess.run(
+        ["git", "-C", REPO, "log", "-30", "--pretty=%s"],
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    for subject in log:
+        s = subject.strip()
+        if s and not s.startswith(("release:", "chore: bump")):
+            return s
+    return log[0].strip() if log else ""
+
+
 def main():
     if len(sys.argv) != 3:
         print(__doc__.strip())
@@ -138,11 +162,7 @@ def main():
         f"?id={dmg_id}&export=download&confirm=t"
     )
 
-    notes = subprocess.run(
-        ["git", "-C", REPO, "log", "-1", "--pretty=%s"],
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    notes = release_notes()
 
     appcast = {
         "version": version,
