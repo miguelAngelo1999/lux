@@ -13,6 +13,8 @@ import 'package:lux/tr.dart';
 import 'package:lux/tray.dart';
 import 'package:lux/util/app_log.dart';
 import 'package:lux/util/notifier.dart';
+import 'package:lux/util/t_text.dart';
+import 'package:lux/util/telemetry.dart' as telem;
 import 'package:flutter/services.dart';
 import 'package:lux/util/process_manager.dart';
 import 'package:lux/widget/quick_edit_window.dart';
@@ -108,6 +110,20 @@ class _HomeState extends State<Home>
     var curHomeDir = await getHomeDir();
     await initAppLog(curHomeDir);
     appLog('APP', 'init started homeDir=$curHomeDir');
+
+    // Translations are needed before the first frame that uses TText, and the
+    // load is a single bundled asset read.
+    await TranslationCache.load();
+
+    // Usage reporting is opt-in; initTelemetry returns immediately when the
+    // stored level is off.
+    final telemetryLevel = await readTelemetryLevel();
+    final telemetryUuid = await readOrCreateTelemetryUuid();
+    await telem.initTelemetry(
+      uuid: telemetryUuid,
+      level: telem.telemetryLevelFromString(telemetryLevel),
+    );
+
     final port = await findAvailablePort(8000, 9000);
     var uuid = Uuid();
     var secret = uuid.v4();

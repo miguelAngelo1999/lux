@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:lux/util/utils.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as path;
+import 'package:uuid/uuid.dart';
 
 import '../const/const.dart';
 
@@ -52,6 +54,72 @@ Future<void> writeCustomAppcastUrl(String? url) async {
     prefs['customAppcastUrl'] = url;
   }
   await _writePrefs(prefs);
+}
+
+/// Usage-reporting level: "off", "ops" or "full". Absent means off, so a build
+/// that has never been configured reports nothing.
+Future<String> readTelemetryLevel() async {
+  final prefs = await _readPrefs();
+  final v = prefs['telemetryLevel'];
+  return v is String && v.isNotEmpty ? v : 'off';
+}
+
+Future<void> writeTelemetryLevel(String level) async {
+  final prefs = await _readPrefs();
+  prefs['telemetryLevel'] = level;
+  await _writePrefs(prefs);
+}
+
+/// Stable anonymous device id, generated on first read.
+///
+/// Random and unrelated to any account; it exists so a user can quote it when
+/// reporting a problem. Stored in lux_prefs.json so it survives app updates.
+Future<String> readOrCreateTelemetryUuid() async {
+  final prefs = await _readPrefs();
+  final existing = prefs['telemetryUuid'];
+  if (existing is String && existing.isNotEmpty) return existing;
+  final generated = const Uuid().v4();
+  prefs['telemetryUuid'] = generated;
+  await _writePrefs(prefs);
+  return generated;
+}
+
+/// Selected UI language: "system", "en", or a language code such as "pt".
+///
+/// Stored in lux_prefs.json, but falls back to the `language` field in
+/// config.json so an existing choice made through the web dashboard is honoured.
+/// Writing goes only to prefs, because config.json belongs to lux_core and a
+/// partial write there risks clobbering fields it owns.
+Future<String> readLocale() async {
+  final prefs = await _readPrefs();
+  final v = prefs['language'];
+  if (v is String && v.isNotEmpty) return v;
+  return readLanguage();
+}
+
+Future<void> setLocale(String code) async {
+  final prefs = await _readPrefs();
+  prefs['language'] = code;
+  await _writePrefs(prefs);
+}
+
+/// Persist the theme choice alongside the other Flutter-only preferences.
+Future<void> writeTheme(ThemeMode mode) async {
+  final prefs = await _readPrefs();
+  prefs['theme'] = switch (mode) {
+    ThemeMode.light => 'light',
+    ThemeMode.dark => 'dark',
+    ThemeMode.system => 'system',
+  };
+  await _writePrefs(prefs);
+}
+
+Future<String> getAppVersionString() async {
+  try {
+    return (await PackageInfo.fromPlatform()).version;
+  } catch (_) {
+    return 'unknown';
+  }
 }
 
 Future<Map<String, dynamic>> readConfig() async {

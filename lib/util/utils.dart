@@ -79,12 +79,19 @@ Future<void> setAutoLaunch(CoreManager? coreManager) async {
 Locale convertLocale(String locale) {
   switch (locale) {
     case 'en-US':
+    case 'en':
       {
         return const Locale('en');
       }
     case 'zh-CN':
+    case 'zh':
       {
         return const Locale('zh');
+      }
+    // Bare language codes from the Settings picker, e.g. "pt".
+    case 'pt':
+      {
+        return const Locale('pt');
       }
     default:
       {
@@ -99,7 +106,9 @@ Locale convertLocale(String locale) {
 }
 
 Future<Locale> getLocale() async {
-  var curLanguage = await readLanguage();
+  // readLocale prefers the Flutter-side preference and falls back to the
+  // language recorded in config.json.
+  var curLanguage = await readLocale();
   return convertLocale(curLanguage);
 }
 
