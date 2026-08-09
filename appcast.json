@@ -1,11 +1,11 @@
 {
-  "version": "1.48.8",
+  "version": "1.50.1",
   "channel": "stable",
-  "notes": "fix: PAC DIRECT override ignored when upstream proxy is configured",
+  "notes": "fix: rule row actions were laid out past the row edge",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "43d05c346fc7fb7857adcd89adde98ffe6abe27427a2673429b608ec62f85f25",
-    "size": 89800337
+    "sha256": "4232a9a849ab6deee4f631a2c6f0bff2b5b1b04053647915aeb56abb200339b4",
+    "size": 34634016
   },
   "windows": {
     "url": "",
