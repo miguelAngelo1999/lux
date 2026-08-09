@@ -3,6 +3,13 @@ import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+/// Rules list, addressed by rule id throughout.
+///
+/// The previous version identified rules by their raw string, which also encoded
+/// enabled state. That made row keys change on toggle, forced a page-wide
+/// mutation lock plus a timed reload guard to paper over the resulting races,
+/// and made reorder compute its target index before a removal had shifted the
+/// list. All of that goes away once identity is stable.
 class RulesPage extends StatefulWidget {
   final CoreManager coreManager;
   const RulesPage({super.key, required this.coreManager});
@@ -13,12 +20,21 @@ class RulesPage extends StatefulWidget {
 
 class _RulesPageState extends State<RulesPage> with WindowListener {
   List<CustomizedRuleItem> _rules = [];
+  List<RuleGroup> _groups = [];
+  Map<String, RuleShadow> _shadows = {};
+
   bool _isLoading = true;
-  bool _isMutating = false; // prevent reload during mutations
+
+  /// Ids with a mutation in flight. Scoped per row so one slow request cannot
+  /// freeze the whole page, which a single page-wide flag did.
+  final Set<String> _busy = {};
+
+  /// Collapsed group ids.
+  final Set<String> _collapsed = {};
+
   String _search = '';
   final _searchCtrl = TextEditingController();
 
-  // Proxy names for policy dropdown
   List<String> _proxyNames = ['DIRECT', 'PROXY', 'REJECT'];
 
   static const _ruleTypes = [
@@ -36,12 +52,15 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     super.initState();
     windowManager.addListener(this);
     _load();
-    _searchCtrl.addListener(() => setState(() => _search = _searchCtrl.text.toLowerCase()));
+    _searchCtrl.addListener(
+        () => setState(() => _search = _searchCtrl.text.toLowerCase()));
   }
 
   @override
   void onWindowFocus() {
-    if (!_isMutating) _load();
+    // Reload only when nothing is in flight. No timed guard is needed: ids are
+    // stable, so a refresh cannot mistake one rule for another.
+    if (_busy.isEmpty) _load();
   }
 
   @override
@@ -54,97 +73,129 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   Future<void> _load() async {
     try {
       final rules = await widget.coreManager.getCustomizedRules();
+      final groups = await widget.coreManager.getRuleGroups();
       final proxyList = await widget.coreManager.getProxyList();
-      if (mounted) {
-        setState(() {
-          _rules = rules;
-          _proxyNames = [
-            'DIRECT',
-            'PROXY',
-            'REJECT',
-            ...proxyList.proxies.map((p) => p.name).where((n) => n.isNotEmpty),
-          ];
-          _isLoading = false;
-        });
-      }
+
+      // Diagnostics are advisory; a failure must not block the list.
+      Map<String, RuleShadow> shadows = {};
+      try {
+        final diag = await widget.coreManager.getRuleDiagnostics();
+        shadows = diag.shadowById;
+      } catch (_) {}
+
+      if (!mounted) return;
+      setState(() {
+        _rules = rules;
+        _groups = groups;
+        _shadows = shadows;
+        _proxyNames = [
+          'DIRECT',
+          'PROXY',
+          'REJECT',
+          ...proxyList.proxies.map((p) => p.name).where((n) => n.isNotEmpty),
+        ];
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _error('Could not load rules: $e');
+      }
     }
   }
 
-  List<CustomizedRuleItem> get _filtered {
-    if (_search.isEmpty) return _rules;
-    return _rules.where((r) =>
-        r.ruleType.toLowerCase().contains(_search) ||
+  void _error(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  bool _matchesSearch(CustomizedRuleItem r) {
+    if (_search.isEmpty) return true;
+    return r.ruleType.toLowerCase().contains(_search) ||
         r.payload.toLowerCase().contains(_search) ||
-        r.policy.toLowerCase().contains(_search)).toList();
+        r.policy.toLowerCase().contains(_search) ||
+        r.slug.toLowerCase().contains(_search);
+  }
+
+  /// Rules for one group, in order, honouring the search filter.
+  List<CustomizedRuleItem> _rulesIn(String groupId) {
+    final out = _rules
+        .where((r) => r.groupId == groupId && _matchesSearch(r))
+        .toList();
+    out.sort((a, b) => a.order.compareTo(b.order));
+    return out;
+  }
+
+  /// Runs [action] with the row marked busy, restoring state on failure.
+  ///
+  /// The optimistic update is applied by the caller; if the request fails we
+  /// reload rather than trying to invert it, so the list always reflects what is
+  /// actually stored.
+  Future<void> _mutate(String id, Future<void> Function() action) async {
+    setState(() => _busy.add(id));
+    try {
+      await action();
+      await _load();
+    } catch (e) {
+      _error('$e');
+      await _load();
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
+    }
   }
 
   Future<void> _toggle(CustomizedRuleItem item) async {
     setState(() {
-      _isMutating = true;
-      final idx = _rules.indexOf(item);
-      if (idx >= 0) {
-        _rules[idx] = item.copyWith(
-          disabled: !item.disabled,
-          raw: item.disabled ? item.toRawString() : '#${item.toRawString()}',
-        );
-      }
+      final i = _rules.indexWhere((r) => r.id == item.id);
+      if (i >= 0) _rules[i] = item.copyWith(disabled: !item.disabled);
     });
-    try {
-      await widget.coreManager.toggleCustomizedRule(item.raw);
-    } catch (e) {
-      debugPrint('Toggle error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Toggle failed: $e'), backgroundColor: Colors.red),
-        );
-        _load();
-      }
-    } finally {
-      if (mounted) setState(() => _isMutating = false);
-    }
+    await _mutate(item.id, () => widget.coreManager.toggleRuleById(item.id));
   }
 
   Future<void> _delete(CustomizedRuleItem item) async {
-    setState(() { _isMutating = true; _rules.remove(item); });
-    try {
-      await widget.coreManager.deleteCustomizedRules([item.raw]);
-    } catch (_) {
-      _load();
-    } finally {
-      if (mounted) setState(() => _isMutating = false);
-    }
+    setState(() => _rules.removeWhere((r) => r.id == item.id));
+    await _mutate(item.id, () => widget.coreManager.deleteRuleById(item.id));
   }
 
-  Future<void> _moveUp(int filteredIdx) async {
-    final item = _filtered[filteredIdx];
-    final fullIdx = _rules.indexOf(item);
-    if (fullIdx <= 0) return;
+  /// Reorder within one group, sending ids rather than raw strings.
+  ///
+  /// Because the request carries ids scoped to a single group, a rule hidden by
+  /// the search filter cannot be dropped: the core keeps anything it is not told
+  /// about in its existing position.
+  Future<void> _reorder(String groupId, int oldIdx, int newIdx) async {
+    final visible = _rulesIn(groupId);
+    if (newIdx > oldIdx) newIdx--;
+    if (oldIdx < 0 || oldIdx >= visible.length) return;
+
+    final moved = visible.removeAt(oldIdx);
+    visible.insert(newIdx.clamp(0, visible.length), moved);
+
     setState(() {
-      _rules.removeAt(fullIdx);
-      _rules.insert(fullIdx - 1, item);
+      for (var i = 0; i < visible.length; i++) {
+        final at = _rules.indexWhere((r) => r.id == visible[i].id);
+        if (at >= 0) _rules[at] = _rules[at].copyWith(order: i);
+      }
     });
-    await widget.coreManager.reorderCustomizedRules(
-        _rules.map((r) => r.raw).toList());
+
+    await _mutate(
+      moved.id,
+      () => widget.coreManager
+          .reorderRuleIds(groupId, visible.map((r) => r.id).toList()),
+    );
   }
 
-  Future<void> _moveDown(int filteredIdx) async {
-    final item = _filtered[filteredIdx];
-    final fullIdx = _rules.indexOf(item);
-    if (fullIdx >= _rules.length - 1) return;
-    setState(() {
-      _rules.removeAt(fullIdx);
-      _rules.insert(fullIdx + 1, item);
-    });
-    await widget.coreManager.reorderCustomizedRules(
-        _rules.map((r) => r.raw).toList());
+  Future<void> _toggleGroup(RuleGroup g) async {
+    await _mutate('group:${g.id}',
+        () => widget.coreManager.toggleRuleGroup(g.id));
   }
 
   Future<void> _showAddEdit({CustomizedRuleItem? item}) async {
     String ruleType = item?.ruleType ?? 'DOMAIN';
     String payload = item?.payload ?? '';
     String policy = item?.policy ?? 'PROXY';
+    String network = item?.network ?? '';
 
     final result = await showDialog<bool>(
       context: context,
@@ -152,14 +203,14 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text(item == null ? 'Add Rule' : 'Edit Rule'),
           content: SizedBox(
-            width: 360,
+            width: 380,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  value: ruleType,
-                  decoration: const InputDecoration(
-                      labelText: 'Type', isDense: true),
+                  initialValue: ruleType,
+                  decoration:
+                      const InputDecoration(labelText: 'Type', isDense: true),
                   items: _ruleTypes
                       .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                       .toList(),
@@ -168,30 +219,37 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 const SizedBox(height: 12),
                 TextFormField(
                   initialValue: payload,
+                  autofocus: true,
                   decoration: InputDecoration(
                     labelText: 'Payload',
-                    hintText: ruleType == 'IP-CIDR'
-                        ? '192.168.0.0/24'
-                        : ruleType == 'PROCESS'
-                            ? 'App.app'
-                            : 'example.com',
+                    hintText: _payloadHint(ruleType),
                     isDense: true,
                   ),
                   onChanged: (v) => payload = v,
+                  onFieldSubmitted: (_) => Navigator.pop(ctx, true),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: _proxyNames.contains(policy) ? policy : _proxyNames.first,
-                  decoration: const InputDecoration(
-                      labelText: 'Policy', isDense: true),
-                  items: [
-                    // Include current policy even if not in list
-                    if (!_proxyNames.contains(policy))
-                      DropdownMenuItem(value: policy, child: Text(policy)),
-                    ..._proxyNames.map((p) =>
-                        DropdownMenuItem(value: p, child: Text(p))),
-                  ],
+                  initialValue: _proxyNames.contains(policy) ? policy : 'PROXY',
+                  decoration:
+                      const InputDecoration(labelText: 'Policy', isDense: true),
+                  items: _proxyNames
+                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                      .toList(),
                   onChanged: (v) => setDialogState(() => policy = v!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: network.isEmpty ? 'both' : network,
+                  decoration: const InputDecoration(
+                      labelText: 'Protocol', isDense: true),
+                  items: const [
+                    DropdownMenuItem(value: 'both', child: Text('TCP and UDP')),
+                    DropdownMenuItem(value: 'tcp', child: Text('TCP only')),
+                    DropdownMenuItem(value: 'udp', child: Text('UDP only')),
+                  ],
+                  onChanged: (v) =>
+                      setDialogState(() => network = v == 'both' ? '' : v!),
                 ),
               ],
             ),
@@ -210,45 +268,47 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       ),
     );
 
-    if (result != true || payload.isEmpty) return;
+    if (result != true || payload.trim().isEmpty) return;
 
-    final newRaw = '$ruleType,$payload,$policy';
+    final parts = [ruleType, payload.trim(), policy];
+    if (network.isNotEmpty) parts.add(network);
+    final newRaw = parts.join(',');
+
     if (item == null) {
-      setState(() => _rules.insert(0, CustomizedRuleItem(
-            ruleType: ruleType,
-            payload: payload,
-            policy: policy,
-            disabled: false,
-            raw: newRaw,
-          )));
       try {
         await widget.coreManager.addCustomizedRules([newRaw]);
-      } catch (_) {
-        _load();
+      } catch (e) {
+        _error('Could not add the rule: $e');
       }
+      await _load();
     } else {
-      setState(() {
-        final idx = _rules.indexOf(item);
-        if (idx >= 0) {
-          _rules[idx] = CustomizedRuleItem(
-            ruleType: ruleType,
-            payload: payload,
-            policy: policy,
-            disabled: false,
-            raw: newRaw,
-          );
-        }
-      });
       try {
         await widget.coreManager.editCustomizedRule(item.raw, newRaw);
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Edit failed: $e'), backgroundColor: Colors.red),
-          );
-        }
-        _load();
+        _error('Could not save the rule: $e');
       }
+      await _load();
+    }
+  }
+
+  String _payloadHint(String ruleType) {
+    switch (ruleType) {
+      case 'DOMAIN':
+        return 'example.com';
+      case 'DOMAIN-SUFFIX':
+        return 'example.com  (matches sub.example.com too)';
+      case 'DOMAIN-KEYWORD':
+        return 'example';
+      case 'DOMAIN-REGEX':
+        return r'^ads\..*\.com$';
+      case 'IP-CIDR':
+        return '10.0.0.0/8';
+      case 'PROCESS':
+        return 'RustDesk';
+      case 'DNS-MAP':
+        return 'example.com;127.0.0.1';
+      default:
+        return '';
     }
   }
 
@@ -261,222 +321,403 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       case 'REJECT':
         return Colors.red;
       default:
+        // A named proxy.
         return Colors.orange;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-    final filtered = _filtered;
+    final visibleCount = _rules.where(_matchesSearch).length;
+    final brokenCount = _rules.where((r) => r.isBroken).length;
 
     return Column(
       children: [
-        // Toolbar
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search rules...',
-                    isDense: true,
-                    prefixIcon: Icon(Icons.search, size: 16),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  ),
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text('${filtered.length} rules',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => _showAddEdit(),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Rule', style: TextStyle(fontSize: 12)),
-                style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        // Header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: const Row(
-            children: [
-              SizedBox(width: 12),
-              SizedBox(width: 100, child: Text('Type', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              Expanded(child: Text('Payload', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 80, child: Text('Policy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              SizedBox(width: 80),
-            ],
-          ),
-        ),
+        _toolbar(visibleCount, brokenCount),
         const Divider(height: 1),
         Expanded(
-          child: filtered.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('No customized rules',
-                          style: TextStyle(color: Colors.grey)),
-                      const SizedBox(height: 8),
-                      FilledButton.icon(
-                        onPressed: () => _showAddEdit(),
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Add first rule'),
-                      ),
-                    ],
-                  ),
-                )
-              : ReorderableListView.builder(
-                  padding: const EdgeInsets.only(right: 16), // space for scrollbar
-                  itemCount: filtered.length,
-                  onReorder: (oldIdx, newIdx) async {
-                    if (newIdx > oldIdx) newIdx--;
-                    // Find actual indices in full list
-                    final item = filtered[oldIdx];
-                    final fullOld = _rules.indexOf(item);
-                    final targetItem = filtered[newIdx];
-                    final fullNew = _rules.indexOf(targetItem);
-                    setState(() {
-                      _rules.removeAt(fullOld);
-                      _rules.insert(fullNew, item);
-                    });
-                    await widget.coreManager.reorderCustomizedRules(
-                        _rules.map((r) => r.raw).toList());
-                  },
-                  itemBuilder: (ctx, i) {
-                    final rule = filtered[i];
-                    final isDisabled = rule.disabled;
-                    return Container(
-                      key: ValueKey(rule.raw),
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: isDisabled
-                            ? Theme.of(ctx).colorScheme.surface.withAlpha(128)
-                            : null,
-                        border: Border(
-                          bottom: BorderSide(
-                              color: Theme.of(ctx).dividerColor, width: 0.5),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          // Disabled indicator (small dot instead of checkbox to save space)
-                          SizedBox(
-                            width: 12,
-                            child: Container(
-                              width: 6,
-                              height: 6,
-                              margin: const EdgeInsets.only(left: 3),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isDisabled ? Colors.grey.withAlpha(100) : Theme.of(ctx).colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                          // Type
-                          SizedBox(
-                            width: 100,
-                            child: Text(
-                              rule.ruleType,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDisabled ? Colors.grey : null,
-                                decoration: isDisabled ? TextDecoration.lineThrough : null,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          // Payload
-                          Expanded(
-                            child: Text(
-                              rule.payload,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDisabled ? Colors.grey : null,
-                                decoration: isDisabled ? TextDecoration.lineThrough : null,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          // Policy badge
-                          SizedBox(
-                            width: 80,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _policyColor(rule.policy).withAlpha(30),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                rule.policy,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: _policyColor(rule.policy),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                          // Actions - use compact overflow menu
-                          SizedBox(
-                            width: 80,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    isDisabled ? Icons.check_box_outline_blank : Icons.check_box,
-                                    size: 16,
-                                    color: isDisabled ? Colors.grey : Theme.of(ctx).colorScheme.primary,
-                                  ),
-                                  onPressed: () => _toggle(rule),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                  tooltip: isDisabled ? 'Enable' : 'Disable',
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.edit, size: 14),
-                                  onPressed: () => _showAddEdit(item: rule),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                  tooltip: 'Edit',
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.delete_outline, size: 14,
-                                      color: Theme.of(ctx).colorScheme.error),
-                                  onPressed: () => _delete(rule),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                  tooltip: 'Delete',
-                                ),
-                                // Drag handle
-                                ReorderableDragStartListener(
-                                  index: i,
-                                  child: const Icon(Icons.drag_handle, size: 16, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+          child: _rules.isEmpty
+              ? const Center(child: Text('No rules yet'))
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: _buildGroupSections(),
                 ),
         ),
       ],
     );
+  }
+
+  Widget _toolbar(int visibleCount, int brokenCount) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 32,
+              child: TextField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Search rules',
+                  prefixIcon: const Icon(Icons.search, size: 16),
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                  suffixIcon: _search.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear, size: 14),
+                          onPressed: () => _searchCtrl.clear(),
+                        ),
+                ),
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text('$visibleCount of ${_rules.length}',
+              style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          if (brokenCount > 0) ...[
+            const SizedBox(width: 10),
+            Tooltip(
+              message: '$brokenCount rule(s) reference a proxy that no longer '
+                  'exists and cannot match',
+              child: Row(children: [
+                const Icon(Icons.error_outline, size: 14, color: Colors.red),
+                const SizedBox(width: 3),
+                Text('$brokenCount broken',
+                    style: const TextStyle(fontSize: 11, color: Colors.red)),
+              ]),
+            ),
+          ],
+          const SizedBox(width: 10),
+          FilledButton.icon(
+            onPressed: () => _showAddEdit(),
+            icon: const Icon(Icons.add, size: 15),
+            label: const Text('Add', style: TextStyle(fontSize: 12)),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: const Size(0, 32),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildGroupSections() {
+    final sections = <Widget>[];
+    final ordered = [..._groups]..sort((a, b) => a.order.compareTo(b.order));
+
+    for (final g in ordered) {
+      final rules = _rulesIn(g.id);
+      // While searching, hide groups with nothing to show.
+      if (rules.isEmpty && _search.isNotEmpty) continue;
+      sections.add(_groupHeader(g, rules.length));
+      if (!_collapsed.contains(g.id)) {
+        sections.add(_groupBody(g.id, rules, groupEnabled: g.enabled));
+      }
+    }
+
+    // Rules with no group are evaluated last, so show them last.
+    final ungrouped = _rulesIn('');
+    if (ungrouped.isNotEmpty) {
+      sections.add(_ungroupedHeader(ungrouped.length));
+      if (!_collapsed.contains('')) {
+        sections.add(_groupBody('', ungrouped, groupEnabled: true));
+      }
+    }
+    return sections;
+  }
+
+  Widget _groupHeader(RuleGroup g, int count) {
+    final collapsed = _collapsed.contains(g.id);
+    final busy = _busy.contains('group:${g.id}');
+    return InkWell(
+      onTap: () => setState(() {
+        collapsed ? _collapsed.remove(g.id) : _collapsed.add(g.id);
+      }),
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Row(
+          children: [
+            Icon(collapsed ? Icons.chevron_right : Icons.expand_more, size: 17),
+            const SizedBox(width: 4),
+            Text(
+              g.name,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: g.enabled ? null : Colors.grey,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text('$count',
+                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            const Spacer(),
+            if (!g.enabled)
+              const Padding(
+                padding: EdgeInsets.only(right: 6),
+                child: Text('group off',
+                    style: TextStyle(fontSize: 10, color: Colors.grey)),
+              ),
+            busy
+                ? const SizedBox(
+                    width: 26,
+                    child: Center(
+                      child: SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 1.6),
+                      ),
+                    ),
+                  )
+                : Tooltip(
+                    message: g.enabled
+                        ? 'Disable every rule in this group'
+                        : 'Enable this group',
+                    child: Switch(
+                      value: g.enabled,
+                      onChanged: (_) => _toggleGroup(g),
+                    ),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _ungroupedHeader(int count) {
+    final collapsed = _collapsed.contains('');
+    return InkWell(
+      onTap: () => setState(() {
+        collapsed ? _collapsed.remove('') : _collapsed.add('');
+      }),
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Row(
+          children: [
+            Icon(collapsed ? Icons.chevron_right : Icons.expand_more, size: 17),
+            const SizedBox(width: 4),
+            const Text('Ungrouped',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 6),
+            Text('$count',
+                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _groupBody(String groupId, List<CustomizedRuleItem> rules,
+      {required bool groupEnabled}) {
+    if (rules.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(24, 8, 0, 8),
+        child: Text('No rules in this group',
+            style: TextStyle(fontSize: 11, color: Colors.grey)),
+      );
+    }
+
+    // Reordering while a search filter is active would be misleading, since the
+    // visible order is not the stored order.
+    final canReorder = _search.isEmpty;
+
+    return ReorderableListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: canReorder,
+      itemCount: rules.length,
+      onReorder: (o, n) => canReorder ? _reorder(groupId, o, n) : null,
+      itemBuilder: (ctx, i) => _ruleRow(rules[i], groupEnabled: groupEnabled),
+    );
+  }
+
+  Widget _ruleRow(CustomizedRuleItem rule, {required bool groupEnabled}) {
+    // Key on the id: it survives edits and toggles, so Flutter never reuses one
+    // row's state for another rule.
+    final key = ValueKey(rule.id);
+    final busy = _busy.contains(rule.id);
+    final shadow = _shadows[rule.id];
+    final inactive = rule.disabled || !groupEnabled || rule.isBroken;
+
+    return Container(
+      key: key,
+      height: 38,
+      decoration: BoxDecoration(
+        color: inactive
+            ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.5)
+            : null,
+        border: Border(
+          bottom:
+              BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 14,
+            child: Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(left: 4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: rule.isBroken
+                    ? Colors.red
+                    : inactive
+                        ? Colors.grey.withValues(alpha: 0.4)
+                        : Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 112,
+            child: Text(
+              rule.ruleType,
+              style: TextStyle(
+                fontSize: 11,
+                color: inactive ? Colors.grey : null,
+                decoration:
+                    rule.disabled ? TextDecoration.lineThrough : null,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(
+            child: Tooltip
+                (
+              message: rule.slug.isEmpty ? rule.payload : rule.slug,
+              child: Text(
+                rule.payload,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: inactive ? Colors.grey : null,
+                  decoration:
+                      rule.disabled ? TextDecoration.lineThrough : null,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          if (rule.network.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Text(rule.network.toUpperCase(),
+                  style: const TextStyle(fontSize: 9)),
+            ),
+          if (rule.isBroken)
+            Tooltip(
+              message: rule.broken,
+              child: const Padding(
+                padding: EdgeInsets.only(right: 5),
+                child: Icon(Icons.error_outline, size: 14, color: Colors.red),
+              ),
+            ),
+          if (shadow != null)
+            Tooltip(
+              message: 'Never matches: ${shadow.reason}. '
+                  'Shadowed by ${shadow.shadowedBySlug}.',
+              child: const Padding(
+                padding: EdgeInsets.only(right: 5),
+                child: Icon(Icons.visibility_off_outlined,
+                    size: 14, color: Colors.amber),
+              ),
+            ),
+          Container(
+            width: 96,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              rule.policy,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: inactive ? Colors.grey : _policyColor(rule.policy),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (busy)
+            const SizedBox(
+              width: 84,
+              child: Center(
+                child: SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(strokeWidth: 1.6),
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              width: 84,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      rule.disabled
+                          ? Icons.toggle_off_outlined
+                          : Icons.toggle_on,
+                      size: 19,
+                    ),
+                    tooltip: rule.disabled ? 'Enable' : 'Disable',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 26),
+                    onPressed: () => _toggle(rule),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 14),
+                    tooltip: 'Edit',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 26),
+                    onPressed: () => _showAddEdit(item: rule),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 14),
+                    tooltip: 'Delete',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 26),
+                    onPressed: () => _confirmDelete(rule),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(CustomizedRuleItem rule) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete rule'),
+        content: Text('${rule.ruleType},${rule.payload} -> ${rule.policy}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await _delete(rule);
   }
 }

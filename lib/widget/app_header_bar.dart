@@ -147,7 +147,13 @@ class _State extends State<AppHeaderBar> with WindowListener {
     refreshData();
 
     if (runtimeStatusChannel == null) {
-      widget.coreManager.getRuntimeStatusChannel().then((channel) {
+      widget.coreManager.getRuntimeStatusChannel().then((channel) async {
+        if (channel == null) return;
+        // Required by web_socket_channel 3.x. Missing it means the connect
+        // toggle can stop reflecting the core's real state, because the status
+        // frames never arrive and no error is raised.
+        await channel.ready;
+        if (!mounted) return;
         runtimeStatusChannel = channel;
         runtimeStatusChannel?.stream.listen((message) {
           RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));

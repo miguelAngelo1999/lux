@@ -37,7 +37,13 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
     refreshMode();
     windowManager.addListener(this);
     if (trafficChannel == null) {
-      widget.coreManager.getTrafficChannel().then((channel) {
+      widget.coreManager.getTrafficChannel().then((channel) async {
+        if (channel == null) return;
+        // Required by web_socket_channel 3.x: without awaiting ready the
+        // subscription can attach before the socket is open and traffic frames
+        // are dropped silently, so the speed readout stays at zero.
+        await channel.ready;
+        if (!mounted) return;
         trafficChannel = channel;
         trafficChannel?.stream.listen((message) {
           if (isWindowHidden) {

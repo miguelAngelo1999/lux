@@ -159,7 +159,12 @@ class _HomeState extends State<Home>
       isCoreReady.value = true;
     });
     if (eventChannel == null) {
-      coreManager?.getEventChannel().then((channel) {
+      coreManager?.getEventChannel().then((channel) async {
+        if (channel == null) return;
+        // Required by web_socket_channel 3.x: core events would otherwise be
+        // dropped before the socket is open, with no error surfaced.
+        await channel.ready;
+        if (!mounted) return;
         eventChannel = channel;
         eventChannel?.stream.listen((rawData) async {
           if (rawData is! String) {

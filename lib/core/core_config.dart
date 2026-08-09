@@ -354,46 +354,196 @@ class RuleList {
   Map<String, dynamic> toJson() => {'rules': rules};
 }
 
+/// A rule that can never match, because an earlier rule with a different policy
+/// already covers everything it would.
+///
+/// Ordered first-match evaluation makes this the most common misrouting cause,
+/// and it is invisible without tooling: the rule looks correct in the list.
+class RuleShadow {
+  final String ruleId;
+  final String ruleSlug;
+  final String shadowedById;
+  final String shadowedBySlug;
+  final String reason;
+
+  const RuleShadow({
+    required this.ruleId,
+    required this.ruleSlug,
+    required this.shadowedById,
+    required this.shadowedBySlug,
+    required this.reason,
+  });
+
+  factory RuleShadow.fromJson(Map<String, dynamic> json) => RuleShadow(
+        ruleId: json['ruleId'] as String? ?? '',
+        ruleSlug: json['ruleSlug'] as String? ?? '',
+        shadowedById: json['shadowedById'] as String? ?? '',
+        shadowedBySlug: json['shadowedBySlug'] as String? ?? '',
+        reason: json['reason'] as String? ?? '',
+      );
+}
+
+/// A rule that cannot be applied, typically because its target proxy is gone.
+class RuleBroken {
+  final String ruleId;
+  final String ruleSlug;
+  final String reason;
+
+  const RuleBroken({
+    required this.ruleId,
+    required this.ruleSlug,
+    required this.reason,
+  });
+
+  factory RuleBroken.fromJson(Map<String, dynamic> json) => RuleBroken(
+        ruleId: json['ruleId'] as String? ?? '',
+        ruleSlug: json['ruleSlug'] as String? ?? '',
+        reason: json['reason'] as String? ?? '',
+      );
+}
+
+class RuleDiagnostics {
+  final List<RuleShadow> shadowed;
+  final List<RuleBroken> broken;
+
+  const RuleDiagnostics({required this.shadowed, required this.broken});
+
+  factory RuleDiagnostics.fromJson(Map<String, dynamic> json) =>
+      RuleDiagnostics(
+        shadowed: ((json['shadowed'] as List?) ?? [])
+            .map((e) => RuleShadow.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        broken: ((json['broken'] as List?) ?? [])
+            .map((e) => RuleBroken.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+
+  /// Shadow keyed by the shadowed rule's id, for quick row lookup.
+  Map<String, RuleShadow> get shadowById =>
+      {for (final s in shadowed) s.ruleId: s};
+}
+
+/// A display grouping for rules. Groups do not nest.
+class RuleGroup {
+  final String id;
+  final String name;
+  final bool enabled;
+  final int order;
+
+  const RuleGroup({
+    required this.id,
+    required this.name,
+    required this.enabled,
+    required this.order,
+  });
+
+  factory RuleGroup.fromJson(Map<String, dynamic> json) => RuleGroup(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        enabled: json['enabled'] as bool? ?? true,
+        order: json['order'] as int? ?? 0,
+      );
+}
+
 class CustomizedRuleItem {
+  /// Stable, opaque, assigned once by the core. Every mutation targets this.
+  ///
+  /// Rules used to be addressed by their raw string, which also encoded
+  /// enabled state, so toggling a rule changed its identity and operations
+  /// keyed on it acted on the wrong rule or none at all.
+  final String id;
+
+  /// Readable label derived from the rule's content, regenerated whenever the
+  /// content changes. For display and logs only; never an identity.
+  final String slug;
+
+  /// Empty for rules in the implicit default group.
+  final String groupId;
+
   final String ruleType;
   final String payload;
   final String policy;
   final bool disabled;
   final String raw;
 
+  /// "tcp", "udp", or empty for both.
+  final String network;
+
+  /// Set when the rule cannot be applied, typically because the proxy it
+  /// targets was deleted. Such a rule is kept and shown rather than dropped.
+  final String broken;
+
+  final int order;
+
   const CustomizedRuleItem({
+    required this.id,
+    required this.slug,
+    required this.groupId,
     required this.ruleType,
     required this.payload,
     required this.policy,
     required this.disabled,
     required this.raw,
+    this.network = '',
+    this.broken = '',
+    this.order = 0,
   });
+
+  bool get isBroken => broken.isNotEmpty;
 
   factory CustomizedRuleItem.fromJson(Map<String, dynamic> json) =>
       CustomizedRuleItem(
+        id: json['id'] as String? ?? '',
+        slug: json['slug'] as String? ?? '',
+        groupId: json['groupId'] as String? ?? '',
         ruleType: json['ruleType'] as String? ?? '',
         payload: json['payload'] as String? ?? '',
         policy: json['policy'] as String? ?? '',
         disabled: json['disabled'] as bool? ?? false,
         raw: json['raw'] as String? ?? '',
+        network: json['network'] as String? ?? '',
+        broken: json['broken'] as String? ?? '',
+        order: json['order'] as int? ?? 0,
       );
 
   CustomizedRuleItem copyWith({
+    String? id,
+    String? slug,
+    String? groupId,
     String? ruleType,
     String? payload,
     String? policy,
     bool? disabled,
     String? raw,
+    String? network,
+    String? broken,
+    int? order,
   }) =>
       CustomizedRuleItem(
+        id: id ?? this.id,
+        slug: slug ?? this.slug,
+        groupId: groupId ?? this.groupId,
         ruleType: ruleType ?? this.ruleType,
         payload: payload ?? this.payload,
         policy: policy ?? this.policy,
         disabled: disabled ?? this.disabled,
         raw: raw ?? this.raw,
+        network: network ?? this.network,
+        broken: broken ?? this.broken,
+        order: order ?? this.order,
       );
 
-  String toRawString() => '$ruleType,$payload,$policy';
+  String toRawString() => network.isEmpty
+      ? '$ruleType,$payload,$policy'
+      : '$ruleType,$payload,$policy,$network';
+
+  /// Identity is the id, so a list can key rows on it and survive edits.
+  @override
+  bool operator ==(Object other) =>
+      other is CustomizedRuleItem && other.id == id && id.isNotEmpty;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 // Define the data classes

@@ -62,6 +62,11 @@ class _LogPageState extends State<LogPage> {
   Future<void> _connect() async {
     try {
       final channel = await widget.coreManager.getLogChannel();
+      // web_socket_channel 3.x requires awaiting ready before listening.
+      // Without it the handshake may still be in flight, the subscription
+      // attaches to a socket that is not open, and frames are dropped with no
+      // error -- the log simply stays empty.
+      await channel.ready;
       if (!mounted) return;
       setState(() {
         _channel = channel;

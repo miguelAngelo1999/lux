@@ -199,7 +199,18 @@ class CoreManager {
   Future<List<CustomizedRuleItem>> getCustomizedRules() async {
     final res = await dio.get('$baseHttpUrl/rules/customized');
     final items = res.data['items'] as List? ?? [];
-    return items.map((e) => CustomizedRuleItem.fromJson(e as Map<String, dynamic>)).toList();
+    return items
+        .map((e) => CustomizedRuleItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Rule groups, in evaluation order.
+  Future<List<RuleGroup>> getRuleGroups() async {
+    final res = await dio.get('$baseHttpUrl/rules/customized');
+    final groups = res.data['groups'] as List? ?? [];
+    return groups
+        .map((e) => RuleGroup.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> addCustomizedRules(List<String> rules) async {
@@ -207,19 +218,69 @@ class CoreManager {
   }
 
   Future<void> editCustomizedRule(String oldRule, String newRule) async {
-    await dio.post('$baseHttpUrl/rules/customized', data: {'oldRule': oldRule, 'newRule': newRule});
+    await dio.post('$baseHttpUrl/rules/customized',
+        data: {'oldRule': oldRule, 'newRule': newRule});
   }
 
-  Future<void> deleteCustomizedRules(List<String> rules) async {
-    await dio.delete('$baseHttpUrl/rules/customized', data: {'rules': rules});
+  // ── Id-based rule mutations ────────────────────────────────────────────────
+  //
+  // Prefer these over the string variants above. Addressing a rule by its raw
+  // string cannot distinguish an enabled rule from a disabled one and breaks as
+  // soon as the rule is edited.
+
+  Future<void> deleteRuleById(String id) async {
+    await dio.delete('$baseHttpUrl/rules/items/$id');
+  }
+
+  Future<void> toggleRuleById(String id) async {
+    await dio.post('$baseHttpUrl/rules/items/$id/toggle');
+  }
+
+  /// Reorder within a single group. Ids omitted from [ids] keep their previous
+  /// relative position rather than being dropped.
+  Future<void> reorderRuleIds(String groupId, List<String> ids) async {
+    await dio.post('$baseHttpUrl/rules/items/reorder',
+        data: {'groupId': groupId, 'ids': ids});
+  }
+
+  Future<void> moveRuleToGroup(String id, String groupId) async {
+    await dio.post('$baseHttpUrl/rules/items/$id/group',
+        data: {'groupId': groupId});
+  }
+
+  Future<void> toggleRuleGroup(String groupId) async {
+    await dio.patch('$baseHttpUrl/rules/groups/$groupId',
+        data: {'toggle': true});
+  }
+
+  Future<void> renameRuleGroup(String groupId, String name) async {
+    await dio.patch('$baseHttpUrl/rules/groups/$groupId', data: {'name': name});
+  }
+
+  Future<RuleGroup> createRuleGroup(String name) async {
+    final res =
+        await dio.post('$baseHttpUrl/rules/groups', data: {'name': name});
+    return RuleGroup.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteRuleGroup(String groupId) async {
+    await dio.delete('$baseHttpUrl/rules/groups/$groupId');
+  }
+
+  /// Rules that can never match, and rules that cannot be applied.
+  Future<RuleDiagnostics> getRuleDiagnostics() async {
+    final res = await dio.get('$baseHttpUrl/rules/diagnostics');
+    return RuleDiagnostics.fromJson(res.data as Map<String, dynamic>);
   }
 
   Future<void> reorderCustomizedRules(List<String> rules) async {
-    await dio.post('$baseHttpUrl/rules/customized/reorder', data: {'rules': rules});
+    await dio.post('$baseHttpUrl/rules/customized/reorder',
+        data: {'rules': rules});
   }
 
   Future<void> toggleCustomizedRule(String rule) async {
-    await dio.post('$baseHttpUrl/rules/customized/toggle', data: {'rule': rule});
+    await dio.post('$baseHttpUrl/rules/customized/toggle',
+        data: {'rule': rule});
   }
 
   /// Test proxy latency. Returns delay in ms or -1 on failure.

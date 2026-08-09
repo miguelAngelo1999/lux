@@ -69,6 +69,9 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
   Future<void> _connect() async {
     try {
       final channel = await widget.coreManager.getConnectionsChannel();
+      // Required by web_socket_channel 3.x: listening before the handshake
+      // completes silently drops frames, leaving the table permanently empty.
+      await channel.ready;
       if (!mounted) return;
       setState(() => _channel = channel);
       channel.stream.listen(
