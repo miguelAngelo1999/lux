@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -21,6 +22,18 @@ class UpdateInfo {
   final String windowsUrl;
   final bool hasUpdate;
 
+  /// Expected digest and byte count of the installer for this platform.
+  ///
+  /// The appcast has always published these; nothing read them, so the only
+  /// check on a download was that it exceeded 1MB. Releases update a Drive file
+  /// in place under a fixed id, and Drive will serve a previously cached
+  /// revision of that id for a while, so a download can return the *previous*
+  /// release: still a valid 33MB DMG, still passes a size floor, and installs an
+  /// older build over a newer one. Carrying the digest is what makes that
+  /// detectable.
+  final String sha256;
+  final int size;
+
   const UpdateInfo({
     required this.latestVersion,
     required this.currentVersion,
@@ -28,7 +41,55 @@ class UpdateInfo {
     required this.macOSUrl,
     required this.windowsUrl,
     required this.hasUpdate,
+    this.sha256 = '',
+    this.size = 0,
   });
+}
+
+/// Streams [file] through sha256 rather than reading it whole.
+///
+/// The installer is tens of megabytes and this runs on the UI isolate, so
+/// loading it into memory to hash it would be a visible stall.
+Future<String> _sha256OfFile(File file) async {
+  final captured = _DigestSink();
+  final conv = sha256.startChunkedConversion(captured);
+  await for (final chunk in file.openRead()) {
+    conv.add(chunk);
+  }
+  conv.close();
+  final digest = captured.value;
+  if (digest == null) throw StateError('hashing produced no digest');
+  return digest.toString();
+}
+
+/// Holds the single digest a chunked sha256 conversion emits on close.
+///
+/// package:convert has AccumulatorSink for this, but it is not a direct
+/// dependency and pulling one in for four lines is not worth it.
+class _DigestSink implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
+}
+
+/// Surfaces a rejected download and offers the manual route.
+void _reportBadDownload(BuildContext context, String message) {
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: Colors.red,
+      duration: const Duration(seconds: 12),
+      action: SnackBarAction(
+        label: 'Download manually',
+        onPressed: () => launchUrl(Uri.parse(releasesPageUrl)),
+      ),
+    ),
+  );
 }
 
 /// Fetches the appcast.json from Google Drive and compares versions.
@@ -105,6 +166,8 @@ UpdateInfo? _parseAppcast(String body, String current) {
     appLog('UPDATE', 'appcast parsed latest=$latest current=$current '
         'platformUrl=${platformUrl.isNotEmpty} hasUpdate=$hasUpdate');
 
+    final platform = Platform.isMacOS ? macos : windows;
+
     return UpdateInfo(
       latestVersion:  latest,
       currentVersion: current,
@@ -112,6 +175,8 @@ UpdateInfo? _parseAppcast(String body, String current) {
       macOSUrl:       macOSUrl,
       windowsUrl:     windowsUrl,
       hasUpdate:      hasUpdate,
+      sha256:         ((platform['sha256'] as String?) ?? '').toLowerCase(),
+      size:           (platform['size'] as num?)?.toInt() ?? 0,
     );
   } catch (e) {
     debugPrint('[Updater] parse failed: $e');
@@ -154,8 +219,16 @@ Future<void> downloadAndInstall(
       appLog('UPDATE', 'deleted stale cached DMG: ${file.path}');
     }
 
-    debugPrint('[Updater] downloading $url → ${file.path}');
-    appLog('UPDATE', 'download started url=$url dest=${file.path}');
+    // Releases overwrite one Drive file under a fixed id, and Drive keeps
+    // serving a cached revision of that id for a while afterwards. Without a
+    // unique query string a download can return the previous release.
+    final fetchUrl = url.contains('drive.usercontent.google.com')
+        ? '$url${url.contains('?') ? '&' : '?'}'
+            '_t=${DateTime.now().millisecondsSinceEpoch}'
+        : url;
+
+    debugPrint('[Updater] downloading $fetchUrl → ${file.path}');
+    appLog('UPDATE', 'download started url=$fetchUrl dest=${file.path}');
 
     // Use lux's own proxy port for the download — it has corporate proxy
     // credentials and handles SSL. Fall back to DIRECT if not running.
@@ -167,8 +240,10 @@ Future<void> downloadAndInstall(
     // Try lux proxy first (127.0.0.1:1090), fall back to DIRECT
     client.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
 
-    final request = await client.getUrl(Uri.parse(url));
+    final request = await client.getUrl(Uri.parse(fetchUrl));
     request.followRedirects = true;
+    request.headers.set('Cache-Control', 'no-cache, no-store');
+    request.headers.set('Pragma', 'no-cache');
     final response = await request.close().timeout(const Duration(minutes: 5));
 
     appLog('UPDATE', 'download response status=${response.statusCode} '
@@ -285,6 +360,50 @@ Future<void> downloadAndInstall(
         );
       }
       return;
+    }
+
+    // Verify the download against the appcast before installing anything.
+    //
+    // This is the check that was missing when an update installed an older
+    // build: Drive served a cached revision of the fixed file id, the DMG was
+    // perfectly valid and well over the size floor, and nothing compared it to
+    // what the appcast said it should be. It is also the only integrity check in
+    // the chain, since the DMG is not code-signed.
+    if (info.sha256.isNotEmpty || info.size > 0) {
+      onStatusChange?.call('Verifying download…');
+
+      if (info.size > 0 && fileSize != info.size) {
+        appLog('UPDATE',
+            'size mismatch: got $fileSize, appcast says ${info.size} — refusing');
+        await file.delete();
+        _reportBadDownload(
+          context,
+          'Downloaded file is ${fileSize}B but the release says ${info.size}B. '
+          'It may be a cached copy of an older version. Try again in a minute.',
+        );
+        return;
+      }
+
+      if (info.sha256.isNotEmpty) {
+        final digest = await _sha256OfFile(file);
+        if (digest != info.sha256) {
+          appLog('UPDATE',
+              'sha256 mismatch: got $digest, appcast says ${info.sha256} — refusing');
+          await file.delete();
+          _reportBadDownload(
+            context,
+            'The downloaded update did not match its published checksum, so it '
+            'was discarded. This usually means a cached copy of an older '
+            'version was served. Try again in a minute.',
+          );
+          return;
+        }
+        appLog('UPDATE', 'sha256 verified: $digest');
+      }
+    } else {
+      // A feed without a digest cannot be verified. Say so rather than implying
+      // the download was checked.
+      appLog('UPDATE', 'appcast carried no sha256/size — installing unverified');
     }
 
     if (Platform.isMacOS) {
