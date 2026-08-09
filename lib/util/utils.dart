@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:intl/intl.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:lux/const/const.dart';
@@ -17,11 +18,25 @@ import 'package:version/version.dart';
 import 'package:win32_registry/win32_registry.dart';
 import 'package:yaml/yaml.dart';
 
+/// Directory holding config.json, lux_prefs.json and logs.
+///
+/// Debug and profile builds get a `-dev` sibling directory. Without this a
+/// locally built app shares config.json with the copy installed in
+/// /Applications: both cores read and rewrite the same rules and proxies, and
+/// a test run can leave the installed app stopped with the system proxy still
+/// pointing at a port nothing listens on, which takes the machine offline.
 Future<String> getHomeDir() async {
   PackageInfo packageInfo = await PackageInfo.fromPlatform();
   final Directory appDocumentsDir = await getApplicationSupportDirectory();
   final Version currentVersion = Version.parse(packageInfo.version);
-  return path.join(appDocumentsDir.path, '${currentVersion.major}.0');
+  final suffix = kReleaseMode ? '' : '-dev';
+  final dir = path.join(appDocumentsDir.path, '${currentVersion.major}.0$suffix');
+  if (suffix.isNotEmpty) {
+    try {
+      Directory(dir).createSync(recursive: true);
+    } catch (_) {}
+  }
+  return dir;
 }
 
 Future<Map<String, dynamic>> readJsonFile(String filePath) async {
