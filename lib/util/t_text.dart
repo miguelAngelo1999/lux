@@ -89,8 +89,20 @@ class TText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lang =
-        context.select<AppStateModel, String>((m) => m.locale.languageCode);
+    // Subscribe to the locale when an AppStateModel is available, and fall back
+    // to the untranslated text when it is not.
+    //
+    // Without this a TText rendered outside the provider scope throws, which
+    // makes the widget unusable in isolation -- in a test, a dialog pushed with
+    // a detached navigator, or any subtree that does not inherit the model.
+    // Untranslated text is a far better outcome than a crashed subtree.
+    String lang;
+    try {
+      lang = context.select<AppStateModel, String>((m) => m.locale.languageCode);
+    } catch (_) {
+      lang = 'en';
+    }
+
     return Text(
       TranslationCache.translate(data, lang),
       style: style,
