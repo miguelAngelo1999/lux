@@ -80,6 +80,10 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.2
   archive: ^4.0.2
+  # Lets tests swap in an in-process path provider. Without it a page that
+  # awaits getApplicationSupportDirectory() never finishes loading under
+  # testWidgets' fake clock.
+  path_provider_platform_interface: ^2.1.2
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -57,7 +58,11 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
   WebSocketChannel? _channel;
   final _searchCtrl = TextEditingController();
   String _search = '';
-  int _total = 0;
+
+  /// Held so dispose can cancel it. A bare Future.delayed keeps this State
+  /// reachable until it fires and then reconnects a page nobody is looking at.
+  Timer? _retry;
+  StreamSubscription<dynamic>? _sub;
 
   @override
   void initState() {
@@ -66,15 +71,26 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
     _searchCtrl.addListener(() => setState(() => _search = _searchCtrl.text.toLowerCase()));
   }
 
+  void _scheduleRetry() {
+    _retry?.cancel();
+    _retry = Timer(const Duration(seconds: 3), () {
+      if (mounted) _connect();
+    });
+  }
+
   Future<void> _connect() async {
     try {
       final channel = await widget.coreManager.getConnectionsChannel();
       // Required by web_socket_channel 3.x: listening before the handshake
       // completes silently drops frames, leaving the table permanently empty.
       await channel.ready;
-      if (!mounted) return;
+      if (!mounted) {
+        await channel.sink.close();
+        return;
+      }
       setState(() => _channel = channel);
-      channel.stream.listen(
+      await _sub?.cancel();
+      _sub = channel.stream.listen(
         (raw) {
           try {
             final data = json.decode(raw as String);
@@ -98,15 +114,15 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
         },
         onError: (e) {
           debugPrint('Connections WS error: $e');
-          Future.delayed(const Duration(seconds: 3), () { if (mounted) _connect(); });
+          if (mounted) _scheduleRetry();
         },
         onDone: () {
-          Future.delayed(const Duration(seconds: 3), () { if (mounted) _connect(); });
+          if (mounted) _scheduleRetry();
         },
       );
     } catch (e) {
       debugPrint('Connections connect error: $e');
-      Future.delayed(const Duration(seconds: 3), () { if (mounted) _connect(); });
+      if (mounted) _scheduleRetry();
     }
   }
 
@@ -128,6 +144,8 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
 
   @override
   void dispose() {
+    _retry?.cancel();
+    _sub?.cancel();
     _channel?.sink.close();
     _searchCtrl.dispose();
     super.dispose();
@@ -156,8 +174,14 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              Text('${filtered.length} connections',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              // "N connections" was shown even while filtered, so a search made
+              // it look like connections had disappeared.
+              Text(
+                _search.isEmpty
+                    ? '${_conns.length} connections'
+                    : '${filtered.length} of ${_conns.length}',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
               const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Close all connections',
@@ -171,7 +195,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
         // Header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          color: Theme.of(context).colorScheme.surfaceVariant,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: const Row(
             children: [
               SizedBox(width: 60, child: Text('Net', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),

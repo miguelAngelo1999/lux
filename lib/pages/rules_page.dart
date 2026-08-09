@@ -10,6 +10,23 @@ import 'package:window_manager/window_manager.dart';
 /// mutation lock plus a timed reload guard to paper over the resulting races,
 /// and made reorder compute its target index before a removal had shifted the
 /// list. All of that goes away once identity is stable.
+/// Applies a [ReorderableListView] move to [ids].
+///
+/// ReorderableListView reports newIndex against the list *before* the dragged
+/// item is removed, so downward moves must decrement it. An earlier version got
+/// this wrong and every downward drag landed one position short, which looked
+/// like the list "snapping back" and made rule order untrustworthy.
+///
+/// Pure and top-level so the arithmetic can be tested without a gesture.
+List<String> applyReorder(List<String> ids, int oldIndex, int newIndex) {
+  if (oldIndex < 0 || oldIndex >= ids.length) return List.of(ids);
+  final out = List.of(ids);
+  if (newIndex > oldIndex) newIndex--;
+  final moved = out.removeAt(oldIndex);
+  out.insert(newIndex.clamp(0, out.length), moved);
+  return out;
+}
+
 class RulesPage extends StatefulWidget {
   final CoreManager coreManager;
   const RulesPage({super.key, required this.coreManager});
@@ -166,23 +183,22 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   /// about in its existing position.
   Future<void> _reorder(String groupId, int oldIdx, int newIdx) async {
     final visible = _rulesIn(groupId);
-    if (newIdx > oldIdx) newIdx--;
     if (oldIdx < 0 || oldIdx >= visible.length) return;
+    final movedId = visible[oldIdx].id;
 
-    final moved = visible.removeAt(oldIdx);
-    visible.insert(newIdx.clamp(0, visible.length), moved);
+    final orderedIds =
+        applyReorder(visible.map((r) => r.id).toList(), oldIdx, newIdx);
 
     setState(() {
-      for (var i = 0; i < visible.length; i++) {
-        final at = _rules.indexWhere((r) => r.id == visible[i].id);
+      for (var i = 0; i < orderedIds.length; i++) {
+        final at = _rules.indexWhere((r) => r.id == orderedIds[i]);
         if (at >= 0) _rules[at] = _rules[at].copyWith(order: i);
       }
     });
 
     await _mutate(
-      moved.id,
-      () => widget.coreManager
-          .reorderRuleIds(groupId, visible.map((r) => r.id).toList()),
+      movedId,
+      () => widget.coreManager.reorderRuleIds(groupId, orderedIds),
     );
   }
 
@@ -541,6 +557,41 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     );
   }
 
+  /// Width of the trailing action column.
+  ///
+  /// Must fit three [_rowAction] buttons. A fixed 84 here was too narrow for
+  /// Material's default 48x48 icon buttons, so the row overflowed by 60px and
+  /// the delete button was laid out beyond the row's right edge, where it could
+  /// not be clicked at all.
+  static const double _actionsWidth = 100;
+
+  /// Compact row action sized to the 38px row.
+  ///
+  /// 32x32 rather than Material's 48x48 default: the row cannot be 48 tall
+  /// without halving the number of rules visible at once. 32 still clears the
+  /// 24x24 minimum WCAG 2.2 asks for pointer targets, and every button carries a
+  /// tooltip so the affordance is not icon-only.
+  Widget _rowAction({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    double iconSize = 14,
+  }) {
+    return IconButton(
+      icon: Icon(icon, size: iconSize),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      style: IconButton.styleFrom(
+        minimumSize: const Size(32, 32),
+        maximumSize: const Size(32, 32),
+        padding: EdgeInsets.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
+
   Widget _ruleRow(CustomizedRuleItem rule, {required bool groupEnabled}) {
     // Key on the id: it survives edits and toggles, so Flutter never reuses one
     // row's state for another rule.
@@ -652,7 +703,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           ),
           if (busy)
             const SizedBox(
-              width: 84,
+              width: _actionsWidth,
               child: Center(
                 child: SizedBox(
                   width: 13,
@@ -663,33 +714,26 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
             )
           else
             SizedBox(
-              width: 84,
+              width: _actionsWidth,
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  IconButton(
-                    icon: Icon(
-                      rule.disabled
-                          ? Icons.toggle_off_outlined
-                          : Icons.toggle_on,
-                      size: 19,
-                    ),
+                  _rowAction(
+                    icon: rule.disabled
+                        ? Icons.toggle_off_outlined
+                        : Icons.toggle_on,
+                    iconSize: 19,
                     tooltip: rule.disabled ? 'Enable' : 'Disable',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 26),
                     onPressed: () => _toggle(rule),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 14),
+                  _rowAction(
+                    icon: Icons.edit_outlined,
                     tooltip: 'Edit',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 26),
                     onPressed: () => _showAddEdit(item: rule),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 14),
+                  _rowAction(
+                    icon: Icons.delete_outline,
                     tooltip: 'Delete',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 26),
                     onPressed: () => _confirmDelete(rule),
                   ),
                 ],

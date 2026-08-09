@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lux/core/core_manager.dart';
@@ -49,6 +51,11 @@ class _LogPageState extends State<LogPage> {
   bool _connected = false;
   String? _error;
 
+  /// Held so dispose can cancel it. A bare Future.delayed keeps this State
+  /// reachable until it fires and then reconnects a page nobody is looking at.
+  Timer? _retry;
+  StreamSubscription<dynamic>? _sub;
+
   final _levels = ['debug', 'info', 'warning', 'error'];
 
   @override
@@ -59,6 +66,13 @@ class _LogPageState extends State<LogPage> {
         () => setState(() => _searchText = _searchCtrl.text.toLowerCase()));
   }
 
+  void _scheduleRetry() {
+    _retry?.cancel();
+    _retry = Timer(const Duration(seconds: 3), () {
+      if (mounted) _connect();
+    });
+  }
+
   Future<void> _connect() async {
     try {
       final channel = await widget.coreManager.getLogChannel();
@@ -67,12 +81,17 @@ class _LogPageState extends State<LogPage> {
       // attaches to a socket that is not open, and frames are dropped with no
       // error -- the log simply stays empty.
       await channel.ready;
-      if (!mounted) return;
+      if (!mounted) {
+        await channel.sink.close();
+        return;
+      }
       setState(() {
         _channel = channel;
         _connected = true;
+        _error = null;
       });
-      channel.stream.listen(
+      await _sub?.cancel();
+      _sub = channel.stream.listen(
         (raw) {
           try {
             // Log endpoint sends an array of JSON-encoded log strings
@@ -108,25 +127,27 @@ class _LogPageState extends State<LogPage> {
         },
         onError: (e) {
           debugPrint('Log WS error: $e');
-          if (mounted) setState(() { _connected = false; _error = e.toString(); });
-          Future.delayed(
-              const Duration(seconds: 3), () { if (mounted) _connect(); });
+          if (!mounted) return;
+          setState(() {
+            _connected = false;
+            _error = e.toString();
+          });
+          _scheduleRetry();
         },
         onDone: () {
-          if (mounted) {
-            setState(() => _connected = false);
-            Future.delayed(
-                const Duration(seconds: 3), () { if (mounted) _connect(); });
-          }
+          if (!mounted) return;
+          setState(() => _connected = false);
+          _scheduleRetry();
         },
       );
     } catch (e) {
       debugPrint('Log connect error: $e');
-      if (mounted) {
-        setState(() { _connected = false; _error = e.toString(); });
-        Future.delayed(
-            const Duration(seconds: 3), () { if (mounted) _connect(); });
-      }
+      if (!mounted) return;
+      setState(() {
+        _connected = false;
+        _error = e.toString();
+      });
+      _scheduleRetry();
     }
   }
 
@@ -154,6 +175,8 @@ class _LogPageState extends State<LogPage> {
 
   @override
   void dispose() {
+    _retry?.cancel();
+    _sub?.cancel();
     _channel?.sink.close();
     _searchCtrl.dispose();
     _scrollCtrl.dispose();
