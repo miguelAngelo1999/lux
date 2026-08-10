@@ -32,6 +32,14 @@ echo "# proxy: $PROXY"
 
 cd "$REPO"
 
+# pubspec declares assets/bin/ as a directory, so everything in it is bundled.
+# A Windows core left there from scripts/build_core_windows.sh would ship an 18MB
+# executable inside the macOS app that it can never run.
+if [ -f assets/bin/lux_core.exe ]; then
+  echo "# removing assets/bin/lux_core.exe so it is not bundled into the mac app"
+  rm -f assets/bin/lux_core.exe
+fi
+
 CURRENT=$(grep "^version:" pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
 echo "# current: $CURRENT"
 
