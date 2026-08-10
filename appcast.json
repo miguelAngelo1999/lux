@@ -1,11 +1,11 @@
 {
-  "version": "1.50.4",
+  "version": "1.50.5",
   "channel": "stable",
-  "notes": "fix: streaming responses hung because the relay never forwarded a client half-close, stranding sockets in FIN_WAIT_2; updates now verify their sha256 before installing",
+  "notes": "fix: TUN mode consults PAC then the configured proxy instead of falling back to DIRECT; per-proxy rules no longer stay dead after their proxy returns",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "5271b6215c6fc39bc720c0880e0619c6989f1c0213a3cc1a85fa7ef438affde9",
-    "size": 34649250
+    "sha256": "9a170e4714e50ed2def067d34e567189c217ca8f1f117a6204da27ac3eed5a33",
+    "size": 34728310
   },
   "windows": {
     "url": "",
