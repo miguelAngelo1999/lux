@@ -1,11 +1,11 @@
 {
-  "version": "1.50.5",
+  "version": "1.50.6",
   "channel": "stable",
-  "notes": "fix: TUN mode consults PAC then the configured proxy instead of falling back to DIRECT; per-proxy rules no longer stay dead after their proxy returns",
+  "notes": "revert: back out the PAC routing change; restores 1.50.4 behaviour",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "9a170e4714e50ed2def067d34e567189c217ca8f1f117a6204da27ac3eed5a33",
-    "size": 34728310
+    "sha256": "0aa6317b16b576dbc7707278b82b04bb9cf1116f0abc3c0579f773062e24e7d1",
+    "size": 34648785
   },
   "windows": {
     "url": "",
