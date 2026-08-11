@@ -406,6 +406,12 @@ class CoreManager {
     return res.data['id'] as String;
   }
 
+  /// Probes the network for a PAC URL and returns discovered proxy entries.
+  Future<DetectProxyResult> detectProxies() async {
+    final res = await dio.post('$baseHttpUrl/proxies/detect');
+    return DetectProxyResult.fromJson(res.data as Map<String, dynamic>);
+  }
+
   /// Updates an existing proxy.
   Future<void> updateProxy(String id, Map<String, dynamic> proxy) async {
     await dio.post('$baseHttpUrl/proxies/$id', data: proxy);

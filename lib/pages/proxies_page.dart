@@ -223,25 +223,150 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return RadioGroup<String>(
-        groupValue: proxyListGroup.selectedId,
-        onChanged: handleSelectProxy,
-        child: proxyListGroup.groups.isEmpty
-            ? SizedBox()
-            : ListView.builder(
-                itemCount: proxyListGroup.groups.length,
-                itemBuilder: (context, index) {
-                  return ProxyListCard(
-                    proxyList: proxyListGroup.groups[index],
-                    key: Key(proxyListGroup.groups[index].id),
-                    isCollapsed: getIsCollapsed(proxyListGroup.groups[index]),
-                    onCollapse: () =>
-                        {handleCollapse(proxyListGroup.groups[index])},
-                    onItemChange: _handleItemChange,
-                    subscriptionList: subscriptionList,
-                    coreManager: widget.coreManager,
-                  );
-                },
-              ));
+    return Column(
+      children: [
+        // Toolbar with detect button
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          child: Row(
+            children: [
+              const Spacer(),
+              _isDetecting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : TextButton.icon(
+                      onPressed: _detectProxies,
+                      icon: const Icon(Icons.wifi_find, size: 16),
+                      label: const Text('Detect Proxy',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RadioGroup<String>(
+            groupValue: proxyListGroup.selectedId,
+            onChanged: handleSelectProxy,
+            child: proxyListGroup.groups.isEmpty
+                ? const Center(
+                    child: Text('No proxies configured',
+                        style: TextStyle(color: Colors.grey)),
+                  )
+                : ListView.builder(
+                    itemCount: proxyListGroup.groups.length,
+                    itemBuilder: (context, index) {
+                      return ProxyListCard(
+                        proxyList: proxyListGroup.groups[index],
+                        key: Key(proxyListGroup.groups[index].id),
+                        isCollapsed:
+                            getIsCollapsed(proxyListGroup.groups[index]),
+                        onCollapse: () =>
+                            {handleCollapse(proxyListGroup.groups[index])},
+                        onItemChange: _handleItemChange,
+                        subscriptionList: subscriptionList,
+                        coreManager: widget.coreManager,
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  bool _isDetecting = false;
+
+  Future<void> _detectProxies() async {
+    setState(() => _isDetecting = true);
+    try {
+      final result = await widget.coreManager.detectProxies();
+      if (!mounted) return;
+
+      if (result.proxies.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message.isNotEmpty
+                ? result.message
+                : 'No proxies detected on this network'),
+          ),
+        );
+        return;
+      }
+
+      // Show detected proxies and offer to add them
+      final added = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Detected Proxies'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (result.pacUrl.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Found via PAC: ${result.pacUrl}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                  ),
+                ...result.proxies.map((p) => ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.dns, size: 20),
+                      title: Text('${p.host}:${p.port}'),
+                      subtitle: const Text('HTTP Proxy'),
+                    )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Add ${result.proxies.length} Prox${result.proxies.length == 1 ? "y" : "ies"}'),
+            ),
+          ],
+        ),
+      );
+
+      if (added == true) {
+        for (final p in result.proxies) {
+          await widget.coreManager.addProxy({
+            'name': p.host,
+            'type': 'http',
+            'server': p.host,
+            'port': int.tryParse(p.port) ?? 8080,
+            'pacUrl': p.pacUrl,
+          });
+        }
+        await refreshProxyList();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content:
+                    Text('Added ${result.proxies.length} proxy(ies)')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Detection failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDetecting = false);
+    }
   }
 }

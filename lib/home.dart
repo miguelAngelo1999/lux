@@ -239,6 +239,17 @@ class _HomeState extends State<Home>
                 await coreManager?.exitCore();
                 exitApp();
               }
+            case 'credential-expired':
+              {
+                final data = message['data'] as Map<String, dynamic>?;
+                final proxyIds = (data?['proxyIds'] as List?)
+                        ?.map((e) => e.toString())
+                        .toList() ??
+                    [];
+                if (proxyIds.isNotEmpty) {
+                  _handleCredentialExpired(proxyIds);
+                }
+              }
           }
         });
       });
@@ -254,6 +265,96 @@ class _HomeState extends State<Home>
     // Listen for save callbacks from native quick edit panel
     _quickEditChannel.setMethodCallHandler(_handleNativeQuickEdit);
     _init(Provider.of<AppStateModel>(context, listen: false));
+  }
+
+  /// When proxy credentials expire and connectivity is lost, bring the window
+  /// to the front and show a dialog prompting for new credentials.
+  Future<void> _handleCredentialExpired(List<String> proxyIds) async {
+    // Give the core a moment to try other proxies
+    await Future.delayed(const Duration(seconds: 3));
+
+    // Check if we still have internet via a quick probe
+    try {
+      await coreManager?.ping();
+      return; // still connected, ignore
+    } catch (_) {
+      // No connectivity — proceed with the prompt
+    }
+
+    // Bring the window to front
+    await windowManager.show();
+    await windowManager.focus();
+
+    if (!mounted) return;
+
+    // Show re-auth dialog
+    final proxyId = proxyIds.first;
+    final controller = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.key_off, size: 22, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Proxy Credentials Expired'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your timed proxy password has expired and the internet '
+              'is unreachable. Enter a new password to reconnect.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'New password',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              controller.clear();
+              Navigator.pop(ctx);
+            },
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Reconnect'),
+          ),
+        ],
+      ),
+    );
+
+    final newPassword = controller.text;
+    controller.dispose();
+
+    if (newPassword.isEmpty) return;
+
+    // Update the proxy password via the API
+    try {
+      await coreManager?.updateProxy(proxyId, {'password': newPassword});
+      // Restart to pick up new credentials
+      await coreManager?.restart();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update credentials: $e')),
+        );
+      }
+    }
   }
 
   Future<AppExitResponse> _handleExitRequest() async {

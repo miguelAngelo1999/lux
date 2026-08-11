@@ -817,3 +817,42 @@ class Setting {
     return ProxyMode.mixed;
   }
 }
+
+
+/// Result from POST /proxies/detect — discovered proxy entries from the network's PAC.
+class DetectProxyResult {
+  final String pacUrl;
+  final List<DetectedProxy> proxies;
+  final String message;
+
+  const DetectProxyResult({
+    required this.pacUrl,
+    required this.proxies,
+    required this.message,
+  });
+
+  factory DetectProxyResult.fromJson(Map<String, dynamic> json) =>
+      DetectProxyResult(
+        pacUrl: json['pacUrl'] as String? ?? '',
+        proxies: ((json['proxies'] as List?) ?? [])
+            .map((e) => DetectedProxy.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        message: json['message'] as String? ?? '',
+      );
+}
+
+class DetectedProxy {
+  final String host;
+  final String port;
+  final String pacUrl;
+
+  const DetectedProxy({required this.host, required this.port, required this.pacUrl});
+
+  factory DetectedProxy.fromJson(Map<String, dynamic> json) => DetectedProxy(
+        host: json['host'] as String? ?? '',
+        port: json['port'] as String? ?? '8080',
+        pacUrl: json['pacUrl'] as String? ?? '',
+      );
+
+  String get displayName => '$host:$port';
+}
