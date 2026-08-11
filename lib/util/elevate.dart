@@ -99,6 +99,10 @@ BIN="$path"
 REAL="$realPath"
 USER_NAME="$user"
 
+# Clear quarantine first. macOS blocks mv/chmod on downloaded apps until this
+# is done, and it requires root — which we have inside this osascript block.
+xattr -cr /Applications/Lux.app 2>/dev/null || true
+
 # Split the binary out, once.
 if [ ! -f "\$REAL" ]; then
   mv "\$BIN" "\$REAL"
