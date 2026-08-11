@@ -1,11 +1,11 @@
 {
-  "version": "1.50.7",
+  "version": "1.50.8",
   "channel": "stable",
-  "notes": "feat: per-proxy PAC \u2014 each proxy with a pacUrl has its own script consulted after rule matching; custom rules still override",
+  "notes": "fix: first-launch elevation shows a Grant Access button instead of asking users to paste terminal commands",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "42d1943d9320d7b2b2111b0f5ce9782e61abad034364afd4d4b00ddd3d72f4c2",
-    "size": 34710988
+    "sha256": "d94402934ca69060c3f989b880b71b6d103f057330bc5081deca7ad0e8b58bd2",
+    "size": 34714316
   },
   "windows": {
     "url": "",
