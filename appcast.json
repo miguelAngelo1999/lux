@@ -1,11 +1,11 @@
 {
-  "version": "1.50.9",
+  "version": "1.50.10",
   "channel": "stable",
-  "notes": "fix: quarantine cleared automatically inside the elevation prompt \u2014 no more terminal commands on fresh install",
+  "notes": "feat: Detect Proxy from WPAD + auto re-auth dialog when timed credentials expire",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "d03264bdfbb718157167e78a5f70f8c7ccaa527106301e2f86b03d1eeed6e94f",
-    "size": 34715395
+    "sha256": "dba7d4fa4ccaafd723ae52a5f5070fc311dec7496dd5ca94f569a69834717e07",
+    "size": 34722719
   },
   "windows": {
     "url": "",
