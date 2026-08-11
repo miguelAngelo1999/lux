@@ -250,6 +250,19 @@ class _HomeState extends State<Home>
                   _handleCredentialExpired(proxyIds);
                 }
               }
+            case 'proxy-switch':
+              {
+                final data = message['data'] as Map<String, dynamic>?;
+                final name = data?['name'] as String? ?? 'another proxy';
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Switched to $name (previous credentials expired)'),
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
+                }
+              }
           }
         });
       });
@@ -267,21 +280,12 @@ class _HomeState extends State<Home>
     _init(Provider.of<AppStateModel>(context, listen: false));
   }
 
-  /// When proxy credentials expire and connectivity is lost, bring the window
-  /// to the front and show a dialog prompting for new credentials.
+  /// When proxy credentials expire and ALL proxies are exhausted (the Go side
+  /// already tried switching to each one), bring the window to front and show
+  /// a dialog prompting for new credentials.
   Future<void> _handleCredentialExpired(List<String> proxyIds) async {
-    // Give the core a moment to try other proxies
-    await Future.delayed(const Duration(seconds: 3));
-
-    // Check if we still have internet via a quick probe
-    try {
-      await coreManager?.ping();
-      return; // still connected, ignore
-    } catch (_) {
-      // No connectivity — proceed with the prompt
-    }
-
-    // Bring the window to front
+    // The Go side already tried every other proxy and none worked.
+    // Bring the window to front immediately.
     await windowManager.show();
     await windowManager.focus();
 
