@@ -1,11 +1,11 @@
 {
-  "version": "1.50.6",
+  "version": "1.50.7",
   "channel": "stable",
-  "notes": "revert: back out the PAC routing change; restores 1.50.4 behaviour",
+  "notes": "feat: per-proxy PAC \u2014 each proxy with a pacUrl has its own script consulted after rule matching; custom rules still override",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "0aa6317b16b576dbc7707278b82b04bb9cf1116f0abc3c0579f773062e24e7d1",
-    "size": 34648785
+    "sha256": "42d1943d9320d7b2b2111b0f5ce9782e61abad034364afd4d4b00ddd3d72f4c2",
+    "size": 34710988
   },
   "windows": {
     "url": "",
