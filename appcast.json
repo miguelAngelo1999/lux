@@ -1,11 +1,11 @@
 {
-  "version": "1.50.10",
+  "version": "1.50.11",
   "channel": "stable",
-  "notes": "feat: Detect Proxy from WPAD + auto re-auth dialog when timed credentials expire",
+  "notes": "feat: proxy failover on credential expiry \u2014 tries each proxy before prompting",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "dba7d4fa4ccaafd723ae52a5f5070fc311dec7496dd5ca94f569a69834717e07",
-    "size": 34722719
+    "sha256": "810b5ca8fb519e9b43c4d42907ff7255ca956a766a6b4be8a8f0ee59fd9a16dd",
+    "size": 41230679
   },
   "windows": {
     "url": "",
