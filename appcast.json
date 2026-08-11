@@ -1,11 +1,11 @@
 {
-  "version": "1.50.8",
+  "version": "1.50.9",
   "channel": "stable",
-  "notes": "fix: first-launch elevation shows a Grant Access button instead of asking users to paste terminal commands",
+  "notes": "fix: quarantine cleared automatically inside the elevation prompt \u2014 no more terminal commands on fresh install",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "d94402934ca69060c3f989b880b71b6d103f057330bc5081deca7ad0e8b58bd2",
-    "size": 34714316
+    "sha256": "d03264bdfbb718157167e78a5f70f8c7ccaa527106301e2f86b03d1eeed6e94f",
+    "size": 34715395
   },
   "windows": {
     "url": "",
