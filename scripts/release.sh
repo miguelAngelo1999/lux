@@ -35,9 +35,17 @@ cd "$REPO"
 # pubspec declares assets/bin/ as a directory, so everything in it is bundled.
 # A Windows core left there from scripts/build_core_windows.sh would ship an 18MB
 # executable inside the macOS app that it can never run.
+# IMPORTANT: only remove the .exe — lux_core (the macOS binary) MUST remain.
 if [ -f assets/bin/lux_core.exe ]; then
   echo "# removing assets/bin/lux_core.exe so it is not bundled into the mac app"
   rm -f assets/bin/lux_core.exe
+fi
+
+# Safety check: the macOS core MUST exist or the build ships an empty bundle
+if [ ! -f assets/bin/lux_core ]; then
+  echo "FATAL: assets/bin/lux_core is missing! Cannot build without it."
+  echo "Run: cd /path/to/itun2socks-clean && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build ... && lipo ..."
+  exit 1
 fi
 
 CURRENT=$(grep "^version:" pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
