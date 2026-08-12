@@ -1,11 +1,11 @@
 {
-  "version": "1.50.12",
+  "version": "1.50.13",
   "channel": "stable",
-  "notes": "fix: Detect Proxy now works \u2014 finds the corporate PAC even when running as root",
+  "notes": "fix: Detect Proxy now finds all PROXY entries from the corporate PAC script",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "25a0212ea75270b7de7016bc838f4e0f686a8dbf0203ac7f8181b7797af4c557",
-    "size": 34723740
+    "sha256": "d5674d607d1ee70b9bef7caf54fe3d16f8c53f1a197db9f87e2cc358aa62569a",
+    "size": 34724168
   },
   "windows": {
     "url": "",
