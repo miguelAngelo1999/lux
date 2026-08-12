@@ -1,11 +1,11 @@
 {
-  "version": "1.50.19",
+  "version": "1.50.20",
   "channel": "stable",
-  "notes": "feat: error reporting active \u2014 elevation failures and incidents now reported to telemetry",
+  "notes": "fix: telemetry endpoint working \u2014 errors now reach the Google Sheet",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "7a1e6d83b6640b4d7543fa337d5b43b210e01129fff549716e1249172845dbe5",
-    "size": 34771863
+    "sha256": "4b808b76c80b556069e4a6ddd522f26219a53c8ecd3e59de41a41f94a00bf7fc",
+    "size": 34772436
   },
   "windows": {
     "url": "",
