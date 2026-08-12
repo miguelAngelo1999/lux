@@ -412,6 +412,22 @@ class CoreManager {
     return DetectProxyResult.fromJson(res.data as Map<String, dynamic>);
   }
 
+  /// Checks for SSL interception through a proxy by doing a TLS handshake.
+  Future<CertCheckResult> checkCert({
+    required String server,
+    required int port,
+    String username = '',
+    String password = '',
+  }) async {
+    final res = await dio.post('$baseHttpUrl/proxies/check-cert', data: {
+      'server': server,
+      'port': port,
+      'username': username,
+      'password': password,
+    });
+    return CertCheckResult.fromJson(res.data as Map<String, dynamic>);
+  }
+
   /// Updates an existing proxy.
   Future<void> updateProxy(String id, Map<String, dynamic> proxy) async {
     await dio.post('$baseHttpUrl/proxies/$id', data: proxy);

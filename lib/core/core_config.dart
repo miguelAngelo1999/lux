@@ -856,3 +856,38 @@ class DetectedProxy {
 
   String get displayName => '$host:$port';
 }
+
+
+/// Result from POST /proxies/check-cert — reports whether SSL interception is present.
+class CertCheckResult {
+  final bool intercepted;
+  final String issuer;
+  final String subject;
+  final String notBefore;
+  final String notAfter;
+  final String sha256;
+  final String pem;
+  final String error;
+
+  const CertCheckResult({
+    this.intercepted = false,
+    this.issuer = '',
+    this.subject = '',
+    this.notBefore = '',
+    this.notAfter = '',
+    this.sha256 = '',
+    this.pem = '',
+    this.error = '',
+  });
+
+  factory CertCheckResult.fromJson(Map<String, dynamic> json) => CertCheckResult(
+        intercepted: json['intercepted'] as bool? ?? false,
+        issuer: json['issuer'] as String? ?? '',
+        subject: json['subject'] as String? ?? '',
+        notBefore: json['notBefore'] as String? ?? '',
+        notAfter: json['notAfter'] as String? ?? '',
+        sha256: json['sha256'] as String? ?? '',
+        pem: json['pem'] as String? ?? '',
+        error: json['error'] as String? ?? '',
+      );
+}

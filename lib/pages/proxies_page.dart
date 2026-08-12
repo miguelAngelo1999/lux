@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
@@ -279,6 +281,144 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   bool _isDetecting = false;
 
+  Future<void> _checkCertForProxy(DetectedProxy proxy, _ProxyCredentials creds) async {
+    try {
+      final result = await widget.coreManager.checkCert(
+        server: proxy.host,
+        port: int.tryParse(proxy.port) ?? 8080,
+        username: creds.username,
+        password: creds.password,
+      );
+
+      if (!mounted) return;
+
+      if (result.error.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cert check: ${result.error}')),
+        );
+        return;
+      }
+
+      if (!result.intercepted) {
+        // No MITM — all good, nothing to show
+        return;
+      }
+
+      // Show the intercepting CA and offer to trust it
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(children: [
+            Icon(Icons.security, size: 22, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('SSL Interception Detected'),
+          ]),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This proxy intercepts HTTPS traffic with a corporate certificate. '
+                  'Some apps may not work until you trust this CA.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                _certRow('Issuer', result.issuer),
+                _certRow('Subject', result.subject),
+                _certRow('Valid', '${result.notBefore} to ${result.notAfter}'),
+                _certRow('SHA256', result.sha256.length > 16
+                    ? '${result.sha256.substring(0, 16)}...'
+                    : result.sha256),
+                const SizedBox(height: 12),
+                Text(
+                  'To trust this certificate, it needs to be added to your '
+                  'system keychain. This requires your Mac password.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Skip'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _installCert(result);
+              },
+              icon: const Icon(Icons.verified_user, size: 16),
+              label: const Text('Trust Certificate'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      // Non-critical — don't block the flow
+      debugPrint('Cert check failed: $e');
+    }
+  }
+
+  Widget _certRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+          Expanded(child: SelectableText(value, style: const TextStyle(fontSize: 12))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _installCert(CertCheckResult cert) async {
+    try {
+      // Write the PEM to a temp file and install via osascript
+      final tmpDir = await Directory.systemTemp.createTemp('lux_cert');
+      final certFile = File('${tmpDir.path}/corporate_ca.pem');
+      await certFile.writeAsString(cert.pem);
+
+      // Use osascript to add to keychain with admin prompt
+      final script = 'do shell script '
+          '"security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '
+          '${certFile.path}" '
+          'with prompt "Lux needs to install the corporate CA certificate" '
+          'with administrator privileges';
+
+      final result = await Process.run('/usr/bin/osascript', ['-e', script]);
+
+      if (result.exitCode == 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Certificate installed and trusted')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Certificate install cancelled or failed')),
+          );
+        }
+      }
+
+      // Cleanup
+      try { await certFile.delete(); await tmpDir.delete(); } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
   Future<_ProxyCredentials?> _promptCredentials(DetectedProxy proxy) async {
     final usernameCtrl = TextEditingController();
     final passwordCtrl = TextEditingController();
@@ -471,6 +611,9 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 content:
                     Text('Added ${result.proxies.length} proxy(ies)')),
           );
+
+          // Step 4: Check for SSL interception
+          _checkCertForProxy(result.proxies.first, creds);
         }
       }
     } catch (e) {
