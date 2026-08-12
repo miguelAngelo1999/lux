@@ -1,11 +1,11 @@
 {
-  "version": "1.50.13",
+  "version": "1.50.14",
   "channel": "stable",
-  "notes": "fix: Detect Proxy now finds all PROXY entries from the corporate PAC script",
+  "notes": "feat: Detect Proxy now prompts for credentials and password type before adding",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "d5674d607d1ee70b9bef7caf54fe3d16f8c53f1a197db9f87e2cc358aa62569a",
-    "size": 34724168
+    "sha256": "4a23f33b1bf4eb001f17634c43a703f24348b6ba94fb548a8ecf1e2ff3944f26",
+    "size": 34727956
   },
   "windows": {
     "url": "",
