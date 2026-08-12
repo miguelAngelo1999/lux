@@ -1,11 +1,11 @@
 {
   "version": "1.50.16",
   "channel": "stable",
-  "notes": "chore: resync checksums",
+  "notes": "fix: rule edit works again + drag handle moved to left side so delete button is clickable",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "4e2036bd6cb831c4d262613dfb36cf32622e650c709d41c295e8d04bdde65e48",
-    "size": 34765823
+    "sha256": "55d05c0733fd8534d5685b5ce16066b0de8acadbf525894ca7486f57864f59ae",
+    "size": 20795723
   },
   "windows": {
     "url": "",
