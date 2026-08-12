@@ -222,6 +222,32 @@ class CoreManager {
         data: {'oldRule': oldRule, 'newRule': newRule});
   }
 
+
+  /// Update a rule by its id using the structured PATCH endpoint.
+  Future<void> updateRuleById(String id, {
+    required String ruleType,
+    required String payload,
+    required String policy,
+    String network = '',
+    String? proxyId,
+  }) async {
+    Map<String, dynamic> policyPayload;
+    switch (policy.toUpperCase()) {
+      case 'DIRECT':
+        policyPayload = {'kind': 'direct'};
+      case 'REJECT':
+        policyPayload = {'kind': 'reject'};
+      case 'PROXY':
+        policyPayload = {'kind': 'selected'};
+      default:
+        policyPayload = {'kind': 'proxy', 'proxyId': proxyId ?? policy};
+    }
+    await dio.patch('$baseHttpUrl/rules/items/$id', data: {
+      'conditions': [{'type': ruleType, 'value': payload}],
+      'policy': policyPayload,
+      if (network.isNotEmpty) 'network': network,
+    });
+  }
   // ── Id-based rule mutations ────────────────────────────────────────────────
   //
   // Prefer these over the string variants above. Addressing a rule by its raw

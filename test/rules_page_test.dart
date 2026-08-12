@@ -436,16 +436,14 @@ void main() {
         groups: [ruleGroup('g1', 'Work', 0)],
       );
       await pumpRules(tester, core);
-      final unfiltered =
-          tester.widget<ReorderableListView>(find.byType(ReorderableListView));
-      expect(unfiltered.buildDefaultDragHandles, isTrue);
+      // When not searching, drag indicators should be visible
+      expect(find.byIcon(Icons.drag_indicator), findsWidgets);
 
       await tester.enterText(find.byType(TextField), 'aa');
       await tester.pumpAndSettle();
 
-      final filtered =
-          tester.widget<ReorderableListView>(find.byType(ReorderableListView));
-      expect(filtered.buildDefaultDragHandles, isFalse);
+      // While searching, drag indicators should be hidden
+      expect(find.byIcon(Icons.drag_indicator), findsNothing);
     });
   });
 }

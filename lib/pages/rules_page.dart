@@ -299,7 +299,13 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       await _load();
     } else {
       try {
-        await widget.coreManager.editCustomizedRule(item.raw, newRaw);
+        await widget.coreManager.updateRuleById(
+          item.id,
+          ruleType: ruleType,
+          payload: payload.trim(),
+          policy: policy,
+          network: network,
+        );
       } catch (e) {
         _error('Could not save the rule: $e');
       }
@@ -550,10 +556,10 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     return ReorderableListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: canReorder,
+      buildDefaultDragHandles: false,
       itemCount: rules.length,
       onReorder: (o, n) => canReorder ? _reorder(groupId, o, n) : null,
-      itemBuilder: (ctx, i) => _ruleRow(rules[i], groupEnabled: groupEnabled),
+      itemBuilder: (ctx, i) => _ruleRow(rules[i], groupEnabled: groupEnabled, index: i),
     );
   }
 
@@ -592,13 +598,14 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     );
   }
 
-  Widget _ruleRow(CustomizedRuleItem rule, {required bool groupEnabled}) {
+  Widget _ruleRow(CustomizedRuleItem rule, {required bool groupEnabled, required int index}) {
     // Key on the id: it survives edits and toggles, so Flutter never reuses one
     // row's state for another rule.
     final key = ValueKey(rule.id);
     final busy = _busy.contains(rule.id);
     final shadow = _shadows[rule.id];
     final inactive = rule.disabled || !groupEnabled || rule.isBroken;
+    final canDrag = _search.isEmpty;
 
     return Container(
       key: key,
@@ -614,12 +621,22 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       ),
       child: Row(
         children: [
+          // Drag handle on the left — only active when not searching
+          if (canDrag)
+            ReorderableDragStartListener(
+              index: index,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.drag_indicator, size: 16, color: Colors.grey),
+              ),
+            )
+          else
+            const SizedBox(width: 24),
           SizedBox(
-            width: 14,
+            width: 6,
             child: Container(
               width: 6,
               height: 6,
-              margin: const EdgeInsets.only(left: 4),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: rule.isBroken
