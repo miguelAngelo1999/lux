@@ -1,11 +1,11 @@
 {
-  "version": "1.50.16",
+  "version": "1.50.18",
   "channel": "stable",
-  "notes": "fix: rule edit works again + drag handle moved to left side so delete button is clickable",
+  "notes": "fix: the macOS core binary was missing from 1.50.16/17 \u2014 this release restores it",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "55d05c0733fd8534d5685b5ce16066b0de8acadbf525894ca7486f57864f59ae",
-    "size": 20795723
+    "sha256": "caf68a17069d658770e44107249fa9ba338d7b2778150af0d49e78409ee879af",
+    "size": 34766260
   },
   "windows": {
     "url": "",
