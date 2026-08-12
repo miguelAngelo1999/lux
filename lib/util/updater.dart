@@ -641,7 +641,7 @@ String _buildWindowsUpdaterScript(String installerPath) {
 /// setuid root + NOPASSWD sudoers. No install, no relaunch — just elevation.
 /// The install itself is now done in-process by Flutter as the user.
 String _buildElevationScript() {
-  return r'''
+  return r"""
 #!/bin/bash
 exec >> /tmp/lux_elevation.log 2>&1
 echo "Elevation setup started at $(date)"
@@ -652,21 +652,36 @@ REAL="${BIN}_real"
 HELPER_DIR="/Library/PrivilegedHelperTools/com.github.igoogolx.lux"
 USER_NAME=$(stat -f '%Su' /dev/console 2>/dev/null || echo "$SUDO_USER")
 
-# Set up wrapper + setuid if not already done
-if [ -f "$BIN" ] && ! grep -q "exec sudo" "$BIN" 2>/dev/null; then
+# Clear quarantine first — without this, mv/chmod fail on downloaded apps.
+xattr -cr "$DEST" 2>/dev/null || true
+
+# After an update, lux_core is a fresh binary (not the wrapper script).
+# _real may still exist from the previous install. Handle all states:
+#   A) lux_core is wrapper, _real is binary — already set up, just fix perms
+#   B) lux_core is binary, _real exists (old) — replace _real, create wrapper
+#   C) lux_core is binary, _real absent — fresh install, move + create wrapper
+if grep -q "exec sudo" "$BIN" 2>/dev/null; then
+  echo "State A: wrapper already in place"
+else
+  echo "State B/C: lux_core is a binary, setting up wrapper"
+  # Remove stale _real if it exists (from previous version)
+  rm -f "$REAL"
   mv "$BIN" "$REAL"
   printf '#!/bin/bash\nexec sudo "%s" "$@"\n' "$REAL" > "$BIN"
   chmod 755 "$BIN"
 fi
+
+# Ensure _real has correct ownership and setuid regardless of state
 if [ -f "$REAL" ]; then
   chown root:wheel "$REAL"
   chmod 4755 "$REAL"
 fi
 
-# Give /Applications/Lux.app back to the user so future updates don't need sudo
+# Give /Applications/Lux.app back to the user so future updates don't need sudo.
+# But lux_core_real must stay root:wheel+setuid.
 chown -R "$USER_NAME":staff "$DEST" 2>/dev/null || true
-# lux_core_real must stay root:wheel+setuid
-chown root:wheel "$REAL" && chmod 4755 "$REAL" 2>/dev/null || true
+chown root:wheel "$REAL" 2>/dev/null || true
+chmod 4755 "$REAL" 2>/dev/null || true
 
 # Update sudoers
 if [ -n "$USER_NAME" ] && [ -f "$REAL" ]; then
@@ -680,11 +695,13 @@ if [ -n "$USER_NAME" ] && [ -f "$REAL" ]; then
     echo "$USER_NAME ALL=(root) NOPASSWD: /bin/bash $HELPER_DIR/lux_updater.sh"
   } > /etc/sudoers.d/lux_core
   chmod 0440 /etc/sudoers.d/lux_core
-  visudo -c -f /etc/sudoers.d/lux_core 2>/dev/null || rm -f /etc/sudoers.d/lux_core
+  if ! visudo -c -f /etc/sudoers.d/lux_core 2>/dev/null; then
+    echo "ERROR: sudoers validation failed, removing entry"
+    rm -f /etc/sudoers.d/lux_core
+  fi
 fi
-
 echo "Elevation setup complete at $(date)"
-''';
+""";
 }
 
 /// Builds a standalone installer script that runs independently of the Lux process.

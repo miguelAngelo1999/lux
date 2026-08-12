@@ -103,8 +103,13 @@ USER_NAME="$user"
 # is done, and it requires root — which we have inside this osascript block.
 xattr -cr /Applications/Lux.app 2>/dev/null || true
 
-# Split the binary out, once.
+# Split the binary out — handles updates where _real already exists from a
+# previous version (must be replaced with the new binary).
 if [ ! -f "\$REAL" ]; then
+  mv "\$BIN" "\$REAL"
+elif ! grep -q "exec sudo" "\$BIN" 2>/dev/null; then
+  # lux_core is a new binary and _real is stale — replace it
+  rm -f "\$REAL"
   mv "\$BIN" "\$REAL"
 fi
 
