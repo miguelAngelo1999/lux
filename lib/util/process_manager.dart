@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lux/core/checksum.dart';
+import 'package:lux/util/telemetry.dart' as telem;
 import 'package:lux/util/utils.dart';
 
 import '../error.dart';
@@ -55,6 +56,8 @@ class ProcessManager {
           var i10nLabel = await getInitI10nLabel();
           var code = await elevate(path, i10nLabel.macOSElevateServiceInfo);
           if (code != 0) {
+            telem.telemetryError('elevation-failed',
+                'elevate returned $code', extra: {'path': path});
             throw CoreRunError("fail to elevate core, code: $code");
           }
         }

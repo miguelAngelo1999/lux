@@ -247,6 +247,9 @@ class _HomeState extends State<Home>
                         .toList() ??
                     [];
                 if (proxyIds.isNotEmpty) {
+                  telem.telemetryError('credential-expired',
+                      'All proxies exhausted after credential expiry',
+                      extra: {'proxyIds': proxyIds});
                   _handleCredentialExpired(proxyIds);
                 }
               }
@@ -254,6 +257,7 @@ class _HomeState extends State<Home>
               {
                 final data = message['data'] as Map<String, dynamic>?;
                 final name = data?['name'] as String? ?? 'another proxy';
+                telem.telemetryOp('proxy-switch', 'Switched to $name');
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

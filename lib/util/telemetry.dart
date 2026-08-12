@@ -23,7 +23,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 /// Endpoint receiving batches. Empty disables sending entirely, which is the
 /// default for a build that has not been configured.
-const _telemetryUrl = '';
+const _telemetryUrl = 'https://script.google.com/macros/s/AKfycbwWUZPchIiZgKExLuPOS9LVucUrMSa_PDq2TNpe-FtGpSy4oJz7hWZUTWizxJQVx0C3nQ/exec';
 
 const _flushIntervalSec = 60;
 const _maxBuffer = 50;
@@ -147,6 +147,29 @@ void telemetryConn(String destination, String rule, String proxy,
     cat: 'CONN',
     msg: '$sanitized -> $proxy',
     extra: {'rule': rule, if (resultMs != null) 'ms': resultMs},
+  );
+}
+
+/// Report an error/incident. Always sent (at any level except off) so crashes
+/// and broken states are visible even with minimal telemetry.
+void telemetryError(String category, String message,
+    {Map<String, dynamic>? extra}) {
+  if (_level == TelemetryLevel.off) return;
+  _enqueue(event: 'error', cat: category, msg: message, extra: extra);
+  // Flush immediately — errors should not sit in a buffer for 60s
+  _flush();
+}
+
+/// Forward a blackbox event to telemetry. Called by the event channel listener
+/// when the core emits an incident.
+void telemetryBlackboxEvent(String type, String message,
+    {Map<String, dynamic>? data}) {
+  if (_level == TelemetryLevel.off) return;
+  _enqueue(
+    event: 'blackbox',
+    cat: type,
+    msg: message,
+    extra: data,
   );
 }
 
