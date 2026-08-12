@@ -1,11 +1,11 @@
 {
-  "version": "1.50.20",
+  "version": "1.50.21",
   "channel": "stable",
-  "notes": "fix: telemetry endpoint working \u2014 errors now reach the Google Sheet",
+  "notes": "fix: streaming stalls in local proxy mode \u2014 same half-close deadlock as the TUN relay, now fixed in both paths",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "4b808b76c80b556069e4a6ddd522f26219a53c8ecd3e59de41a41f94a00bf7fc",
-    "size": 34772436
+    "sha256": "efd25304c16eaaf4e4ac1fa51785e2a0faa5d66897d6c28cdda9e2a6c0378cda",
+    "size": 34773160
   },
   "windows": {
     "url": "",
