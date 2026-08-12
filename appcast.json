@@ -1,11 +1,11 @@
 {
-  "version": "1.50.18",
+  "version": "1.50.19",
   "channel": "stable",
-  "notes": "fix: the macOS core binary was missing from 1.50.16/17 \u2014 this release restores it",
+  "notes": "feat: error reporting active \u2014 elevation failures and incidents now reported to telemetry",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "caf68a17069d658770e44107249fa9ba338d7b2778150af0d49e78409ee879af",
-    "size": 34766260
+    "sha256": "7a1e6d83b6640b4d7543fa337d5b43b210e01129fff549716e1249172845dbe5",
+    "size": 34771863
   },
   "windows": {
     "url": "",
