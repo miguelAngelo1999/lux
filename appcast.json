@@ -1,11 +1,11 @@
 {
-  "version": "1.50.15",
+  "version": "1.50.16",
   "channel": "stable",
-  "notes": "feat: detects corporate SSL interception after proxy setup and offers to trust the CA",
+  "notes": "chore: resync checksums",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "66da8a8f57c6bb770564d29492836ac0562bd25d6144ec09db0b17ad64dcbc4e",
-    "size": 34749401
+    "sha256": "4e2036bd6cb831c4d262613dfb36cf32622e650c709d41c295e8d04bdde65e48",
+    "size": 34765823
   },
   "windows": {
     "url": "",
