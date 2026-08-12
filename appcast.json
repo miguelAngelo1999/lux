@@ -1,11 +1,11 @@
 {
-  "version": "1.50.11",
+  "version": "1.50.12",
   "channel": "stable",
-  "notes": "feat: proxy failover on credential expiry \u2014 tries each proxy before prompting",
+  "notes": "fix: Detect Proxy now works \u2014 finds the corporate PAC even when running as root",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "810b5ca8fb519e9b43c4d42907ff7255ca956a766a6b4be8a8f0ee59fd9a16dd",
-    "size": 41230679
+    "sha256": "25a0212ea75270b7de7016bc838f4e0f686a8dbf0203ac7f8181b7797af4c557",
+    "size": 34723740
   },
   "windows": {
     "url": "",
