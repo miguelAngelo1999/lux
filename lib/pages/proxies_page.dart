@@ -279,6 +279,113 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   bool _isDetecting = false;
 
+  Future<_ProxyCredentials?> _promptCredentials(DetectedProxy proxy) async {
+    final usernameCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    String passwordMode = 'persistent';
+    int ttlMinutes = 60;
+
+    final result = await showDialog<_ProxyCredentials>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Credentials for ${proxy.host}:${proxy.port}'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: usernameCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Username',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passwordCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => Navigator.pop(
+                    ctx,
+                    _ProxyCredentials(
+                      username: usernameCtrl.text,
+                      password: passwordCtrl.text,
+                      passwordMode: passwordMode,
+                      ttlMinutes: ttlMinutes,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: passwordMode,
+                  decoration: const InputDecoration(
+                    labelText: 'Password type',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'persistent', child: Text('Persistent (saved)')),
+                    DropdownMenuItem(value: 'timed', child: Text('Timed (expires)')),
+                    DropdownMenuItem(value: 'one-time', child: Text('One-time (cleared after use)')),
+                  ],
+                  onChanged: (v) => setDialogState(() => passwordMode = v!),
+                ),
+                if (passwordMode == 'timed') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Expires after (minutes)',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    controller: TextEditingController(text: '$ttlMinutes'),
+                    onChanged: (v) => ttlMinutes = int.tryParse(v) ?? 60,
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  'Leave empty if the proxy does not require authentication.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                ctx,
+                _ProxyCredentials(
+                  username: usernameCtrl.text,
+                  password: passwordCtrl.text,
+                  passwordMode: passwordMode,
+                  ttlMinutes: ttlMinutes,
+                ),
+              ),
+              child: const Text('Add Proxy'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    usernameCtrl.dispose();
+    passwordCtrl.dispose();
+    return result;
+  }
+
   Future<void> _detectProxies() async {
     setState(() => _isDetecting = true);
     try {
@@ -338,6 +445,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       );
 
       if (added == true) {
+        // Step 2: Prompt for credentials and password type
+        final creds = await _promptCredentials(result.proxies.first);
+        if (creds == null) return;
+
+        // Step 3: Add the proxy with credentials
         for (final p in result.proxies) {
           await widget.coreManager.addProxy({
             'name': p.host,
@@ -345,6 +457,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
             'server': p.host,
             'port': int.tryParse(p.port) ?? 8080,
             'pacUrl': p.pacUrl,
+            if (creds.username.isNotEmpty) 'username': creds.username,
+            if (creds.password.isNotEmpty) 'password': creds.password,
+            if (creds.passwordMode.isNotEmpty) 'passwordMode': creds.passwordMode,
+            if (creds.passwordMode == 'timed' && creds.ttlMinutes > 0)
+              'passwordTTLMinutes': creds.ttlMinutes,
           });
         }
         await refreshProxyList();
@@ -369,4 +486,19 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       if (mounted) setState(() => _isDetecting = false);
     }
   }
+}
+
+
+class _ProxyCredentials {
+  final String username;
+  final String password;
+  final String passwordMode;
+  final int ttlMinutes;
+
+  const _ProxyCredentials({
+    required this.username,
+    required this.password,
+    required this.passwordMode,
+    required this.ttlMinutes,
+  });
 }
