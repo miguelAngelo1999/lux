@@ -1,11 +1,11 @@
 {
-  "version": "1.50.14",
+  "version": "1.50.15",
   "channel": "stable",
-  "notes": "feat: Detect Proxy now prompts for credentials and password type before adding",
+  "notes": "feat: detects corporate SSL interception after proxy setup and offers to trust the CA",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "4a23f33b1bf4eb001f17634c43a703f24348b6ba94fb548a8ecf1e2ff3944f26",
-    "size": 34727956
+    "sha256": "66da8a8f57c6bb770564d29492836ac0562bd25d6144ec09db0b17ad64dcbc4e",
+    "size": 34749401
   },
   "windows": {
     "url": "",
