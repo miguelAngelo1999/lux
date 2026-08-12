@@ -217,11 +217,16 @@ Future<void> _flush() async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 10);
     final req = await client.postUrl(Uri.parse(_telemetryUrl));
+    req.followRedirects = false; // Apps Script returns 302 on success
     req.headers.contentType = ContentType.json;
     req.write(payload);
     final resp = await req.close().timeout(const Duration(seconds: 15));
     await resp.drain();
     client.close();
+    // 302 from Apps Script = success (redirect to result page)
+    if (resp.statusCode != 200 && resp.statusCode != 302) {
+      debugPrint('[Telemetry] unexpected status ${resp.statusCode}');
+    }
   } catch (e) {
     // Dropped rather than retried. Reporting must never degrade the app, and a
     // retry queue would risk unbounded growth.
