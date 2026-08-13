@@ -1,11 +1,11 @@
 {
-  "version": "1.50.21",
+  "version": "1.50.22",
   "channel": "stable",
-  "notes": "fix: streaming stalls in local proxy mode \u2014 same half-close deadlock as the TUN relay, now fixed in both paths",
+  "notes": "feat: DNS-MAP rules now show 'domain \u2192 ip' and the edit dialog has separate Domain/IP fields",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "efd25304c16eaaf4e4ac1fa51785e2a0faa5d66897d6c28cdda9e2a6c0378cda",
-    "size": 34773160
+    "sha256": "b54e4f259b4eb89087b381a49dd95feba90d763ffd4d15d2140ba3ba9947f884",
+    "size": 34774274
   },
   "windows": {
     "url": "",
