@@ -213,6 +213,15 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     String policy = item?.policy ?? 'PROXY';
     String network = item?.network ?? '';
 
+    // DNS-MAP splits payload into domain;ip
+    String dnsMapDomain = '';
+    String dnsMapIp = '';
+    if (ruleType == 'DNS-MAP' && payload.contains(';')) {
+      final parts = payload.split(';');
+      dnsMapDomain = parts[0];
+      dnsMapIp = parts.length > 1 ? parts[1] : '';
+    }
+
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -233,17 +242,42 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   onChanged: (v) => setDialogState(() => ruleType = v!),
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: payload,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Payload',
-                    hintText: _payloadHint(ruleType),
-                    isDense: true,
+                if (ruleType == 'DNS-MAP') ...[
+                  // Two intuitive fields instead of "example.com;127.0.0.1"
+                  TextFormField(
+                    initialValue: dnsMapDomain,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Domain',
+                      hintText: 'example.com',
+                      isDense: true,
+                    ),
+                    onChanged: (v) => dnsMapDomain = v,
                   ),
-                  onChanged: (v) => payload = v,
-                  onFieldSubmitted: (_) => Navigator.pop(ctx, true),
-                ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    initialValue: dnsMapIp,
+                    decoration: const InputDecoration(
+                      labelText: 'Resolve to IP',
+                      hintText: '127.0.0.1',
+                      isDense: true,
+                    ),
+                    onChanged: (v) => dnsMapIp = v,
+                    onFieldSubmitted: (_) => Navigator.pop(ctx, true),
+                  ),
+                ] else ...[
+                  TextFormField(
+                    initialValue: payload,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Payload',
+                      hintText: _payloadHint(ruleType),
+                      isDense: true,
+                    ),
+                    onChanged: (v) => payload = v,
+                    onFieldSubmitted: (_) => Navigator.pop(ctx, true),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _proxyNames.contains(policy) ? policy : 'PROXY',
@@ -284,7 +318,15 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       ),
     );
 
-    if (result != true || payload.trim().isEmpty) return;
+    if (result != true) return;
+
+    // Assemble the payload
+    if (ruleType == 'DNS-MAP') {
+      if (dnsMapDomain.trim().isEmpty || dnsMapIp.trim().isEmpty) return;
+      payload = '${dnsMapDomain.trim()};${dnsMapIp.trim()}';
+    } else {
+      if (payload.trim().isEmpty) return;
+    }
 
     final parts = [ruleType, payload.trim(), policy];
     if (network.isNotEmpty) parts.add(network);
@@ -665,7 +707,9 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 (
               message: rule.slug.isEmpty ? rule.payload : rule.slug,
               child: Text(
-                rule.payload,
+                rule.ruleType == 'DNS-MAP' && rule.payload.contains(';')
+                    ? '${rule.payload.split(';')[0]} → ${rule.payload.split(';')[1]}'
+                    : rule.payload,
                 style: TextStyle(
                   fontSize: 11,
                   color: inactive ? Colors.grey : null,
