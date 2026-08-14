@@ -37,13 +37,21 @@ void main(List<String> args) async {
   try {
     await windowManager.ensureInitialized();
 
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(800, 650),
+    WindowOptions windowOptions = WindowOptions(
+      size: const Size(800, 650),
       center: true,
       skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.hidden,
+      windowButtonVisibility: Platform.isMacOS,
     );
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
+      if (Platform.isMacOS) {
+        await windowManager.setTitleBarStyle(
+          TitleBarStyle.hidden,
+          windowButtonVisibility: true,
+        );
+      }
       windowManager.center();
       var isLaunchFromStartUp =
           Platform.isWindows && args.contains(launchFromStartupArg);
