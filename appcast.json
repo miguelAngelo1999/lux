@@ -1,11 +1,11 @@
 {
-  "version": "1.50.22",
+  "version": "1.50.23",
   "channel": "stable",
-  "notes": "feat: DNS-MAP rules now show 'domain \u2192 ip' and the edit dialog has separate Domain/IP fields",
+  "notes": "feat: borderless window with native macOS traffic lights",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "b54e4f259b4eb89087b381a49dd95feba90d763ffd4d15d2140ba3ba9947f884",
-    "size": 34774274
+    "sha256": "c8d3016e8b0c9df920bcc1f7b7af74ecd2d4a4dae7a24881137fb681f7de3ca5",
+    "size": 34773781
   },
   "windows": {
     "url": "",
