@@ -84,6 +84,22 @@ Future<String> readOrCreateTelemetryUuid() async {
   return generated;
 }
 
+/// Shared secret for the local core API, generated on first read.
+///
+/// Persisted rather than regenerated per launch so a CoreManager captured by
+/// a widget keeps working after the core or the app restarts. A fresh secret
+/// each time left held references pointing at a token the core had retired,
+/// which surfaced as WebSocket upgrades failing with 401.
+Future<String> readOrCreateApiSecret() async {
+  final prefs = await _readPrefs();
+  final existing = prefs['apiSecret'];
+  if (existing is String && existing.isNotEmpty) return existing;
+  final generated = const Uuid().v4();
+  prefs['apiSecret'] = generated;
+  await _writePrefs(prefs);
+  return generated;
+}
+
 /// Selected UI language: "system", "en", or a language code such as "pt".
 ///
 /// Stored in lux_prefs.json, but falls back to the `language` field in

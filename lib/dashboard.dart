@@ -115,17 +115,26 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     }
   }
 
+  /// On Windows the hidden title bar leaves nothing to drag the window by,
+  /// so the whole header doubles as the drag surface.
+  Widget _wrapDraggable(Widget child) {
+    if (!Platform.isWindows) return child;
+    return DragToMoveArea(child: child);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(50),
-        child: AppHeaderBar(
+        // Windows hides the native title bar, so the header itself has to
+        // be the drag handle. Buttons inside still win the hit test.
+        child: _wrapDraggable(AppHeaderBar(
           coreManager: widget.coreManager,
           urlStr: widget.urlStr,
           curProxyInfo: curProxyInfo,
           onCurProxyInfoChange: onCurProxyInfoChange,
-        ),
+        )),
       ),
       body: Row(
         children: [

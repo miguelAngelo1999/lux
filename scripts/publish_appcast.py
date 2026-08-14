@@ -116,6 +116,33 @@ def upload_in_place(svc, file_id, name, media):
         return created["id"]
 
 
+def fetch_appcast(svc):
+    """The appcast as it stands on Drive.
+
+    Read before write so the platform this script is not publishing keeps
+    its download URL. Building the dict from scratch is what silently
+    disabled Windows updates for every release after 1.46.9.
+    """
+    try:
+        raw = svc.files().get_media(fileId=APPCAST_FILE_ID).execute()
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        return json.loads(raw)
+    except Exception as e:
+        print(f"# could not read existing appcast ({e}); starting fresh")
+        return {}
+
+
+def platform_entry(appcast, key):
+    """Existing entry for a platform, normalised, or an empty one."""
+    entry = appcast.get(key) or {}
+    return {
+        "url": entry.get("url", ""),
+        "sha256": entry.get("sha256", ""),
+        "size": entry.get("size", 0),
+    }
+
+
 def release_notes():
     """Subject of the newest commit that is not itself a release commit.
 
@@ -176,12 +203,21 @@ def main():
 
     notes = release_notes()
 
+    current = fetch_appcast(svc)
+    windows = platform_entry(current, "windows")
+    if windows["url"]:
+        print("# preserving windows entry, {} bytes".format(windows["size"]))
+    else:
+        print("# no windows entry to preserve")
+
     appcast = {
         "version": version,
         "channel": "stable",
         "notes": notes,
         "macOS": {"url": url, "sha256": digest, "size": size},
-        "windows": {"url": "", "sha256": "", "size": 0},
+        # Carried over, never blanked. This script publishes the macOS
+        # build only; clobbering this is what broke Windows updates.
+        "windows": windows,
     }
     body = json.dumps(appcast, indent=2) + "\n"
 

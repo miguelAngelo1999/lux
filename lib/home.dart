@@ -25,7 +25,6 @@ import 'package:power_monitor/power_monitor.dart';
 import 'package:provider/provider.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:uuid/uuid.dart';
 import 'package:version/version.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_manager/window_manager.dart';
@@ -125,8 +124,8 @@ class _HomeState extends State<Home>
     );
 
     final port = await findAvailablePort(8000, 9000);
-    var uuid = Uuid();
-    var secret = uuid.v4();
+    // Stable across restarts on purpose. See readOrCreateApiSecret.
+    var secret = await readOrCreateApiSecret();
     final Version currentVersion = Version.parse(await getAppVersion());
     var needElevate = true;
     var homeDirArg = '-home_dir=$curHomeDir';

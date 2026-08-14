@@ -40,6 +40,10 @@ class _State extends State<AppHeaderBar> with WindowListener {
   bool isLoadingRuleDropdown = false;
   WebSocketChannel? runtimeStatusChannel;
 
+  /// Windows draws its own caption buttons because hiding the native title
+  /// bar removes them, so the maximised state has to be tracked here.
+  bool isMaximized = false;
+
   void openWebDashboard() {
     launchUrl(Uri.parse(widget.urlStr));
   }
@@ -145,6 +149,11 @@ class _State extends State<AppHeaderBar> with WindowListener {
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    if (Platform.isWindows) {
+      windowManager.isMaximized().then((value) {
+        if (mounted) setState(() => isMaximized = value);
+      });
+    }
     refreshData();
 
     if (runtimeStatusChannel == null) {
@@ -175,6 +184,16 @@ class _State extends State<AppHeaderBar> with WindowListener {
     refreshData();
   }
 
+  @override
+  void onWindowMaximize() {
+    if (mounted) setState(() => isMaximized = true);
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    if (mounted) setState(() => isMaximized = false);
+  }
+
   void _handleAdd() async {
     await showDialog(
       context: context,
@@ -196,6 +215,9 @@ class _State extends State<AppHeaderBar> with WindowListener {
     );
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
+        // dashboard.dart wraps this in a 50px PreferredSize; without
+        // matching it here the default 56px gets squeezed and overlaps.
+        toolbarHeight: 50,
         // On macOS with hidden title bar, leave space for the traffic lights.
         leadingWidth: Platform.isMacOS ? 80 : null,
         leading: Padding(
@@ -242,6 +264,34 @@ class _State extends State<AppHeaderBar> with WindowListener {
               ),
             ),
           ],
-        ));
+        ),
+        actions: Platform.isWindows ? _windowsCaptionButtons() : null);
+  }
+
+  /// Minimise / maximise / close for Windows, replacing the buttons lost
+  /// with the native title bar. Close goes through windowManager so the
+  /// existing setPreventClose handling still runs.
+  List<Widget> _windowsCaptionButtons() {
+    final brightness = Theme.of(context).brightness;
+    return [
+      WindowCaptionButton.minimize(
+        brightness: brightness,
+        onPressed: () => windowManager.minimize(),
+      ),
+      if (isMaximized)
+        WindowCaptionButton.unmaximize(
+          brightness: brightness,
+          onPressed: () => windowManager.unmaximize(),
+        )
+      else
+        WindowCaptionButton.maximize(
+          brightness: brightness,
+          onPressed: () => windowManager.maximize(),
+        ),
+      WindowCaptionButton.close(
+        brightness: brightness,
+        onPressed: () => windowManager.close(),
+      ),
+    ];
   }
 }
