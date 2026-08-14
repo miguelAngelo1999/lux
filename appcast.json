@@ -1,11 +1,11 @@
 {
-  "version": "1.48.8",
+  "version": "1.48.9",
   "channel": "stable",
-  "notes": "fix: PAC DIRECT override ignored when upstream proxy is configured",
+  "notes": "feat: DIRECT IP-CIDR rules now bypass TUN entirely (preproxy/upstream proxy never enters userspace). Windows: WFP per-process bypass for PROCESS,x,DIRECT rules.",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "43d05c346fc7fb7857adcd89adde98ffe6abe27427a2673429b608ec62f85f25",
-    "size": 89800337
+    "sha256": "64ffeab8874121f0ea2263f6722c2c606acea28f98257fb9feaeb154c767cfed",
+    "size": 89759757
   },
   "windows": {
     "url": "",
