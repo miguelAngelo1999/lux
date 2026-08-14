@@ -1,11 +1,11 @@
 {
-  "version": "1.50.24",
+  "version": "1.50.25",
   "channel": "stable",
-  "notes": "fix: traffic lights separated from toolbar \u2014 no more overlap",
+  "notes": "feat: terminal/Node/Docker now use the proxy too \u2014 env vars set on toggle",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "1c583ee1444f03f638992564ddd94d82ccb6459df09bca1d2330011c56fbdc73",
-    "size": 34772560
+    "sha256": "ba6e574affcf5858376ea56474cc6609b0e06e0e3f637b1148480015f6bf93a1",
+    "size": 34775891
   },
   "windows": {
     "url": "",
