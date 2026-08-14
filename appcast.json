@@ -1,11 +1,11 @@
 {
-  "version": "1.50.23",
+  "version": "1.50.24",
   "channel": "stable",
-  "notes": "feat: borderless window with native macOS traffic lights",
+  "notes": "fix: traffic lights separated from toolbar \u2014 no more overlap",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "c8d3016e8b0c9df920bcc1f7b7af74ecd2d4a4dae7a24881137fb681f7de3ca5",
-    "size": 34773781
+    "sha256": "1c583ee1444f03f638992564ddd94d82ccb6459df09bca1d2330011c56fbdc73",
+    "size": 34772560
   },
   "windows": {
     "url": "",
