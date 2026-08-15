@@ -53,6 +53,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
   final _searchCtrl = TextEditingController();
 
   List<String> _proxyNames = ['DIRECT', 'PROXY', 'REJECT'];
+  Map<String, String> _proxyNameToId = {};
 
   static const _ruleTypes = [
     'DOMAIN',
@@ -111,6 +112,10 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           'REJECT',
           ...proxyList.proxies.map((p) => p.name).where((n) => n.isNotEmpty),
         ];
+        _proxyNameToId = {
+          for (final p in proxyList.proxies)
+            if (p.name.isNotEmpty) p.name: p.id,
+        };
         _isLoading = false;
       });
     } catch (e) {
@@ -347,6 +352,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           payload: payload.trim(),
           policy: policy,
           network: network,
+          proxyId: _proxyNameToId[policy],
         );
       } catch (e) {
         _error('Could not save the rule: $e');
