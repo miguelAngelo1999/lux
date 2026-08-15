@@ -1,11 +1,11 @@
 {
-  "version": "1.50.25",
+  "version": "1.50.26",
   "channel": "stable",
-  "notes": "feat: terminal/Node/Docker now use the proxy too \u2014 env vars set on toggle",
+  "notes": "feat: pre-TUN bypass + env vars for terminal + relay fix for local proxy",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "ba6e574affcf5858376ea56474cc6609b0e06e0e3f637b1148480015f6bf93a1",
-    "size": 34775891
+    "sha256": "f32ba30222f66f25919c70d289c04d2aefa31ca5c5253795bc573923557d0ba9",
+    "size": 34796633
   },
   "windows": {
     "url": "",
