@@ -5,6 +5,10 @@ class AppStateModel extends ChangeNotifier {
   late Locale _locale;
   String _selectedProxyId = "";
   bool _isStarted = false;
+  // Whether the user has intentionally started the core.
+  // The watchdog only restarts when this is true, so a deliberate toggle-off
+  // is respected and the app doesn't fight the user.
+  bool userWantsRunning = false;
 
   Locale get locale => _locale;
   ThemeMode get theme => _theme;

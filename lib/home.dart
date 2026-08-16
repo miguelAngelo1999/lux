@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
@@ -58,6 +59,11 @@ class _HomeState extends State<Home>
   var needRestart = false;
   dynamic coreError;
   bool _quickEditMode = false;
+  Timer? _watchdogTimer;
+  // True when the user has explicitly started the core (or autoConnect did).
+  // The watchdog only restarts when this is true, so a deliberate toggle-off
+  // is respected.
+  bool _userWantsRunning = false;
   final _quickEditChannel = const MethodChannel('lux_quick_edit');
 
   Future<void> _handleNativeQuickEdit(MethodCall call) async {
@@ -159,6 +165,12 @@ class _HomeState extends State<Home>
     isCoreReady.addListener(() {
       if (isCoreReady.value) {
         initClient(coreManager);
+        // If autoConnect fires, mark user intent so watchdog knows to keep it running.
+        readAutoConnect().then((v) {
+          if (v && mounted) {
+            Provider.of<AppStateModel>(context, listen: false).userWantsRunning = true;
+          }
+        });
         _refreshTray();
       }
     });
@@ -281,6 +293,26 @@ class _HomeState extends State<Home>
     // Listen for save callbacks from native quick edit panel
     _quickEditChannel.setMethodCallHandler(_handleNativeQuickEdit);
     _init(Provider.of<AppStateModel>(context, listen: false));
+    // Watchdog: restart the core if it stops unexpectedly while the user
+    // had it running. Checks every 30 seconds.
+    _watchdogTimer = Timer.periodic(const Duration(seconds: 30), (_) => _watchdog());
+  }
+
+  /// Watchdog — restarts the core if it stopped unexpectedly while the user
+  /// wanted it running. Runs every 30 seconds.
+  Future<void> _watchdog() async {
+    if (coreManager == null) return;
+    final appState = Provider.of<AppStateModel>(context, listen: false);
+    if (!appState.userWantsRunning) return;
+    try {
+      final isStarted = await coreManager!.getIsStarted();
+      if (!isStarted) {
+        appLog('WATCHDOG', 'core stopped unexpectedly — restarting');
+        await coreManager!.start();
+      }
+    } catch (_) {
+      // Core unreachable — will retry next tick
+    }
   }
 
   /// When proxy credentials expire and ALL proxies are exhausted (the Go side
@@ -373,6 +405,7 @@ class _HomeState extends State<Home>
 
   @override
   void dispose() {
+    _watchdogTimer?.cancel();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     powerMonitor.removeListener(this);

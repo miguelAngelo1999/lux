@@ -86,6 +86,10 @@ class _State extends State<AppHeaderBar> with WindowListener {
       setState(() {
         isLoadingSwitch = true;
       });
+      // Update intent before calling start/stop so the watchdog in home.dart
+      // knows whether to restart.
+      final appState = Provider.of<AppStateModel>(context, listen: false);
+      appState.userWantsRunning = value;
       if (value) {
         await widget.coreManager.start();
         setState(() {
