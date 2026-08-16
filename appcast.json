@@ -1,11 +1,11 @@
 {
-  "version": "1.50.28",
+  "version": "1.50.29",
   "channel": "stable",
-  "notes": "fix: named proxies via VPN now work \u2014 outbound not bound to en0 anymore",
+  "notes": "fix: LP delay test now works \u2014 VPN-reachable proxies test correctly",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a7d1f58478ad3c021b596dbf5975b1d408975535d12bb296d557be7a339c0235",
-    "size": 34801671
+    "sha256": "8931826617ab3522ae83533302b50199042669a07b8b1e2e983652d928546f00",
+    "size": 34802046
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
