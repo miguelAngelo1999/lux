@@ -1,15 +1,15 @@
 {
-  "version": "1.50.27",
+  "version": "1.50.28",
   "channel": "stable",
-  "notes": "fix: editing rules with named proxies no longer fails with 500",
+  "notes": "fix: named proxies via VPN now work \u2014 outbound not bound to en0 anymore",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "c77d4aed7a24e73631f37e4b0310a9860c746bf937319544e664edcd8cc804e3",
-    "size": 34797552
+    "sha256": "a7d1f58478ad3c021b596dbf5975b1d408975535d12bb296d557be7a339c0235",
+    "size": 34801671
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "c01b0193a2e50868b6137445b1b7e9aa8072cac94db1f5af6c96f9b178080282",
-    "size": 21510117
+    "sha256": "999287db44be11d25002a8f4d72d1e22d516324aafb3a3ed48de495c2b07dec7",
+    "size": 21505194
   }
 }
