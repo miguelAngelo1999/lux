@@ -1,15 +1,15 @@
 {
-  "version": "1.50.29",
+  "version": "1.50.30",
   "channel": "stable",
-  "notes": "fix: LP delay test now works \u2014 VPN-reachable proxies test correctly",
+  "notes": "feat: core watchdog \u2014 restarts automatically if stopped unexpectedly while toggle was on",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "8931826617ab3522ae83533302b50199042669a07b8b1e2e983652d928546f00",
-    "size": 34802046
+    "sha256": "ca8e60f4d99e7ae319953d9e4fd8465d4b4c717b0d84abf5fb0a857c7451a266",
+    "size": 34803008
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "999287db44be11d25002a8f4d72d1e22d516324aafb3a3ed48de495c2b07dec7",
-    "size": 21505194
+    "sha256": "2db7ba468d8348f1833cdcdd89303d0e747ecabefa5145ff29719079c50ba332",
+    "size": 21508592
   }
 }
