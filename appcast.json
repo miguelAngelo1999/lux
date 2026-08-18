@@ -1,7 +1,7 @@
 {
   "version": "1.50.31",
   "channel": "stable",
-  "notes": "fix: Electron/Node apps (Antigravity, Windsurf, etc.) now work \u2014 NODE_EXTRA_CA_CERTS and NODE_TLS_REJECT_UNAUTHORIZED set on toggle",
+  "notes": "feat: lux_launcher.exe - Win7/8/Server 2008-2012 support via systray + browser dashboard; UDP DIRECT fallback; WFP auth fix; system TUN stack",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "d5ba14ef68353d09e1cdf084efbb2e85dc3c81393936bcc85f0282fec65853bb",
@@ -9,7 +9,7 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "0bbf91a34bb6eb4de8ef88f77a9cacf4d0714a47b7b5015b21f57f59182b6fc7",
-    "size": 21513331
+    "sha256": "7e8229cdaa55440902fbe5801b766e1409f5b741f49556334bc321f57095860e",
+    "size": 22369720
   }
 }
