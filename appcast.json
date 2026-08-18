@@ -1,7 +1,7 @@
 {
   "version": "1.50.31",
   "channel": "stable",
-  "notes": "feat: lux_launcher.exe - Win7/8/Server 2008-2012 support via systray + browser dashboard; UDP DIRECT fallback; WFP auth fix; system TUN stack",
+  "notes": "fix(windows): drop non-DNS UDP in TUN/mixed mode so WhatsApp/Zoom/Teams calls work; HTTP proxies are TCP-only; DNS still handled in-process",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "d5ba14ef68353d09e1cdf084efbb2e85dc3c81393936bcc85f0282fec65853bb",
@@ -9,7 +9,7 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "7e8229cdaa55440902fbe5801b766e1409f5b741f49556334bc321f57095860e",
-    "size": 22369720
+    "sha256": "6343b867b8266a27d35ceb4e121aad18b248d271c933c851ddc8aeb93a9d813f",
+    "size": 22344553
   }
 }
