@@ -1,15 +1,15 @@
 {
-  "version": "1.50.30",
+  "version": "1.50.31",
   "channel": "stable",
-  "notes": "feat: core watchdog \u2014 restarts automatically if stopped unexpectedly while toggle was on",
+  "notes": "fix: Electron/Node apps (Antigravity, Windsurf, etc.) now work \u2014 NODE_EXTRA_CA_CERTS and NODE_TLS_REJECT_UNAUTHORIZED set on toggle",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "ca8e60f4d99e7ae319953d9e4fd8465d4b4c717b0d84abf5fb0a857c7451a266",
-    "size": 34803008
+    "sha256": "d5ba14ef68353d09e1cdf084efbb2e85dc3c81393936bcc85f0282fec65853bb",
+    "size": 34795160
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "2db7ba468d8348f1833cdcdd89303d0e747ecabefa5145ff29719079c50ba332",
-    "size": 21508592
+    "sha256": "0bbf91a34bb6eb4de8ef88f77a9cacf4d0714a47b7b5015b21f57f59182b6fc7",
+    "size": 21513331
   }
 }
