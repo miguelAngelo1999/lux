@@ -1,15 +1,15 @@
 {
-  "version": "1.50.31",
+  "version": "1.50.32",
   "channel": "stable",
-  "notes": "fix(windows): drop non-DNS UDP in TUN/mixed mode so WhatsApp/Zoom/Teams calls work; HTTP proxies are TCP-only; DNS still handled in-process",
+  "notes": "fix: credential expiry dialog adds username field + 5-min auto-disconnect grace period; NODE env vars for Electron apps",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "d5ba14ef68353d09e1cdf084efbb2e85dc3c81393936bcc85f0282fec65853bb",
-    "size": 34795160
+    "sha256": "3480a4646bf113552b08ba0b6f24cdf2e2c46bd5b366781f5206e789cff043e6",
+    "size": 34797280
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "6343b867b8266a27d35ceb4e121aad18b248d271c933c851ddc8aeb93a9d813f",
-    "size": 22344553
+    "sha256": "1546c8db877703207b6d73cd1e0b12ab38a93422790ad81b3651484b5e0cfe21",
+    "size": 22373179
   }
 }
