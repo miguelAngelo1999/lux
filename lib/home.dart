@@ -326,9 +326,23 @@ class _HomeState extends State<Home>
 
     if (!mounted) return;
 
-    // Show re-auth dialog
+    // Show re-auth dialog with a grace period timer.
+    // If ignored for 5 minutes, stop the core to prevent leaking traffic
+    // with invalid credentials (some proxies log failed auth attempts).
     final proxyId = proxyIds.first;
-    final controller = TextEditingController();
+    final usernameController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool submitted = false;
+
+    // Grace period: auto-disconnect after 5 minutes if dialog is ignored
+    final graceTimer = Timer(const Duration(minutes: 5), () {
+      if (!submitted && mounted) {
+        coreManager?.stop();
+        appLog('CRED-EXPIRY', 'grace period elapsed — stopped core');
+        final appState = Provider.of<AppStateModel>(context, listen: false);
+        appState.userWantsRunning = false;
+      }
+    });
 
     await showDialog<void>(
       context: context,
@@ -345,14 +359,27 @@ class _HomeState extends State<Home>
           children: [
             const Text(
               'Your timed proxy password has expired and the internet '
-              'is unreachable. Enter a new password to reconnect.',
+              'is unreachable. Enter new credentials to reconnect.',
               style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Lux will disconnect in 5 minutes if not re-authenticated.',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: controller,
-              obscureText: true,
+              controller: usernameController,
               autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
               decoration: const InputDecoration(
                 labelText: 'New password',
                 border: OutlineInputBorder(),
@@ -364,7 +391,8 @@ class _HomeState extends State<Home>
         actions: [
           TextButton(
             onPressed: () {
-              controller.clear();
+              passwordController.clear();
+              usernameController.clear();
               Navigator.pop(ctx);
             },
             child: const Text('Cancel'),
@@ -377,14 +405,20 @@ class _HomeState extends State<Home>
       ),
     );
 
-    final newPassword = controller.text;
-    controller.dispose();
+    final newUsername = usernameController.text;
+    final newPassword = passwordController.text;
+    usernameController.dispose();
+    passwordController.dispose();
+    submitted = true;
+    graceTimer.cancel();
 
     if (newPassword.isEmpty) return;
 
-    // Update the proxy password via the API
+    // Update the proxy credentials via the API
     try {
-      await coreManager?.updateProxy(proxyId, {'password': newPassword});
+      final data = <String, dynamic>{'password': newPassword};
+      if (newUsername.isNotEmpty) data['username'] = newUsername;
+      await coreManager?.updateProxy(proxyId, data);
       // Restart to pick up new credentials
       await coreManager?.restart();
     } catch (e) {
