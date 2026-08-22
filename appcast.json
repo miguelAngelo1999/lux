@@ -1,11 +1,11 @@
 {
-  "version": "1.50.32",
+  "version": "1.50.33",
   "channel": "stable",
-  "notes": "fix: credential expiry dialog adds username field + 5-min auto-disconnect grace period; NODE env vars for Electron apps",
+  "notes": "fix: Electron apps (Antigravity, Kiro) now reliably get proxy env vars on toggle",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "3480a4646bf113552b08ba0b6f24cdf2e2c46bd5b366781f5206e789cff043e6",
-    "size": 34797280
+    "sha256": "e4f9492aab1c7d97082d7c6d558e45b1f1b054f9ffed2a5e717bfe6cffb102e7",
+    "size": 34798607
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
