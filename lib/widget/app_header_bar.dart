@@ -95,11 +95,19 @@ class _State extends State<AppHeaderBar> with WindowListener {
         setState(() {
           isStarted = true;
         });
+        // Set proxy env vars from the user's GUI session (not the root core).
+        // launchctl setenv only works for the session it's called from.
+        if (Platform.isMacOS) {
+          _setProxyEnv();
+        }
       } else {
         await widget.coreManager.stop();
         setState(() {
           isStarted = false;
         });
+        if (Platform.isMacOS) {
+          _clearProxyEnv();
+        }
       }
     } finally {
       setState(() {
@@ -297,5 +305,38 @@ class _State extends State<AppHeaderBar> with WindowListener {
         onPressed: () => windowManager.close(),
       ),
     ];
+  }
+}
+
+
+/// Sets proxy and Node.js env vars in the user's GUI session via launchctl.
+/// Must run from the Flutter app (user context), NOT from lux_core (root).
+void _setProxyEnv() async {
+  const proxy = 'http://127.0.0.1:1090';
+  const noProxy = 'localhost,127.0.0.1,10.255.0.1,*.local';
+  final vars = {
+    'HTTP_PROXY': proxy,
+    'HTTPS_PROXY': proxy,
+    'http_proxy': proxy,
+    'https_proxy': proxy,
+    'NO_PROXY': noProxy,
+    'no_proxy': noProxy,
+    'NODE_EXTRA_CA_CERTS': '/Library/Keychains/System.keychain',
+    'NODE_TLS_REJECT_UNAUTHORIZED': '0',
+    'NODE_OPTIONS': '--use-openssl-ca',
+  };
+  for (final e in vars.entries) {
+    await Process.run('launchctl', ['setenv', e.key, e.value]);
+  }
+}
+
+void _clearProxyEnv() async {
+  final keys = [
+    'HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy',
+    'NO_PROXY', 'no_proxy',
+    'NODE_EXTRA_CA_CERTS', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_OPTIONS',
+  ];
+  for (final k in keys) {
+    await Process.run('launchctl', ['unsetenv', k]);
   }
 }
