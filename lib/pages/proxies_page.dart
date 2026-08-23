@@ -589,32 +589,78 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         final creds = await _promptCredentials(result.proxies.first);
         if (creds == null) return;
 
-        // Step 3: Check cert to derive a meaningful proxy name
-        String proxyName = result.proxies.first.host;
+        // Step 3: Validate credentials via cert check
+        final firstProxy = result.proxies.first;
+        final port = int.tryParse(firstProxy.port) ?? 8080;
+        CertCheckResult? certResult;
         try {
-          final certResult = await widget.coreManager.checkCert(
-            server: result.proxies.first.host,
-            port: int.tryParse(result.proxies.first.port) ?? 8080,
+          certResult = await widget.coreManager.checkCert(
+            server: firstProxy.host,
+            port: port,
             username: creds.username,
             password: creds.password,
           );
-          if (certResult.issuer.isNotEmpty) {
-            // Extract organization from issuer (e.g. "O=CompanyName" or just use full issuer)
-            final orgMatch = RegExp(r'O=([^,]+)').firstMatch(certResult.issuer);
-            if (orgMatch != null) {
-              proxyName = orgMatch.group(1)!.trim();
-            } else {
-              proxyName = certResult.issuer;
+        } catch (e) {
+          final errStr = e.toString().toLowerCase();
+          if (errStr.contains('407') || errStr.contains('auth') || errStr.contains('denied')) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Authentication failed — check username and password'),
+                  backgroundColor: Colors.red,
+                ),
+              );
             }
+            return;
           }
-        } catch (_) {
-          // Cert check failed — use host as name
+          // Other errors (timeout, network) — proceed without cert info
         }
 
-        // Step 4: Add the proxy with credentials and derived name
+        // Step 4: Derive proxy name from cert or fall back to host
+        String suggestedName = firstProxy.host;
+        if (certResult != null && certResult.intercepted && certResult.issuer.isNotEmpty) {
+          final orgMatch = RegExp(r'O=([^,]+)').firstMatch(certResult.issuer);
+          if (orgMatch != null) {
+            suggestedName = orgMatch.group(1)!.trim();
+          } else {
+            suggestedName = certResult.issuer;
+          }
+        }
+
+        // Step 5: Let user confirm or override the name
+        final nameCtrl = TextEditingController(text: suggestedName);
+        final confirmedName = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Name this proxy'),
+            content: TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Proxy name',
+                hintText: 'e.g. Office, School, Home',
+              ),
+              autofocus: true,
+              onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, null),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()),
+                child: const Text('Add'),
+              ),
+            ],
+          ),
+        );
+        nameCtrl.dispose();
+        if (confirmedName == null || confirmedName.isEmpty) return;
+
+        // Step 6: Add the proxy
         for (final p in result.proxies) {
           await widget.coreManager.addProxy({
-            'name': proxyName,
+            'name': confirmedName,
             'type': 'http',
             'server': p.host,
             'port': int.tryParse(p.port) ?? 8080,
@@ -629,10 +675,12 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         await refreshProxyList();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content:
-                    Text('Added ${result.proxies.length} proxy(ies) as "$proxyName"')),
+            SnackBar(content: Text('Added ${result.proxies.length} proxy(ies) as "$confirmedName"')),
           );
+          // Show SSL interception info if detected
+          if (certResult != null && certResult.intercepted) {
+            _checkCertForProxy(firstProxy, creds);
+          }
         }
       }
     } catch (e) {
