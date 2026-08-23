@@ -600,22 +600,25 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
             username: creds.username,
             password: creds.password,
           );
-        } catch (e) {
-          final errStr = e.toString().toLowerCase();
-          if (errStr.contains('407') || errStr.contains('auth') || errStr.contains('denied')) {
+        } catch (_) {
+          // Network/timeout error - proceed without cert info
+        }
+
+        // Check if auth failed (407 in response body, not as an exception)
+        if (certResult != null && certResult.error.isNotEmpty) {
+          final err = certResult.error.toLowerCase();
+          if (err.contains('407') || err.contains('auth') || err.contains('denied')) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Authentication failed — check username and password'),
+                  content: Text('Authentication failed \u2014 check username and password'),
                   backgroundColor: Colors.red,
                 ),
               );
             }
             return;
           }
-          // Other errors (timeout, network) — proceed without cert info
         }
-
         // Step 4: Derive proxy name from cert or fall back to host
         String suggestedName = firstProxy.host;
         if (certResult != null && certResult.intercepted && certResult.issuer.isNotEmpty) {
