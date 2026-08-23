@@ -589,10 +589,32 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         final creds = await _promptCredentials(result.proxies.first);
         if (creds == null) return;
 
-        // Step 3: Add the proxy with credentials
+        // Step 3: Check cert to derive a meaningful proxy name
+        String proxyName = result.proxies.first.host;
+        try {
+          final certResult = await widget.coreManager.checkCert(
+            server: result.proxies.first.host,
+            port: int.tryParse(result.proxies.first.port) ?? 8080,
+            username: creds.username,
+            password: creds.password,
+          );
+          if (certResult.issuer.isNotEmpty) {
+            // Extract organization from issuer (e.g. "O=CompanyName" or just use full issuer)
+            final orgMatch = RegExp(r'O=([^,]+)').firstMatch(certResult.issuer);
+            if (orgMatch != null) {
+              proxyName = orgMatch.group(1)!.trim();
+            } else {
+              proxyName = certResult.issuer;
+            }
+          }
+        } catch (_) {
+          // Cert check failed — use host as name
+        }
+
+        // Step 4: Add the proxy with credentials and derived name
         for (final p in result.proxies) {
           await widget.coreManager.addProxy({
-            'name': p.host,
+            'name': proxyName,
             'type': 'http',
             'server': p.host,
             'port': int.tryParse(p.port) ?? 8080,
@@ -609,11 +631,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
                 content:
-                    Text('Added ${result.proxies.length} proxy(ies)')),
+                    Text('Added ${result.proxies.length} proxy(ies) as "$proxyName"')),
           );
-
-          // Step 4: Check for SSL interception
-          _checkCertForProxy(result.proxies.first, creds);
         }
       }
     } catch (e) {
