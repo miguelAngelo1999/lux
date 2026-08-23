@@ -433,10 +433,19 @@ class CoreManager {
   }
 
   /// Probes the network for a PAC URL and returns discovered proxy entries.
+  /// Retries once on failure - first call after startup can timeout while
+  /// PowerShell cold-starts on Windows.
   Future<DetectProxyResult> detectProxies() async {
-    final res = await dio.post('$baseHttpUrl/proxies/detect');
-    return DetectProxyResult.fromJson(res.data as Map<String, dynamic>);
+    try {
+      final res = await dio.post('$baseHttpUrl/proxies/detect');
+      return DetectProxyResult.fromJson(res.data as Map<String, dynamic>);
+    } catch (_) {
+      await Future.delayed(const Duration(seconds: 2));
+      final res = await dio.post('$baseHttpUrl/proxies/detect');
+      return DetectProxyResult.fromJson(res.data as Map<String, dynamic>);
+    }
   }
+
 
   /// Checks for SSL interception through a proxy by doing a TLS handshake.
   Future<CertCheckResult> checkCert({
