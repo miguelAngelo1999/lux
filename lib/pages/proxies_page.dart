@@ -585,76 +585,113 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       );
 
       if (added == true) {
-        // Step 2: Prompt for credentials and password type
-        final creds = await _promptCredentials(result.proxies.first);
-        if (creds == null) return;
-
-        // Step 3: Validate credentials via cert check
+        // Step 2: Prompt for credentials with retry on auth failure
         final firstProxy = result.proxies.first;
         final port = int.tryParse(firstProxy.port) ?? 8080;
+        _ProxyCredentials? creds;
         CertCheckResult? certResult;
-        try {
-          certResult = await widget.coreManager.checkCert(
-            server: firstProxy.host,
-            port: port,
-            username: creds.username,
-            password: creds.password,
-          );
-        } catch (_) {
-          // Network/timeout error - proceed without cert info
-        }
 
-        // Check if auth failed (407 in response body, not as an exception)
-        if (certResult != null && certResult.error.isNotEmpty) {
-          final err = certResult.error.toLowerCase();
-          if (err.contains('407') || err.contains('auth') || err.contains('denied')) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Authentication failed \u2014 check username and password'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-            return;
+        while (true) {
+          creds = await _promptCredentials(firstProxy);
+          if (creds == null) return;
+
+          // Step 3: Validate credentials via cert check
+          try {
+            certResult = await widget.coreManager.checkCert(
+              server: firstProxy.host,
+              port: port,
+              username: creds.username,
+              password: creds.password,
+            );
+          } catch (_) {
+            // Network/timeout error - proceed without cert info
+            break;
           }
+
+          // Check if auth failed (407 in response body)
+          if (certResult != null && certResult.error.isNotEmpty) {
+            final err = certResult.error.toLowerCase();
+            if (err.contains('407') || err.contains('auth') || err.contains('denied')) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Wrong password \u2014 try again'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              continue; // loop back to credentials prompt
+            }
+          }
+          break; // auth succeeded or no error
         }
-        // Step 4: Derive proxy name from cert or fall back to host
+        if (creds == null) return;
+
+        // Step 4: Derive proxy name from cert issuer
         String suggestedName = firstProxy.host;
-        if (certResult != null && certResult.intercepted && certResult.issuer.isNotEmpty) {
+        if (certResult != null && certResult.issuer.isNotEmpty) {
+          // Try to extract O= (Organization) from the issuer DN
           final orgMatch = RegExp(r'O=([^,]+)').firstMatch(certResult.issuer);
           if (orgMatch != null) {
             suggestedName = orgMatch.group(1)!.trim();
           } else {
-            suggestedName = certResult.issuer;
+            // Fall back to CN= or the whole issuer string
+            final cnMatch = RegExp(r'CN=([^,]+)').firstMatch(certResult.issuer);
+            suggestedName = cnMatch != null ? cnMatch.group(1)!.trim() : certResult.issuer;
           }
         }
-
-        // Step 5: Let user confirm or override the name
+        // Step 5: Let user confirm or override the name (no duplicates)
+        final existingNames = proxyListGroup.allProxies.map((p) => p.name.toLowerCase()).toSet();
         final nameCtrl = TextEditingController(text: suggestedName);
+        String? nameError;
         final confirmedName = await showDialog<String>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Name this proxy'),
-            content: TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Proxy name',
-                hintText: 'e.g. Office, School, Home',
-              ),
-              autofocus: true,
-              onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, null),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()),
-                child: const Text('Add'),
-              ),
-            ],
+          builder: (ctx) => StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              void validate(String v) {
+                final trimmed = v.trim().toLowerCase();
+                setDialogState(() {
+                  if (trimmed.isEmpty) {
+                    nameError = 'Name cannot be empty';
+                  } else if (existingNames.contains(trimmed)) {
+                    nameError = 'A proxy with this name already exists';
+                  } else {
+                    nameError = null;
+                  }
+                });
+              }
+
+              return AlertDialog(
+                title: const Text('Name this proxy'),
+                content: TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Proxy name',
+                    hintText: 'e.g. Office, School, Home',
+                    errorText: nameError,
+                  ),
+                  autofocus: true,
+                  onChanged: validate,
+                  onSubmitted: (v) {
+                    if (nameError == null && v.trim().isNotEmpty) {
+                      Navigator.pop(ctx, v.trim());
+                    }
+                  },
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, null),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: nameError == null && nameCtrl.text.trim().isNotEmpty
+                        ? () => Navigator.pop(ctx, nameCtrl.text.trim())
+                        : null,
+                    child: const Text('Add'),
+                  ),
+                ],
+              );
+            },
           ),
         );
         nameCtrl.dispose();
