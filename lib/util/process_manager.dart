@@ -44,6 +44,7 @@ class ProcessManager {
         runInShell: false,
       );
     } else {
+      bool freshElevation = false;
       if (!kDebugMode) {
         DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
         MacOsDeviceInfo macOsInfo = await deviceInfo.macOsInfo;
@@ -60,9 +61,19 @@ class ProcessManager {
                 'elevate returned $code', extra: {'path': path});
             throw CoreRunError("fail to elevate core, code: $code");
           }
+          freshElevation = true;
         }
       }
-      process = await Process.start(path, args);
+      // After fresh elevation, the wrapper script now calls sudo on lux_core_real.
+      // Give sudoers a moment to register the new entry, then start via sudo
+      // directly (bypass wrapper) to avoid race conditions on first launch.
+      if (freshElevation) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        final realPath = '${path}_real';
+        process = await Process.start('sudo', [realPath, ...args]);
+      } else {
+        process = await Process.start(path, args);
+      }
       process?.stdout.transform(utf8.decoder).forEach(debugPrint);
       process?.stderr.transform(utf8.decoder).forEach(debugPrint);
     }
