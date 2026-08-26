@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lux/widget/proxy_item_action_menu.dart';
 
@@ -32,13 +34,117 @@ class _ProxyListItemState extends State<ProxyListItem> {
       _testing = true;
       _delay = null;
     });
-    final ms = await widget.coreManager!.testProxyDelay(widget.item.id);
+    final result = await widget.coreManager!.testProxyDelayDetailed(widget.item.id);
     if (mounted) {
       setState(() {
-        _delay = ms;
+        _delay = result.delay;
         _testing = false;
       });
+      if (result.certError && result.delay < 0) {
+        _promptCertTrust();
+      }
     }
+  }
+
+  Future<void> _promptCertTrust() async {
+    if (!mounted || widget.coreManager == null) return;
+    final item = widget.item;
+    final server = item.server ?? '';
+    final port = item.port ?? 0;
+    if (server.isEmpty || port == 0) return;
+
+    final shouldCheck = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.security, size: 20, color: Colors.orange),
+          SizedBox(width: 8),
+          Flexible(child: Text('Certificate Error', style: TextStyle(fontSize: 15))),
+        ]),
+        content: const Text(
+          'The proxy uses an SSL certificate not trusted by this system. '
+          'This usually means a corporate proxy is inspecting traffic.\n\n'
+          'Would you like to detect and install the certificate?',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Skip'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Trust Certificate'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldCheck != true || !mounted) return;
+
+    try {
+      // Get full proxy detail for username
+      final detail = await widget.coreManager!.getProxyDetail(item.id);
+      final username = detail?.raw['username'] as String? ?? '';
+      final password = detail?.password ?? item.password ?? '';
+
+      final cert = await widget.coreManager!.checkCert(
+        server: server,
+        port: port,
+        username: username,
+        password: password,
+      );
+
+      if (!mounted) return;
+
+      if (cert.intercepted && cert.pem.isNotEmpty) {
+        await _installCert(cert);
+      } else if (cert.error.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cert check failed: ${cert.error}')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No intercepting certificate detected')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _installCert(CertCheckResult cert) async {
+    final tmpDir = await Directory.systemTemp.createTemp('lux_cert');
+    final certFile = File('${tmpDir.path}/corporate_ca.pem');
+    await certFile.writeAsString(cert.pem);
+
+    final script = 'do shell script '
+        '"security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '
+        '${certFile.path}" '
+        'with prompt "Lux needs to install the corporate CA certificate" '
+        'with administrator privileges';
+
+    final result = await Process.run('/usr/bin/osascript', ['-e', script]);
+
+    if (mounted) {
+      if (result.exitCode == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Certificate installed. Please re-test the proxy.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Certificate installation cancelled or failed.')),
+        );
+      }
+    }
+
+    // Cleanup
+    try { await certFile.delete(); } catch (_) {}
+    try { await tmpDir.delete(); } catch (_) {}
   }
 
   Color _delayColor(int ms) {
