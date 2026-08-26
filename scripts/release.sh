@@ -80,8 +80,25 @@ xattr -cr "$APP"
 DMG_NAME="Lux-${VERSION}-macOS-universal.dmg"
 rm -f dist/*.dmg
 mkdir -p dist
-create-dmg --overwrite --no-code-sign --dmg-title "Lux $VERSION" "$APP" dist/
-for f in dist/*.dmg; do [ "$f" = "dist/$DMG_NAME" ] || mv "$f" "dist/$DMG_NAME"; done
+
+# Stage DMG contents: Lux.app + install.sh
+DMG_STAGE="/tmp/lux-dmg-stage"
+rm -rf "$DMG_STAGE"
+mkdir -p "$DMG_STAGE"
+cp -R "$APP" "$DMG_STAGE/"
+cp "$REPO/macos/install.sh" "$DMG_STAGE/"
+
+# create-dmg only accepts .app bundles; use hdiutil for mixed content
+SIZE_KB=$(du -sk "$DMG_STAGE" | awk '{print $1}')
+SIZE_KB=$((SIZE_KB + 5000))
+hdiutil create -size ${SIZE_KB}k -fs HFS+ -volname "Lux $VERSION" -ov /tmp/lux_tmp.dmg >/dev/null
+MOUNT_DIR=$(hdiutil attach /tmp/lux_tmp.dmg | grep "/Volumes" | awk -F'\t' '{print $NF}')
+cp -R "$DMG_STAGE/Lux.app" "$MOUNT_DIR/"
+cp "$DMG_STAGE/install.sh" "$MOUNT_DIR/"
+hdiutil detach "$MOUNT_DIR" >/dev/null
+hdiutil convert /tmp/lux_tmp.dmg -format UDZO -o "dist/$DMG_NAME" >/dev/null
+rm -f /tmp/lux_tmp.dmg
+rm -rf "$DMG_STAGE"
 hdiutil verify "dist/$DMG_NAME" >/dev/null
 echo "# dmg: $(ls -lh "dist/$DMG_NAME" | awk '{print $5}')"
 

@@ -1,15 +1,15 @@
 {
   "version": "1.50.34",
   "channel": "stable",
-  "notes": "fix: Electron apps (Antigravity, Kiro) now reliably get proxy env vars on toggle",
+  "notes": "feat: auto-detect corporate MITM cert on delay test failure",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "e4f9492aab1c7d97082d7c6d558e45b1f1b054f9ffed2a5e717bfe6cffb102e7",
-    "size": 34798607
+    "sha256": "8be98fba25c51f642df02f69d70648d14345eaf2665c4ce256a0da688c8375e5",
+    "size": 37703008
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "1546c8db877703207b6d73cd1e0b12ab38a93422790ad81b3651484b5e0cfe21",
-    "size": 22373179
+    "sha256": "5fe4fe093551496c4db3fd90aeaff469bad452c08c655b354557d2051d3a214e",
+    "size": 22374108
   }
 }
