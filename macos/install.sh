@@ -107,7 +107,7 @@ fi
 PROXY_HOST=""
 # Check common corporate proxy addresses
 for host in 192.168.68.254:8082 10.8.0.1:8082; do
-  if timeout 2 bash -c "echo >/dev/tcp/${host%:*}/${host#*:}" 2>/dev/null; then
+  if (echo >/dev/tcp/${host%:*}/${host#*:}) 2>/dev/null; then
     PROXY_HOST="$host"
     break
   fi
@@ -118,18 +118,11 @@ if [ -n "$PROXY_HOST" ]; then
   CERT_FILE="/tmp/lux_proxy_ca.pem"
   # Connect through the proxy to grab its MITM cert
   echo | openssl s_client -proxy "$PROXY_HOST" -connect www.google.com:443 -showcerts 2>/dev/null | \
-    awk '/BEGIN CERT/,/END CERT/{ print }' | \
-    awk 'BEGIN{n=0} /BEGIN CERT/{n++} n>1' > "$CERT_FILE" 2>/dev/null || true
+    awk 'BEGIN{n=0}/BEGIN CERT/{n++}n>1' > "$CERT_FILE" 2>/dev/null || true
 
   if [ -s "$CERT_FILE" ] && grep -q "BEGIN CERTIFICATE" "$CERT_FILE"; then
-    # Install each cert in the chain to System Keychain
-    csplit -f /tmp/lux_ca_ -z "$CERT_FILE" '/-----BEGIN CERTIFICATE-----/' '{*}' 2>/dev/null || true
-    for f in /tmp/lux_ca_*; do
-      if grep -q "BEGIN CERTIFICATE" "$f" 2>/dev/null; then
-        sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$f" 2>/dev/null || true
-      fi
-    done
-    rm -f /tmp/lux_ca_* "$CERT_FILE"
+    sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$CERT_FILE" 2>/dev/null || true
+    rm -f "$CERT_FILE"
     echo "CA certificate installed."
   else
     rm -f "$CERT_FILE"
