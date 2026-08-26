@@ -704,7 +704,6 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
             'type': 'http',
             'server': p.host,
             'port': int.tryParse(p.port) ?? 8080,
-            'pacUrl': p.pacUrl,
             if (creds.username.isNotEmpty) 'username': creds.username,
             if (creds.password.isNotEmpty) 'password': creds.password,
             if (creds.passwordMode.isNotEmpty) 'passwordMode': creds.passwordMode,

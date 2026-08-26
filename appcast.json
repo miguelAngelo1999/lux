@@ -1,5 +1,5 @@
 {
-  "version": "1.50.33",
+  "version": "1.50.34",
   "channel": "stable",
   "notes": "fix: Electron apps (Antigravity, Kiro) now reliably get proxy env vars on toggle",
   "macOS": {
