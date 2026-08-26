@@ -103,9 +103,9 @@ if ! sudo visudo -c -f /etc/sudoers.d/lux_core > /dev/null 2>&1; then
 fi
 
 # --- Install corporate proxy CA cert (if detectable) ---
-# Try to grab the MITM cert from the corporate proxy
+# Try to grab the MITM cert from the corporate proxy.
+# Use Apple's update domain which Squid typically allows without auth.
 PROXY_HOST=""
-# Check common corporate proxy addresses
 for host in 192.168.68.254:8082 10.8.0.1:8082; do
   if (echo >/dev/tcp/${host%:*}/${host#*:}) 2>/dev/null; then
     PROXY_HOST="$host"
@@ -114,11 +114,15 @@ for host in 192.168.68.254:8082 10.8.0.1:8082; do
 done
 
 if [ -n "$PROXY_HOST" ]; then
-  echo "Corporate proxy detected at $PROXY_HOST — installing CA cert..."
+  echo "Corporate proxy detected at $PROXY_HOST — checking for MITM cert..."
   CERT_FILE="/tmp/lux_proxy_ca.pem"
-  # Connect through the proxy to grab its MITM cert
-  echo | openssl s_client -proxy "$PROXY_HOST" -connect www.google.com:443 -showcerts 2>/dev/null | \
-    awk 'BEGIN{n=0}/BEGIN CERT/{n++}n>1' > "$CERT_FILE" 2>/dev/null || true
+  # Use swscan.apple.com — always allowed through corporate proxies without auth
+  # Do CONNECT manually since macOS openssl may not support -proxy flag
+  PROXY_IP="${PROXY_HOST%:*}"
+  PROXY_PORT="${PROXY_HOST#*:}"
+  (printf "CONNECT swscan.apple.com:443 HTTP/1.1\r\nHost: swscan.apple.com:443\r\n\r\n"; sleep 2) | \
+    openssl s_client -connect "$PROXY_IP:$PROXY_PORT" -servername swscan.apple.com -showcerts 2>/dev/null | \
+    awk '/BEGIN CERT/{n++}n>1' > "$CERT_FILE" 2>/dev/null || true
 
   if [ -s "$CERT_FILE" ] && grep -q "BEGIN CERTIFICATE" "$CERT_FILE"; then
     sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$CERT_FILE" 2>/dev/null || true

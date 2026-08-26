@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:lux/widget/proxy_item_action_menu.dart';
 
@@ -118,33 +116,21 @@ class _ProxyListItemState extends State<ProxyListItem> {
   }
 
   Future<void> _installCert(CertCheckResult cert) async {
-    final tmpDir = await Directory.systemTemp.createTemp('lux_cert');
-    final certFile = File('${tmpDir.path}/corporate_ca.pem');
-    await certFile.writeAsString(cert.pem);
-
-    final script = 'do shell script '
-        '"security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '
-        '${certFile.path}" '
-        'with prompt "Lux needs to install the corporate CA certificate" '
-        'with administrator privileges';
-
-    final result = await Process.run('/usr/bin/osascript', ['-e', script]);
-
-    if (mounted) {
-      if (result.exitCode == 0) {
+    try {
+      // lux_core runs as root — use its install-cert endpoint directly
+      await widget.coreManager!.installCert(cert.pem);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Certificate installed. Please re-test the proxy.')),
         );
-      } else {
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Certificate installation cancelled or failed.')),
+          SnackBar(content: Text('Certificate installation failed: $e')),
         );
       }
     }
-
-    // Cleanup
-    try { await certFile.delete(); } catch (_) {}
-    try { await tmpDir.delete(); } catch (_) {}
   }
 
   Color _delayColor(int ms) {

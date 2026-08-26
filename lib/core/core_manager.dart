@@ -477,6 +477,14 @@ class CoreManager {
     return CertCheckResult.fromJson(res.data as Map<String, dynamic>);
   }
 
+  /// Installs a PEM certificate to the System Keychain via lux_core (runs as root).
+  Future<void> installCert(String pem) async {
+    final res = await dio.post('$baseHttpUrl/proxies/install-cert', data: {'pem': pem});
+    if (res.data['success'] != true) {
+      throw Exception(res.data['error'] ?? 'cert install failed');
+    }
+  }
+
   /// Updates an existing proxy.
   Future<void> updateProxy(String id, Map<String, dynamic> proxy) async {
     await dio.post('$baseHttpUrl/proxies/$id', data: proxy);
