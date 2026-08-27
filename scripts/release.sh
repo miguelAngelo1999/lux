@@ -77,6 +77,9 @@ APP=build/macos/Build/Products/Release/Lux.app
 # Gatekeeper flags a quarantined bundle inside a DMG as damaged.
 xattr -cr "$APP"
 
+# Codesign the app if a Developer ID is configured (no-op otherwise).
+bash "$REPO/scripts/sign_and_notarize.sh" app "$APP"
+
 DMG_NAME="Lux-${VERSION}-macOS-universal.dmg"
 rm -f dist/*.dmg
 mkdir -p dist
@@ -101,6 +104,9 @@ rm -f /tmp/lux_tmp.dmg
 rm -rf "$DMG_STAGE"
 hdiutil verify "dist/$DMG_NAME" >/dev/null
 echo "# dmg: $(ls -lh "dist/$DMG_NAME" | awk '{print $5}')"
+
+# Notarize + staple the DMG if a Developer ID is configured (no-op otherwise).
+bash "$REPO/scripts/sign_and_notarize.sh" dmg "dist/$DMG_NAME"
 
 echo "# uploading"
 python3 "$REPO/scripts/publish_appcast.py" "$VERSION" "dist/$DMG_NAME"
