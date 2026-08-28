@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:lux/const/const.dart';
@@ -115,6 +117,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   @override
   void dispose() {
+    _detectTimer?.cancel();
     super.dispose();
     windowManager.removeListener(this);
   }
@@ -234,10 +237,26 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
             children: [
               const Spacer(),
               _isDetecting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                  ? SizedBox(
+                      width: 140,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Detecting ${(_detectProgress * 100).round()}%',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          const SizedBox(height: 3),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: _detectProgress,
+                              minHeight: 3,
+                            ),
+                          ),
+                        ],
+                      ),
                     )
                   : TextButton.icon(
                       onPressed: _detectProxies,
@@ -280,6 +299,41 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   }
 
   bool _isDetecting = false;
+  double _detectProgress = 0; // 0..1 fake progress while detecting
+  Timer? _detectTimer;
+
+  /// Starts a fake progress animation that ramps to 30%, slows to 60%,
+  /// crawls to 90% and holds — same UX as the download page. The real
+  /// detect call replaces it with 100% when it completes.
+  void _startDetectProgress() {
+    _detectProgress = 0.01;
+    int phase = 0;
+    _detectTimer?.cancel();
+    _detectTimer = Timer.periodic(const Duration(milliseconds: 200), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final rnd = math.Random();
+      double p = _detectProgress * 100;
+      if (phase == 0) {
+        p += 1.5 + rnd.nextDouble() * 2;
+        if (p >= 30) { p = 30; phase = 1; }
+      } else if (phase == 1) {
+        p += 0.3 + rnd.nextDouble() * 0.5;
+        if (p >= 60) { p = 60; phase = 2; }
+      } else if (phase == 2) {
+        p += 0.1 + rnd.nextDouble() * 0.2;
+        if (p >= 90) { p = 90; phase = 3; }
+      }
+      setState(() => _detectProgress = p / 100);
+    });
+  }
+
+  void _stopDetectProgress() {
+    _detectTimer?.cancel();
+    _detectTimer = null;
+  }
 
   Future<void> _checkCertForProxy(DetectedProxy proxy, _ProxyCredentials creds) async {
     try {
@@ -528,8 +582,12 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   Future<void> _detectProxies() async {
     setState(() => _isDetecting = true);
+    _startDetectProgress();
     try {
       final result = await widget.coreManager.detectProxies();
+      // Detection done — snap the bar to 100% before showing results
+      _stopDetectProgress();
+      if (mounted) setState(() => _detectProgress = 1.0);
       if (!mounted) return;
 
       if (result.proxies.isEmpty) {
@@ -732,7 +790,13 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         );
       }
     } finally {
-      if (mounted) setState(() => _isDetecting = false);
+      _stopDetectProgress();
+      if (mounted) {
+        setState(() {
+          _isDetecting = false;
+          _detectProgress = 0;
+        });
+      }
     }
   }
 }
