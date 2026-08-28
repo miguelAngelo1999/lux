@@ -197,24 +197,28 @@ def main():
     # One version field covers both platforms, so publishing a Windows build at
     # a version the macOS build has not reached would offer Mac users a
     # downgrade, and vice versa. Refuse rather than half-break one platform.
-    published = (current.get("version") or "").strip()
-    if published and published != version and macos["url"]:
-        print(
-            "# refusing: appcast is at {} but this installer is {}.\n"
-            "# Publish matching versions for both platforms, or set\n"
-            "# LUX_ALLOW_VERSION_SKEW=1 to override.".format(published, version)
-        )
-        if os.environ.get("LUX_ALLOW_VERSION_SKEW") != "1":
-            return 1
+    # Per-platform versioning: each platform carries its own version field
+    # (windows.version, macOS.version). The top-level "version" field is kept
+    # as the higher of the two for backward compatibility with old clients, but
+    # the updater now reads the per-platform field so platforms can release
+    # independently without ever blocking or skewing each other.
+    macos_version = (macos.get("version") or current.get("version") or "").strip()
+    top_version = version  # Windows is publishing now, so it's at least this
+    if macos_version:
+        try:
+            from packaging.version import Version as PkgV
+            top_version = str(max(PkgV(version), PkgV(macos_version)))
+        except Exception:
+            top_version = version  # packaging not available — use Windows version
 
     appcast = {
-        "version": version,
+        "version": top_version,
         "channel": "stable",
         "notes": os.environ.get("LUX_RELEASE_NOTES", "").strip() or release_notes(),
         # Carried over, never blanked. This script publishes the Windows build
         # only; the macOS entry belongs to publish_appcast.py.
         "macOS": macos,
-        "windows": {"url": url, "sha256": digest, "size": size},
+        "windows": {"url": url, "sha256": digest, "size": size, "version": version},
     }
     body = json.dumps(appcast, indent=2) + "\n"
 

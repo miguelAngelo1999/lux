@@ -210,11 +210,22 @@ def main():
     else:
         print("# no windows entry to preserve")
 
+    # Per-platform versioning: macOS carries its own version inside macOS.version.
+    # Top-level "version" is the higher of the two for backward compatibility.
+    windows_version = (windows.get("version") or current.get("version") or "").strip()
+    top_version = version
+    if windows_version:
+        try:
+            from packaging.version import Version as PkgV
+            top_version = str(max(PkgV(version), PkgV(windows_version)))
+        except Exception:
+            top_version = version
+
     appcast = {
-        "version": version,
+        "version": top_version,
         "channel": "stable",
         "notes": notes,
-        "macOS": {"url": url, "sha256": digest, "size": size},
+        "macOS": {"url": url, "sha256": digest, "size": size, "version": version},
         # Carried over, never blanked. This script publishes the macOS
         # build only; clobbering this is what broke Windows updates.
         "windows": windows,

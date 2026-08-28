@@ -5,11 +5,13 @@
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "8be98fba25c51f642df02f69d70648d14345eaf2665c4ce256a0da688c8375e5",
-    "size": 37703008
+    "size": 37703008,
+    "version": "1.50.34"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "a9c93f724f7313d6a08b8760d9c8204336fc44daeefeb41d83e796dd464d7674",
-    "size": 22379982
+    "sha256": "fc631b717cb5b1d911d6e4ee8ee50949a074372982d838b2a739c35e10601deb",
+    "size": 22376845,
+    "version": "1.50.35"
   }
 }

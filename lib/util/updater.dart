@@ -149,17 +149,22 @@ UpdateInfo? _parseAppcast(String body, String current) {
     final data = Map<String, dynamic>.from(
         const JsonDecoder().convert(body) as Map);
 
-    final latest = (data['version'] as String?) ?? '';
-    if (latest.isEmpty) return null;
-
     final macos   = (data['macOS']   as Map?)?.cast<String, dynamic>() ?? {};
     final windows = (data['windows'] as Map?)?.cast<String, dynamic>() ?? {};
+
+    // Per-platform version: each platform publishes independently on its own
+    // schedule. Read windows.version / macOS.version first; fall back to the
+    // legacy top-level "version" field so old appcast files still work.
+    final platformData = Platform.isMacOS ? macos : windows;
+    final latest = (platformData['version'] as String?)
+        ?? (data['version'] as String?)
+        ?? '';
+    if (latest.isEmpty) return null;
 
     final macOSUrl   = (macos['url']   as String?) ?? '';
     final windowsUrl = (windows['url'] as String?) ?? '';
 
     // Only flag an update if this platform actually has a download URL.
-    // A Windows-only release leaves macOS.url empty — don't notify Mac users.
     final platformUrl = Platform.isMacOS ? macOSUrl : windowsUrl;
     final hasUpdate = platformUrl.isNotEmpty &&
         Version.parse(latest).compareTo(Version.parse(current)) > 0;
