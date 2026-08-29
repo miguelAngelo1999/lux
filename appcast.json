@@ -1,12 +1,12 @@
 {
-  "version": "1.50.35",
+  "version": "1.50.36",
   "channel": "stable",
-  "notes": "chore: update windowsAmd64Checksum for 1.50.34 cert build",
+  "notes": "Translations (es/it/pt/fil/zh), cert install via root, detect-proxy progress bar, first-run elevation fix",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "8be98fba25c51f642df02f69d70648d14345eaf2665c4ce256a0da688c8375e5",
-    "size": 37703008,
-    "version": "1.50.34"
+    "sha256": "5334b6e550d18558a0d8732ce3bf0beec23ad59e76f606acc1e159886bdb742b",
+    "size": 37759389,
+    "version": "1.50.36"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
