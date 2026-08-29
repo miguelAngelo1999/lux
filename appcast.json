@@ -1,17 +1,16 @@
 {
   "version": "1.50.36",
   "channel": "stable",
-  "notes": "Translations (es/it/pt/fil/zh), cert install via root, detect-proxy progress bar, first-run elevation fix",
+  "notes": "fix: resolve pubspec.yaml merge conflict markers + build_windows.sh fixes",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "5334b6e550d18558a0d8732ce3bf0beec23ad59e76f606acc1e159886bdb742b",
-    "size": 37759389,
-    "version": "1.50.36"
+    "size": 37759389
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "fc631b717cb5b1d911d6e4ee8ee50949a074372982d838b2a739c35e10601deb",
-    "size": 22376845,
-    "version": "1.50.35"
+    "sha256": "2978101e6a4080e71ff4d0bb386664cd32a74881ab05d9884486fd46a6a95f5b",
+    "size": 22384595,
+    "version": "1.50.36"
   }
 }
