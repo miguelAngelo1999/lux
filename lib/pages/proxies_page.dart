@@ -493,7 +493,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 TextField(
                   controller: usernameCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: tl(ctx, 'Username'),
                     isDense: true,
                     border: OutlineInputBorder(),
@@ -503,7 +503,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 TextField(
                   controller: passwordCtrl,
                   obscureText: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: tl(ctx, 'Password'),
                     isDense: true,
                     border: OutlineInputBorder(),
@@ -521,7 +521,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: passwordMode,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: tl(ctx, 'Password type'),
                     isDense: true,
                     border: OutlineInputBorder(),
@@ -537,7 +537,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   const SizedBox(height: 12),
                   TextField(
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: tl(ctx, 'Expires after (minutes)'),
                       isDense: true,
                       border: OutlineInputBorder(),
