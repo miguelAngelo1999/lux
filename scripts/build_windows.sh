@@ -151,6 +151,9 @@ endlocal
 Write-Host 'checksum updated'
 "
 
+  # Delete stale .dart_tool (it has macOS pub cache paths from robocopy — must regenerate)
+  win "if exist C:\\lux-build\\lux\\.dart_tool rmdir /S /Q C:\\lux-build\\lux\\.dart_tool >nul 2>&1 & exit 0"
+
   # ── Step 4: Flutter build ─────────────────────────────────────────────────
   step "Building Flutter Windows app"
   win_script "build_flutter.bat" '@echo off
@@ -191,24 +194,15 @@ win "copy \"${INSTALLER_WIN}\" \"\\\\Mac\\Home\\lux-clean\\dist\\Lux-${WIN_VERSI
 [ -f "$MAC_INSTALLER" ] || { echo "ERROR: Installer not found at $MAC_INSTALLER"; exit 1; }
 echo "$(ls -lh "$MAC_INSTALLER" | awk '{print $5, $9}')"
 
-# ── Step 7: Publish ───────────────────────────────────────────────────────
+# ── Step 7: Publish from macOS (VM has no direct internet access) ─────────
 step "Publishing to GDrive + updating appcast"
 OAUTH_SRC="/Users/virgoh/lux/scripts/.oauth_token.json"
 [ -f "$OAUTH_SRC" ] || { echo "ERROR: OAuth token missing at $OAUTH_SRC"; exit 1; }
-win "copy \"\\\\Mac\\Home\\lux\\scripts\\.oauth_token.json\" \"C:\\lux-build\\lux\\scripts\\.oauth_token.json\" && echo TOKEN_OK"
-
-win_script "publish.bat" "@echo off
-setlocal
-set LUX_RELEASE_PROXY=http://127.0.0.1:1090
-cd /d C:\\lux-build\\lux
-python scripts\\publish_appcast_windows.py ${WIN_VERSION} ${INSTALLER_WIN}
-if %ERRORLEVEL% EQU 0 (echo PUBLISH_OK) else (echo PUBLISH_FAILED & exit /b 1)
-endlocal
-"
-
-# ── Step 8: Sync appcast.json back to Mac ─────────────────────────────────
-step "Syncing appcast.json"
-win "copy \"C:\\lux-build\\lux\\appcast.json\" \"\\\\Mac\\Home\\lux-clean\\appcast.json\" && echo SYNC_OK"
+# Temporarily link the OAuth token to the lux-clean scripts dir
+cp "$OAUTH_SRC" "$REPO/scripts/.oauth_token.json"
+export LUX_RELEASE_PROXY="$MAC_PROXY" PYTHONHTTPSVERIFY=0 REQUESTS_CA_BUNDLE=""
+python3 "$REPO/scripts/publish_appcast_windows.py" "$WIN_VERSION" "$MAC_INSTALLER"
+rm -f "$REPO/scripts/.oauth_token.json"
 
 cd "$REPO"
 git add appcast.json
