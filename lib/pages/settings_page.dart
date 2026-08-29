@@ -422,6 +422,14 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             return 'English';
           case 'pt':
             return 'Português';
+          case 'es':
+            return 'Español';
+          case 'it':
+            return 'Italiano';
+          case 'fil':
+            return 'Filipino';
+          case 'zh':
+            return '中文';
           default:
             return v;
         }

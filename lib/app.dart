@@ -52,6 +52,10 @@ class _App extends State<App> {
           supportedLocales: [
             Locale('en'),
             Locale('zh'),
+            Locale('pt'),
+            Locale('es'),
+            Locale('it'),
+            Locale('fil'),
           ],
         ),
       ),
