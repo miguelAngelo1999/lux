@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/util/elevation_helper.dart';
@@ -132,7 +133,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                     const Icon(Icons.vpn_key_outlined, size: 16),
                     const SizedBox(width: 8),
                     const Expanded(
-                      child: Text(
+                      child: TText(
                         'Edit Credentials',
                         style: TextStyle(
                             fontWeight: FontWeight.w600, fontSize: 13),
@@ -161,7 +162,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                     // Profile selector
                     DropdownButtonFormField<String>(
                       value: _selectedId.isEmpty ? null : _selectedId,
-                      decoration: _inputDecoration('Profile', isDark),
+                      decoration: _inputDecoration(tl(context, 'Profile'), isDark),
                       isDense: true,
                       items: _proxies
                           .map((p) => DropdownMenuItem(
@@ -181,7 +182,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                     // Username
                     TextFormField(
                       initialValue: _username,
-                      decoration: _inputDecoration('Username', isDark),
+                      decoration: _inputDecoration(tl(context, 'Username'), isDark),
                       style: const TextStyle(fontSize: 13),
                       onChanged: (v) => _username = v,
                     ),
@@ -190,7 +191,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                     TextFormField(
                       initialValue: _password,
                       obscureText: _obscurePassword,
-                      decoration: _inputDecoration('Password', isDark).copyWith(
+                      decoration: _inputDecoration(tl(context, 'Password'), isDark).copyWith(
                         suffixIcon: GestureDetector(
                           onTap: () async {
                             if (_obscurePassword) {
@@ -233,7 +234,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                                   const EdgeInsets.symmetric(vertical: 8),
                               textStyle: const TextStyle(fontSize: 12),
                             ),
-                            child: const Text('Cancel'),
+                            child: const TText('Cancel'),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -253,7 +254,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                                         strokeWidth: 2,
                                         color: Colors.white),
                                   )
-                                : const Text('Save'),
+                                : const TText('Save'),
                           ),
                         ),
                       ],

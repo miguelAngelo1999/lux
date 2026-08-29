@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lux/widget/proxy_item_action_menu.dart';
+import 'package:lux/util/t_text.dart';
 
 import '../const/const.dart';
 import '../core/core_config.dart';
@@ -57,9 +58,9 @@ class _ProxyListItemState extends State<ProxyListItem> {
         title: const Row(children: [
           Icon(Icons.security, size: 20, color: Colors.orange),
           SizedBox(width: 8),
-          Flexible(child: Text('Certificate Error', style: TextStyle(fontSize: 15))),
+          Flexible(child: TText('Certificate Error', style: TextStyle(fontSize: 15))),
         ]),
-        content: const Text(
+        content: const TText(
           'The proxy uses an SSL certificate not trusted by this system. '
           'This usually means a corporate proxy is inspecting traffic.\n\n'
           'Would you like to detect and install the certificate?',
@@ -68,11 +69,11 @@ class _ProxyListItemState extends State<ProxyListItem> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Skip'),
+            child: const TText('Skip'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Trust Certificate'),
+            child: const TText('Trust Certificate'),
           ),
         ],
       ),
@@ -103,7 +104,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No intercepting certificate detected')),
+          const SnackBar(content: TText('No intercepting certificate detected')),
         );
       }
     } catch (e) {
@@ -121,7 +122,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
       await widget.coreManager!.installCert(cert.pem);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Certificate installed. Please re-test the proxy.')),
+          const SnackBar(content: TText('Certificate installed. Please re-test the proxy.')),
         );
       }
     } catch (e) {

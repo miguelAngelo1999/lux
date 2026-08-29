@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
@@ -244,7 +245,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            'Detecting ${(_detectProgress * 100).round()}%',
+                            '${tl(context, 'Detecting')} ${(_detectProgress * 100).round()}%',
                             style: const TextStyle(fontSize: 11),
                           ),
                           const SizedBox(height: 3),
@@ -261,7 +262,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   : TextButton.icon(
                       onPressed: _detectProxies,
                       icon: const Icon(Icons.wifi_find, size: 16),
-                      label: const Text('Detect Proxy',
+                      label: const TText('Detect Proxy',
                           style: TextStyle(fontSize: 12)),
                     ),
             ],
@@ -273,7 +274,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
             onChanged: handleSelectProxy,
             child: proxyListGroup.groups.isEmpty
                 ? const Center(
-                    child: Text('No proxies configured',
+                    child: TText('No proxies configured',
                         style: TextStyle(color: Colors.grey)),
                   )
                 : ListView.builder(
@@ -365,7 +366,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           title: const Row(children: [
             Icon(Icons.security, size: 22, color: Colors.orange),
             SizedBox(width: 8),
-            Text('SSL Interception Detected'),
+            TText('SSL Interception Detected'),
           ]),
           content: SizedBox(
             width: 420,
@@ -373,7 +374,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                const TText(
                   'This proxy intercepts HTTPS traffic with a corporate certificate. '
                   'Some apps may not work until you trust this CA.',
                   style: TextStyle(fontSize: 13),
@@ -386,10 +387,10 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     ? '${result.sha256.substring(0, 16)}...'
                     : result.sha256),
                 const SizedBox(height: 12),
-                Text(
+                const TText(
                   'To trust this certificate, it needs to be added to your '
                   'system keychain. This requires your Mac password.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 11),
                 ),
               ],
             ),
@@ -397,7 +398,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Skip'),
+              child: const TText('Skip'),
             ),
             FilledButton.icon(
               onPressed: () async {
@@ -405,7 +406,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 await _installCert(result);
               },
               icon: const Icon(Icons.verified_user, size: 16),
-              label: const Text('Trust Certificate'),
+              label: const TText('Trust Certificate'),
             ),
           ],
         ),
@@ -424,7 +425,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         children: [
           SizedBox(
             width: 70,
-            child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            child: TText(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
           ),
           Expanded(child: SelectableText(value, style: const TextStyle(fontSize: 12))),
         ],
@@ -451,7 +452,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       if (result.exitCode == 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Certificate installed and trusted')),
+            const SnackBar(content: TText('Certificate installed and trusted')),
           );
         }
       } else {
@@ -493,7 +494,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   controller: usernameCtrl,
                   autofocus: true,
                   decoration: const InputDecoration(
-                    labelText: 'Username',
+                    labelText: tl(ctx, 'Username'),
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
@@ -503,7 +504,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   controller: passwordCtrl,
                   obscureText: true,
                   decoration: const InputDecoration(
-                    labelText: 'Password',
+                    labelText: tl(ctx, 'Password'),
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
@@ -521,14 +522,14 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 DropdownButtonFormField<String>(
                   value: passwordMode,
                   decoration: const InputDecoration(
-                    labelText: 'Password type',
+                    labelText: tl(ctx, 'Password type'),
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'persistent', child: Text('Persistent (saved)')),
-                    DropdownMenuItem(value: 'timed', child: Text('Timed (expires)')),
-                    DropdownMenuItem(value: 'one-time', child: Text('One-time (cleared after use)')),
+                    DropdownMenuItem(value: 'persistent', child: TText('Persistent (saved)')),
+                    DropdownMenuItem(value: 'timed', child: TText('Timed (expires)')),
+                    DropdownMenuItem(value: 'one-time', child: TText('One-time (cleared after use)')),
                   ],
                   onChanged: (v) => setDialogState(() => passwordMode = v!),
                 ),
@@ -537,7 +538,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   TextField(
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Expires after (minutes)',
+                      labelText: tl(ctx, 'Expires after (minutes)'),
                       isDense: true,
                       border: OutlineInputBorder(),
                     ),
@@ -546,9 +547,9 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   ),
                 ],
                 const SizedBox(height: 8),
-                Text(
+                const TText(
                   'Leave empty if the proxy does not require authentication.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 11),
                 ),
               ],
             ),
@@ -556,7 +557,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, null),
-              child: const Text('Cancel'),
+              child: const TText('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(
@@ -568,7 +569,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                   ttlMinutes: ttlMinutes,
                 ),
               ),
-              child: const Text('Add Proxy'),
+              child: const TText('Add Proxy'),
             ),
           ],
         ),
@@ -605,7 +606,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       final added = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Detected Proxies'),
+          title: const TText('Detected Proxies'),
           content: SizedBox(
             width: 380,
             child: Column(
@@ -624,7 +625,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                       dense: true,
                       leading: const Icon(Icons.dns, size: 20),
                       title: Text('${p.host}:${p.port}'),
-                      subtitle: const Text('HTTP Proxy'),
+                      subtitle: const TText('HTTP Proxy'),
                     )),
               ],
             ),
@@ -632,7 +633,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
+              child: const TText('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
@@ -673,7 +674,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Wrong password \u2014 try again'),
+                    content: TText('Wrong password — try again'),
                     backgroundColor: Colors.red,
                   ),
                 );
@@ -720,12 +721,12 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
               }
 
               return AlertDialog(
-                title: const Text('Name this proxy'),
+                title: const TText('Name this proxy'),
                 content: TextField(
                   controller: nameCtrl,
                   decoration: InputDecoration(
-                    labelText: 'Proxy name',
-                    hintText: 'e.g. Office, School, Home',
+                    labelText: tl(ctx, 'Proxy name'),
+                    hintText: tl(ctx, 'e.g. Office, School, Home'),
                     errorText: nameError,
                   ),
                   autofocus: true,
@@ -739,13 +740,13 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(ctx, null),
-                    child: const Text('Cancel'),
+                    child: const TText('Cancel'),
                   ),
                   FilledButton(
                     onPressed: nameError == null && nameCtrl.text.trim().isNotEmpty
                         ? () => Navigator.pop(ctx, nameCtrl.text.trim())
                         : null,
-                    child: const Text('Add'),
+                    child: const TText('Add'),
                   ),
                 ],
               );
