@@ -64,6 +64,49 @@ class ProcessManager {
           freshElevation = true;
         }
       }
+      // Kill any stale lux_core holding the port before starting a new one.
+      // Prevents "bind: address already in use" and multi-instance conflicts.
+      // macOS: lsof  |  Windows: netstat + taskkill
+      try {
+        if (Platform.isWindows) {
+          // Extract PID from: TCP  0.0.0.0:8000  ...  LISTENING  <PID>
+          final portArg = args.firstWhere(
+              (a) => a.startsWith('-port='), orElse: () => '-port=8000');
+          final port = portArg.split('=').last.trim();
+          final check = await Process.run(
+              'cmd', ['/c', 'netstat -ano | findstr :$port | findstr LISTENING'],
+              runInShell: false);
+          final pids = (check.stdout as String)
+              .split('\n')
+              .map((l) => l.trim().split(RegExp(r'\s+')).last.trim())
+              .where((p) => p.isNotEmpty && RegExp(r'^\d+$').hasMatch(p))
+              .toSet()
+              .toList();
+          for (final pid in pids) {
+            await Process.run('taskkill', ['/F', '/PID', pid]);
+          }
+          if (pids.isNotEmpty) {
+            await Future.delayed(const Duration(milliseconds: 300));
+          }
+        } else {
+          final portArg = args.firstWhere(
+              (a) => a.startsWith('-port='), orElse: () => '-port=8000');
+          final port = portArg.split('=').last.trim();
+          final check = await Process.run('lsof', ['-ti', ':$port']);
+          final pids = (check.stdout as String)
+              .split('\n')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          for (final pid in pids) {
+            await Process.run('kill', ['-9', pid]);
+          }
+          if (pids.isNotEmpty) {
+            await Future.delayed(const Duration(milliseconds: 300));
+          }
+        }
+      } catch (_) {}
+
       // After fresh elevation, the wrapper script now calls sudo on lux_core_real.
       // Give sudoers a moment to register the new entry, then start via sudo
       // directly (bypass wrapper) to avoid race conditions on first launch.
