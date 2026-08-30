@@ -224,6 +224,20 @@ Write-Host 'iss patched'
   echo "$ISCC_OUT" | tail -5
   echo "$ISCC_OUT" | grep -q "ISCC_OK" || { echo "ERROR: Inno Setup failed"; exit 1; }
 
+  # Recreate LuxApp scheduled task pointing to the installed lux.exe so
+  # lux_core gets elevated at next login (the installer's own task creation
+  # runs as SYSTEM and may target the wrong profile path)
+  win_ps_script "fix_luxapp_task.ps1" '
+$luxExe = "C:\Users\virgoh\AppData\Local\Programs\lux\lux.exe"
+if (-not (Test-Path $luxExe)) { Write-Host "lux.exe not found at $luxExe, skipping task"; exit 0 }
+$action   = New-ScheduledTaskAction -Execute $luxExe
+$trigger  = New-ScheduledTaskTrigger -AtLogOn -User "VIRGOH\virgoh"
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$principal = New-ScheduledTaskPrincipal -UserId "VIRGOH\virgoh" -RunLevel Highest
+Register-ScheduledTask -TaskName "LuxApp" -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+Write-Host "LuxApp task updated"
+'
+
 fi
 
 # ── Step 6: Copy installer to Mac ─────────────────────────────────────────
