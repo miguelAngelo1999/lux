@@ -164,6 +164,7 @@ print('checksum.dart updated on macOS')
   step "Building Flutter Windows app"
   win_script "build_flutter.bat" '@echo off
 setlocal
+set PUB_CACHE=C:\Users\virgoh\AppData\Local\Pub\Cache
 cd /d C:\lux-build\lux
 C:\lux-build\flutter\bin\flutter.bat pub get --offline
 C:\lux-build\flutter\bin\flutter.bat build windows --release --no-pub
