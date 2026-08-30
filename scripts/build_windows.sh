@@ -172,7 +172,36 @@ print('checksum.dart updated on macOS')
   # Sync it to the VM so Flutter build picks it up
   win "copy \"\\\\Mac\\Home\\lux-clean\\lib\\core\\checksum.dart\" \"C:\\lux-build\\lux\\lib\\core\\checksum.dart\" && echo CHECKSUM_SYNCED"
 
-  # Delete stale build output AND .dart_tool (package_config.json has macOS paths)
+  # ── Fix 3: ISS kill order — schtasks /end before taskkill ───────────────
+  step "Patching dist-setup.iss kill order"
+  win_ps_script "fix_iss_kill.ps1" '
+$path = "C:\lux-build\lux\dist-setup.iss"
+if (-not (Test-Path $path)) { Write-Host "dist-setup.iss not found, skipping"; exit 0 }
+$c = [System.IO.File]::ReadAllText($path)
+$old = "    { Kill all lux processes before installing files }`r`n" +
+       "    Exec(''taskkill.exe'', ''/F /IM lux.exe /T'', '''', SW_HIDE, ewWaitUntilTerminated, ResultCode);`r`n" +
+       "    Exec(''taskkill.exe'', ''/F /IM lux_core.exe /T'', '''', SW_HIDE, ewWaitUntilTerminated, ResultCode);`r`n" +
+       "    Exec(''taskkill.exe'', ''/F /IM lux_launcher.exe /T'', '''', SW_HIDE, ewWaitUntilTerminated, ResultCode);`r`n" +
+       "    Exec(''schtasks.exe'', ''/end /tn LuxApp'', '''', SW_HIDE, ewWaitUntilTerminated, ResultCode);"
+$new = "    { Stop scheduled task FIRST — lux_core runs as SYSTEM via LuxApp }`r`n" +
+       "    { A user-level taskkill cannot kill a SYSTEM process }`r`n" +
+       "    Exec(''schtasks.exe'', ''/end /tn LuxApp'', '''', SW_HIDE, ewWaitUntilTerminated, ResultCode);`r`n" +
+       "    Sleep(2000);`r`n" +
+       "    Exec(''taskkill.exe'', ''/F /IM lux_core.exe /T'', '''', SW_HIDE, ewWaitUntilTerminated, ResultCode);`r`n" +
+       "    Exec(''taskkill.exe'', ''/F /IM lux.exe /T'', '''', SW_HIDE, ewWaitUntilTerminated, ResultCode);`r`n" +
+       "    Exec(''taskkill.exe'', ''/F /IM lux_launcher.exe /T'', '''', SW_HIDE, ewWaitUntilTerminated, ResultCode);"
+if ($c -match [regex]::Escape("schtasks.exe.*end.*LuxApp")) {
+    if ($c -notmatch "Stop scheduled task FIRST") {
+        $c = $c.Replace($old, $new)
+        [System.IO.File]::WriteAllText($path, $c)
+        Write-Host "ISS kill order patched"
+    } else {
+        Write-Host "ISS kill order already patched"
+    }
+} else {
+    Write-Host "ISS pattern not found, skipping"
+}
+'
   win "if exist C:\\lux-build\\lux\\build\\windows rmdir /S /Q C:\\lux-build\\lux\\build\\windows >nul 2>&1 & exit 0"
   win "if exist C:\\lux-build\\lux\\.dart_tool rmdir /S /Q C:\\lux-build\\lux\\.dart_tool >nul 2>&1 & exit 0"
 

@@ -339,7 +339,7 @@ Future<void> downloadAndInstall(
     await sink.close();
     client.close();
 
-    final fileSize = await file.length();
+    var fileSize = await file.length();
     appLog('UPDATE', 'download complete size=${fileSize}B file=${file.path}');
     debugPrint('[Updater] downloaded ${fileSize}B to ${file.path}');
 
@@ -379,14 +379,47 @@ Future<void> downloadAndInstall(
 
       if (info.size > 0 && fileSize != info.size) {
         appLog('UPDATE',
-            'size mismatch: got $fileSize, appcast says ${info.size} — refusing');
+            'size mismatch: got $fileSize, appcast says ${info.size} — retrying in 30s');
         await file.delete();
-        _reportBadDownload(
-          context,
-          'Downloaded file is ${fileSize}B but the release says ${info.size}B. '
-          'It may be a cached copy of an older version. Try again in a minute.',
-        );
-        return;
+
+        // GDrive CDN sometimes serves a cached older revision for ~30–60s
+        // after a new file is uploaded. Wait and retry once automatically.
+        onStatusChange?.call('Download size mismatch — retrying in 30s…');
+        await Future.delayed(const Duration(seconds: 30));
+
+        // Re-download with a fresh timestamp
+        final retryUrl = url.contains('drive.usercontent.google.com')
+            ? '$url${url.contains('?') ? '&' : '?'}'
+                '_t=${DateTime.now().millisecondsSinceEpoch}'
+            : url;
+        final retryFile = File('${file.parent.path}/Lux-${info.latestVersion}-retry$ext');
+        if (await retryFile.exists()) await retryFile.delete();
+
+        onStatusChange?.call('Re-downloading…');
+        final retryRequest = await client.getUrl(Uri.parse(retryUrl));
+        retryRequest.followRedirects = true;
+        retryRequest.headers.set('Cache-Control', 'no-cache, no-store');
+        final retryResponse = await retryRequest.close()
+            .timeout(const Duration(minutes: 10));
+        final retrySink = retryFile.openWrite();
+        await retryResponse.pipe(retrySink);
+        final retrySize = await retryFile.length();
+
+        if (retrySize != info.size) {
+          appLog('UPDATE',
+              'retry size mismatch: got $retrySize, appcast says ${info.size} — giving up');
+          await retryFile.delete();
+          _reportBadDownload(
+            context,
+            'Downloaded file is ${retrySize}B but the release says ${info.size}B. '
+            'It may be a cached copy of an older version. Try again in a minute.',
+          );
+          return;
+        }
+        // Retry succeeded — continue with the retried file
+        await retryFile.rename(file.path);
+        fileSize = retrySize;
+        appLog('UPDATE', 'retry download succeeded size=$retrySize');
       }
 
       if (info.sha256.isNotEmpty) {
