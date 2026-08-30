@@ -30,9 +30,11 @@ win_script() {
   local name="$1"
   local content="$2"
   local mac_path="$REPO/$name"
-  local win_path="\\\\Mac\\Home\\lux-clean\\${name}"
+  local share_path="\\\\Mac\\Home\\lux-clean\\${name}"
+  local local_path="C:\\lux-build\\${name}"
   printf '%s' "$content" > "$mac_path"
-  win "$win_path"
+  # Copy to local C: path first — batch files can't reliably run from UNC paths
+  win "copy \"${share_path}\" \"${local_path}\" && cmd /c \"${local_path}\""
   rm -f "$mac_path"
 }
 
