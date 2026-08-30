@@ -84,8 +84,8 @@ if [ "${SKIP_BUILD:-}" != "1" ]; then
   # ── Step 1: Sync repos via shared folder ──────────────────────────────────
   step "Syncing repos to VM via shared folder"
   win "robocopy \\\\Mac\\Home\\lux-clean C:\\lux-build\\lux /E /XD .git build dist dist2 /XF *.dmg *.exe pubspec.yaml /NP /NFL /NDL 2>nul & exit 0"
-  win "attrib -R C:\\lux-build\\lux\\*.* /S /D >nul 2>&1 & exit 0"
-  win "del /F C:\\lux-build\\lux\\.flutter-plugins C:\\lux-build\\lux\\.flutter-plugins-dependencies >nul 2>&1 & exit 0"
+  win "attrib -R -H C:\\lux-build\\lux\\*.* /S /D >nul 2>&1 & attrib -R -H C:\\lux-build\\lux\\.* >nul 2>&1 & exit 0"
+  win "del /F /A:H C:\\lux-build\\lux\\.flutter-plugins C:\\lux-build\\lux\\.flutter-plugins-dependencies >nul 2>&1 & exit 0"
   # Write pubspec.yaml with quoted version to avoid YAML parse issues on Windows Flutter
   WIN_VER_QUOTED="version: \"${WIN_VERSION}+1\""
   PUBSPEC_CONTENT=$(sed "s/^version: .*/version: ${WIN_VERSION}+1/" "$REPO/pubspec.yaml")
