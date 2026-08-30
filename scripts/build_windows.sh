@@ -230,7 +230,7 @@ Write-Host 'iss patched'
   win_ps_script "fix_luxapp_task.ps1" '
 $luxExe = "C:\Users\virgoh\AppData\Local\Programs\lux\lux.exe"
 if (-not (Test-Path $luxExe)) { Write-Host "lux.exe not found at $luxExe, skipping task"; exit 0 }
-$action   = New-ScheduledTaskAction -Execute $luxExe
+$action   = New-ScheduledTaskAction -Execute $luxExe -Argument '--enable-software-rendering'
 $trigger  = New-ScheduledTaskTrigger -AtLogOn -User "VIRGOH\virgoh"
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 $principal = New-ScheduledTaskPrincipal -UserId "VIRGOH\virgoh" -RunLevel Highest
