@@ -1,7 +1,7 @@
 {
-  "version": "1.50.38",
+  "version": "1.50.39",
   "channel": "stable",
-  "notes": "fix: use PS1 Start-Process -Wait for flutter build \u2014 bat cmd /c doesn't wait for Dart subprocess",
+  "notes": "fix: var fileSize (not final) for retry; ISS kill order patch in build script",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "5334b6e550d18558a0d8732ce3bf0beec23ad59e76f606acc1e159886bdb742b",
@@ -9,8 +9,8 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "b3adfc7893e63ea06e2450f2dac9f5dd1043ba4987952a11e87d2e61cfd017c0",
-    "size": 22404564,
-    "version": "1.50.38"
+    "sha256": "3102f17b4d320c741268263ccd89126564704629e0e25af945fb5428ce6ebc9f",
+    "size": 22400337,
+    "version": "1.50.39"
   }
 }
