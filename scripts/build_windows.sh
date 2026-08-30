@@ -156,15 +156,16 @@ print('checksum.dart updated on macOS')
   # Sync it to the VM so Flutter build picks it up
   win "copy \"\\\\Mac\\Home\\lux-clean\\lib\\core\\checksum.dart\" \"C:\\lux-build\\lux\\lib\\core\\checksum.dart\" && echo CHECKSUM_SYNCED"
 
-  # Delete stale build output (has cached MSBuild references to macOS paths)
-  # Keep .dart_tool — it's needed for --no-pub to work
+  # Delete stale build output AND .dart_tool (package_config.json has macOS paths)
   win "if exist C:\\lux-build\\lux\\build\\windows rmdir /S /Q C:\\lux-build\\lux\\build\\windows >nul 2>&1 & exit 0"
+  win "if exist C:\\lux-build\\lux\\.dart_tool rmdir /S /Q C:\\lux-build\\lux\\.dart_tool >nul 2>&1 & exit 0"
 
   # ── Step 4: Flutter build ─────────────────────────────────────────────────
   step "Building Flutter Windows app"
   win_script "build_flutter.bat" '@echo off
 setlocal
 cd /d C:\lux-build\lux
+C:\lux-build\flutter\bin\flutter.bat pub get --offline
 C:\lux-build\flutter\bin\flutter.bat build windows --release --no-pub
 if %ERRORLEVEL% EQU 0 (echo FLUTTER_OK) else (echo FLUTTER_FAILED & exit /b 1)
 endlocal
