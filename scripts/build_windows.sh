@@ -141,15 +141,20 @@ endlocal
 
   # ── Step 3: Update checksum.dart ─────────────────────────────────────────
   step "Updating checksum.dart"
+  # Get hash from the VM
   WIN_HASH=$(prlctl exec "$VM" powershell -NonInteractive -NoProfile -Command "(Get-FileHash 'C:\lux-build\lux\assets\bin\lux_core.exe' -Algorithm SHA256).Hash.ToLower()" 2>&1 | tr -d '[:space:]\r\n')
   echo "Hash: $WIN_HASH"
 
-  win_ps_script "fix_checksum.ps1" "
-\$f = 'C:\\lux-build\\lux\\lib\\core\\checksum.dart'
-\$old = (Select-String 'windowsAmd64Checksum' \$f).Line -replace '.*\"([^\"]+)\".*', '\$1'
-(Get-Content \$f -Raw).Replace(\$old, '${WIN_HASH}') | Set-Content \$f -NoNewline
-Write-Host 'checksum updated'
+  # Update checksum.dart on macOS (source of truth)
+  python3 -c "
+import re
+with open('$REPO/lib/core/checksum.dart') as f: c = f.read()
+c = re.sub(r'windowsAmd64Checksum = \"[a-f0-9]+\"', 'windowsAmd64Checksum = \"$WIN_HASH\"', c)
+with open('$REPO/lib/core/checksum.dart', 'w') as f: f.write(c)
+print('checksum.dart updated on macOS')
 "
+  # Sync it to the VM so Flutter build picks it up
+  win "copy \"\\\\Mac\\Home\\lux-clean\\lib\\core\\checksum.dart\" \"C:\\lux-build\\lux\\lib\\core\\checksum.dart\" && echo CHECKSUM_SYNCED"
 
   # Delete stale .dart_tool (it has macOS pub cache paths from robocopy — must regenerate)
   win "if exist C:\\lux-build\\lux\\.dart_tool rmdir /S /Q C:\\lux-build\\lux\\.dart_tool >nul 2>&1 & exit 0"
