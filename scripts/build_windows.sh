@@ -86,6 +86,19 @@ if [ "${SKIP_BUILD:-}" != "1" ]; then
   win "robocopy \\\\Mac\\Home\\lux-clean C:\\lux-build\\lux /E /XD .git build dist dist2 /XF *.dmg *.exe pubspec.yaml /NP /NFL /NDL 2>nul & exit 0"
   win "attrib -R -H C:\\lux-build\\lux\\*.* /S /D >nul 2>&1 & attrib -R -H C:\\lux-build\\lux\\.* >nul 2>&1 & exit 0"
   win "del /F /A:H C:\\lux-build\\lux\\.flutter-plugins C:\\lux-build\\lux\\.flutter-plugins-dependencies >nul 2>&1 & exit 0"
+  # Force remove hidden dotfiles that Windows attrib misses
+  win_ps_script "cleanup_dotfiles.ps1" '
+$dir = "C:\lux-build\lux"
+$dotfiles = @(".flutter-plugins", ".flutter-plugins-dependencies")
+foreach ($f in $dotfiles) {
+    $path = Join-Path $dir $f
+    if (Test-Path $path) {
+        attrib -R -H $path
+        Remove-Item -Force $path -ErrorAction SilentlyContinue
+        Write-Host "Removed: $f"
+    }
+}
+'
   # Write pubspec.yaml with quoted version to avoid YAML parse issues on Windows Flutter
   WIN_VER_QUOTED="version: \"${WIN_VERSION}+1\""
   PUBSPEC_CONTENT=$(sed "s/^version: .*/version: ${WIN_VERSION}+1/" "$REPO/pubspec.yaml")
