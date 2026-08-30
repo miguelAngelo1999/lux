@@ -1,7 +1,7 @@
 {
-  "version": "1.50.36",
+  "version": "1.50.37",
   "channel": "stable",
-  "notes": "fix: resolve pubspec.yaml merge conflict markers + build_windows.sh fixes",
+  "notes": "fix: Windows checksum sync \u2014 update checksum.dart on macOS + copy to VM before Flutter build",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "5334b6e550d18558a0d8732ce3bf0beec23ad59e76f606acc1e159886bdb742b",
@@ -9,8 +9,8 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "2978101e6a4080e71ff4d0bb386664cd32a74881ab05d9884486fd46a6a95f5b",
-    "size": 22384595,
-    "version": "1.50.36"
+    "sha256": "f61aa3a3c0c77f6cccd6f81fc099dea22efd3fababe81de1c58ab80400cb1d42",
+    "size": 22384597,
+    "version": "1.50.37"
   }
 }
