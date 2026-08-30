@@ -178,14 +178,19 @@ print('checksum.dart updated on macOS')
 
   # ── Step 4: Flutter build ─────────────────────────────────────────────────
   step "Building Flutter Windows app"
-  win_script "build_flutter.bat" '@echo off
-setlocal
-set PUB_CACHE=C:\Users\virgoh\AppData\Local\Pub\Cache
-cd /d C:\lux-build\lux
-C:\lux-build\flutter\bin\flutter.bat pub get --offline
-C:\lux-build\flutter\bin\flutter.bat build windows --release --no-pub
-if %ERRORLEVEL% EQU 0 (echo FLUTTER_OK) else (echo FLUTTER_FAILED & exit /b 1)
-endlocal
+  # Use PowerShell Start-Process -Wait to ensure flutter.bat is fully awaited
+  # (cmd /c does not wait for the Dart subprocess that flutter.bat spawns)
+  win_ps_script "build_flutter.ps1" '
+$env:PUB_CACHE = "C:\Users\virgoh\AppData\Local\Pub\Cache"
+Set-Location C:\lux-build\lux
+# pub get first
+& "C:\lux-build\flutter\bin\flutter.bat" pub get --offline
+# build windows — must use Start-Process -Wait or flutter.bat returns before Dart finishes
+$p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
+     -ArgumentList "build","windows","--release","--no-pub" `
+     -Wait -PassThru -NoNewWindow
+Write-Host "Flutter exit code: $($p.ExitCode)"
+if ($p.ExitCode -eq 0) { Write-Host "FLUTTER_OK" } else { Write-Host "FLUTTER_FAILED"; exit 1 }
 '
   # Verify Flutter output exists
   win "if exist \"C:\\lux-build\\lux\\build\\windows\\x64\\runner\\Release\\lux.exe\" (echo EXE_EXISTS) else (echo EXE_MISSING)" | grep -q "EXE_EXISTS" || { echo "ERROR: Flutter build output not found"; exit 1; }
