@@ -1,0 +1,17 @@
+{
+  "version": "1.50.40-beta.1",
+  "channel": "beta",
+  "notes": "fix: add macOS.version to appcast \u2014 prevents false update prompt on macOS 1.50.36",
+  "macOS": {
+    "url": "https://drive.usercontent.google.com/download?id=1Qkg_6MK0zjGGy64f-BJt-3l1OEmVvt4X&export=download&confirm=t",
+    "sha256": "457e85844fb597276ae5a4b8f2b276a4e9e4b575845e55f72c6ca3e0c944ca1c",
+    "size": 37762218,
+    "version": "1.50.40-beta.1"
+  },
+  "windows": {
+    "url": "",
+    "sha256": "",
+    "size": 0,
+    "version": ""
+  }
+}
