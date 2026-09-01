@@ -1,17 +1,16 @@
 {
   "version": "1.50.39",
   "channel": "stable",
-  "notes": "fix: kill stale lux_core on port before starting new one (macOS+Windows)",
+  "notes": "fix: add macOS.version to appcast \u2014 prevents false update prompt on macOS 1.50.36",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "5334b6e550d18558a0d8732ce3bf0beec23ad59e76f606acc1e159886bdb742b",
-    "size": 37759389,
-    "version": "1.50.36"
+    "sha256": "6bcd30f3b2bc4596e02144b35c1037c33b138266c2b7060f54651cc18fdc8745",
+    "size": 37763659,
+    "version": "1.50.39"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
     "sha256": "3102f17b4d320c741268263ccd89126564704629e0e25af945fb5428ce6ebc9f",
-    "size": 22400337,
-    "version": "1.50.39"
+    "size": 22400337
   }
 }
