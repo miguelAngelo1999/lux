@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
 import '../tr.dart';
+import '../util/utils.dart';
 
 class AppHeaderBar extends StatefulWidget {
   final CoreManager coreManager;
@@ -311,9 +312,20 @@ class _State extends State<AppHeaderBar> with WindowListener {
 
 /// Sets proxy and Node.js env vars in the user's GUI session via launchctl.
 /// Must run from the Flutter app (user context), NOT from lux_core (root).
+///
+/// NODE_EXTRA_CA_CERTS points to the PEM bundle that lux_core writes at
+/// {homeDir}/proxy_ca_bundle.pem when it starts — a real text PEM file
+/// exported from the System Keychain that Node.js can actually read.
+/// The broken /Library/Keychains/System.keychain path (a binary file)
+/// is intentionally not used here.
 void _setProxyEnv() async {
   const proxy = 'http://127.0.0.1:1090';
   const noProxy = 'localhost,127.0.0.1,10.255.0.1,*.local';
+
+  // Resolve the lux home dir to find the PEM bundle lux_core writes there.
+  final homeDir = await getHomeDir();
+  final caBundlePath = '$homeDir/proxy_ca_bundle.pem';
+
   final vars = {
     'HTTP_PROXY': proxy,
     'HTTPS_PROXY': proxy,
@@ -321,9 +333,10 @@ void _setProxyEnv() async {
     'https_proxy': proxy,
     'NO_PROXY': noProxy,
     'no_proxy': noProxy,
-    'NODE_EXTRA_CA_CERTS': '/Library/Keychains/System.keychain',
-    'NODE_TLS_REJECT_UNAUTHORIZED': '0',
-    'NODE_OPTIONS': '--use-openssl-ca',
+    'NODE_EXTRA_CA_CERTS': caBundlePath,
+    // NODE_TLS_REJECT_UNAUTHORIZED and NODE_OPTIONS are intentionally omitted.
+    // Setting them to 0 / --use-openssl-ca disables TLS verification globally,
+    // which is worse than the original problem. The PEM bundle is the correct fix.
   };
   for (final e in vars.entries) {
     await Process.run('launchctl', ['setenv', e.key, e.value]);
@@ -334,7 +347,9 @@ void _clearProxyEnv() async {
   final keys = [
     'HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy',
     'NO_PROXY', 'no_proxy',
-    'NODE_EXTRA_CA_CERTS', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_OPTIONS',
+    'NODE_EXTRA_CA_CERTS',
+    // Legacy: unset even if we stopped setting them
+    'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_OPTIONS',
   ];
   for (final k in keys) {
     await Process.run('launchctl', ['unsetenv', k]);
