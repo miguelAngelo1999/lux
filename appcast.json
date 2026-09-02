@@ -1,16 +1,17 @@
 {
-  "version": "1.50.39",
+  "version": "1.50.40",
   "channel": "stable",
-  "notes": "fix: add macOS.version to appcast \u2014 prevents false update prompt on macOS 1.50.36",
+  "notes": "fix: _setProxyEnv uses PEM bundle path for NODE_EXTRA_CA_CERTS",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "6bcd30f3b2bc4596e02144b35c1037c33b138266c2b7060f54651cc18fdc8745",
-    "size": 37763659,
-    "version": "1.50.39"
+    "sha256": "ce8867525aa5cf28081b9e185ccf3a528ef9a1b8bfd95268c7f29bb83769212a",
+    "size": 37764148,
+    "version": "1.50.40"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
     "sha256": "3102f17b4d320c741268263ccd89126564704629e0e25af945fb5428ce6ebc9f",
-    "size": 22400337
+    "size": 22400337,
+    "version": ""
   }
 }
