@@ -48,6 +48,7 @@ class _LogPageState extends State<LogPage> {
   final _searchCtrl = TextEditingController();
   String _searchText = '';
   final _scrollCtrl = ScrollController();
+  final _logFocusNode = FocusNode();
   bool _connected = false;
   String? _error;
 
@@ -180,6 +181,7 @@ class _LogPageState extends State<LogPage> {
     _channel?.sink.close();
     _searchCtrl.dispose();
     _scrollCtrl.dispose();
+    _logFocusNode.dispose();
     super.dispose();
   }
 
@@ -270,7 +272,10 @@ class _LogPageState extends State<LogPage> {
                     style: const TextStyle(color: Colors.grey),
                   ),
                 )
-              : ListView.builder(
+              : SelectableRegion(
+                  focusNode: _logFocusNode,
+                  selectionControls: materialTextSelectionControls,
+                  child: ListView.builder(
                   controller: _scrollCtrl,
                   itemCount: filtered.length,
                   itemBuilder: (ctx, i) {
@@ -308,7 +313,7 @@ class _LogPageState extends State<LogPage> {
                           ),
                           const SizedBox(width: 6),
                           Expanded(
-                            child: SelectableText(
+                            child: Text(
                               e.message,
                               style: TextStyle(
                                   fontSize: 12,
@@ -319,7 +324,7 @@ class _LogPageState extends State<LogPage> {
                       ),
                     );
                   },
-                ),
+                )),
         ),
       ],
     );
