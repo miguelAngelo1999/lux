@@ -1,7 +1,7 @@
 {
   "version": "1.50.40",
   "channel": "stable",
-  "notes": "fix: _setProxyEnv uses PEM bundle path for NODE_EXTRA_CA_CERTS",
+  "notes": "fix: appcast macOS.version=1.50.40 windows.version=1.50.39 to prevent false update prompts",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "ce8867525aa5cf28081b9e185ccf3a528ef9a1b8bfd95268c7f29bb83769212a",
@@ -10,8 +10,8 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "3102f17b4d320c741268263ccd89126564704629e0e25af945fb5428ce6ebc9f",
-    "size": 22400337,
-    "version": "1.50.39"
+    "sha256": "74779cad18599baa02ec0567fda768c01c358b25cfb073f7375a0813c149aaba",
+    "size": 22403234,
+    "version": "1.50.40"
   }
 }
