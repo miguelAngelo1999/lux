@@ -153,11 +153,28 @@ class CoreManager {
   }
 
   Future<void> start() async {
-    await dio.post('$baseHttpUrl/manager/start',
-        options: Options(
-          sendTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 10),
-        ));
+  /// Start the proxy. Retries up to 3 times on 500 (lux_core still initialising)
+  /// with exponential backoff: 1s, 2s, 4s.
+  Future<void> start() async {
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await dio.post('$baseHttpUrl/manager/start',
+            options: Options(
+              sendTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 15),
+            ));
+        return; // success
+      } on DioException catch (e) {
+        final status = e.response?.statusCode;
+        if (status == 500 && attempt < 3) {
+          // lux_core may still be initialising — wait and retry
+          appLog('CORE', 'start() got 500, retrying in ${attempt}s (attempt $attempt/3)');
+          await Future.delayed(Duration(seconds: attempt));
+          continue;
+        }
+        rethrow;
+      }
+    }
   }
 
   Future<bool> getIsStarted() async {

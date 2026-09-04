@@ -686,9 +686,9 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         }
         if (creds == null) return;
 
-        // Step 4: Derive proxy name from cert issuer
+        // Step 4: Derive proxy name from cert issuer (only when MITM is detected)
         String suggestedName = firstProxy.host;
-        if (certResult != null && certResult.issuer.isNotEmpty) {
+        if (certResult != null && certResult.intercepted && certResult.issuer.isNotEmpty) {
           // Try to extract O= (Organization) from the issuer DN
           final orgMatch = RegExp(r'O=([^,]+)').firstMatch(certResult.issuer);
           if (orgMatch != null) {
