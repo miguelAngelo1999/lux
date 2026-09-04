@@ -519,7 +519,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         subtitle: 'Appcast URL describing the newest build',
         onChanged: (v) async {
           await writeCustomAppcastUrl(v.trim().isEmpty ? null : v.trim());
-          _notify('Update server saved');
+          _notify(tl(context, 'Update server saved'));
           if (mounted) setState(() {});
         },
       ),
@@ -532,7 +532,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       final info = await checkForUpdate();
       if (!mounted) return;
       if (info == null || !info.hasUpdate) {
-        _notify('You are up to date');
+        _notify(tl(context, 'You are up to date'));
       } else {
         await showUpdateDialog(context, info);
       }

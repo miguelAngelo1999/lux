@@ -254,7 +254,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
                         _delay == null
                             ? '...'
                             : _delay! < 0
-                                ? 'fail'
+                                ? tl(context, 'fail')
                                 : '${_delay}ms',
                         style: TextStyle(
                           fontSize: 10,

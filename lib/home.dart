@@ -351,7 +351,7 @@ class _HomeState extends State<Home>
         title: const Row(children: [
           Icon(Icons.key_off, size: 22, color: Colors.orange),
           SizedBox(width: 8),
-          Text('Proxy Credentials Expired'),
+          TText('Proxy Credentials Expired'),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -371,8 +371,8 @@ class _HomeState extends State<Home>
             TextField(
               controller: usernameController,
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Username',
+              decoration: InputDecoration(
+                labelText: tl(context, 'Username'),
                 border: OutlineInputBorder(),
               ),
             ),
@@ -380,8 +380,8 @@ class _HomeState extends State<Home>
             TextField(
               controller: passwordController,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'New password',
+              decoration: InputDecoration(
+                labelText: tl(context, 'New password'),
                 border: OutlineInputBorder(),
               ),
               onSubmitted: (_) => Navigator.pop(ctx),
@@ -395,11 +395,11 @@ class _HomeState extends State<Home>
               usernameController.clear();
               Navigator.pop(ctx);
             },
-            child: const Text('Cancel'),
+            child: const TText('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Reconnect'),
+            child: const TText('Reconnect'),
           ),
         ],
       ),

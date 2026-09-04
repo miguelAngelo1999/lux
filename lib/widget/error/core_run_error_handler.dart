@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/elevate.dart';
 import 'package:path/path.dart' as path;
@@ -84,7 +85,7 @@ class _CoreRunErrorHandlerState extends State<CoreRunErrorHandler> {
               const SizedBox(height: 20),
               Text(
                 needsElevation
-                    ? 'Administrator Access Required'
+                    ? tl(context, 'Administrator Access Required')
                     : tr().somethingWrong,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
@@ -92,8 +93,7 @@ class _CoreRunErrorHandlerState extends State<CoreRunErrorHandler> {
               const SizedBox(height: 12),
               Text(
                 needsElevation
-                    ? 'Lux needs administrator privileges to create the network '
-                        'adapter. Click below and enter your Mac password when prompted.'
+                    ? tl(context, 'Lux needs administrator privileges to create the network adapter. Click below and enter your Mac password when prompted.')
                     : '${tr().coreRunError}: ${widget.errorDetail.message}',
                 style: const TextStyle(fontSize: 14),
                 textAlign: TextAlign.center,
@@ -105,14 +105,14 @@ class _CoreRunErrorHandlerState extends State<CoreRunErrorHandler> {
                     children: [
                       CircularProgressIndicator(),
                       SizedBox(height: 12),
-                      Text('Waiting for password...', style: TextStyle(fontSize: 12)),
+                      TText('Waiting for password...', style: TextStyle(fontSize: 12)),
                     ],
                   )
                 else
                   FilledButton.icon(
                     onPressed: _grantAccess,
                     icon: const Icon(Icons.lock_open),
-                    label: const Text('Grant Access'),
+                    label: const TText('Grant Access'),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                     ),
@@ -120,8 +120,7 @@ class _CoreRunErrorHandlerState extends State<CoreRunErrorHandler> {
                 if (grantFailed) ...[
                   const SizedBox(height: 16),
                   Text(
-                    'Setup was cancelled or failed. Try again, or if this '
-                    'keeps happening, open Terminal and paste:',
+                    tl(context, 'Setup was cancelled or failed. Try again, or if this keeps happening, open Terminal and paste:'),
                     style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),

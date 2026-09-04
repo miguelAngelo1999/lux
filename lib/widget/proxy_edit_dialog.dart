@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/util/elevation_helper.dart';
@@ -46,7 +47,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
     if (_passwordMode == 'one-time' || _passwordMode == 'timed') {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This password mode does not allow revealing the password')),
+        const SnackBar(content: TText('This password mode does not allow revealing the password')),
       );
       return false;
     }
@@ -144,11 +145,11 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         // Proxy type
                         DropdownButtonFormField<String>(
                           value: _type,
-                          decoration: const InputDecoration(labelText: 'Type'),
+                          decoration: InputDecoration(labelText: tl(context, 'Type')),
                           items: const [
-                            DropdownMenuItem(value: 'http', child: Text('HTTP')),
-                            DropdownMenuItem(value: 'socks5', child: Text('SOCKS5')),
-                            DropdownMenuItem(value: 'ss', child: Text('Shadowsocks')),
+                            DropdownMenuItem(value: 'http', child: TText('HTTP')),
+                            DropdownMenuItem(value: 'socks5', child: TText('SOCKS5')),
+                            DropdownMenuItem(value: 'ss', child: TText('Shadowsocks')),
                           ],
                           onChanged: isEditing ? null : (v) => setState(() => _type = v!),
                         ),
@@ -156,14 +157,14 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         // Name
                         TextFormField(
                           initialValue: _name,
-                          decoration: const InputDecoration(labelText: 'Name'),
+                          decoration: InputDecoration(labelText: tl(context, 'Name')),
                           onSaved: (v) => _name = v ?? '',
                         ),
                         const SizedBox(height: 12),
                         // Server
                         TextFormField(
                           initialValue: _server,
-                          decoration: const InputDecoration(labelText: 'Server'),
+                          decoration: InputDecoration(labelText: tl(context, 'Server')),
                           validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
                           onSaved: (v) => _server = v ?? '',
                         ),
@@ -171,7 +172,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         // Port
                         TextFormField(
                           initialValue: _port.toString(),
-                          decoration: const InputDecoration(labelText: 'Port'),
+                          decoration: InputDecoration(labelText: tl(context, 'Port')),
                           keyboardType: TextInputType.number,
                           validator: (v) {
                             final p = int.tryParse(v ?? '');
@@ -184,7 +185,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         // Username
                         TextFormField(
                           initialValue: _username,
-                          decoration: const InputDecoration(labelText: 'Username (optional)'),
+                          decoration: InputDecoration(labelText: tl(context, 'Username (optional)')),
                           onSaved: (v) => _username = v ?? '',
                         ),
                         const SizedBox(height: 12),
@@ -192,7 +193,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         TextFormField(
                           initialValue: _password,
                           decoration: InputDecoration(
-                            labelText: 'Password (optional)',
+                            labelText: tl(context, 'Password (optional)'),
                             suffixIcon: (_passwordMode == 'one-time' || _passwordMode == 'timed')
                                 ? const Tooltip(
                                     message: 'Password cannot be revealed in this mode',
@@ -217,11 +218,11 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         // Password Mode
                         DropdownButtonFormField<String>(
                           value: _passwordMode,
-                          decoration: const InputDecoration(labelText: 'Password Mode'),
+                          decoration: InputDecoration(labelText: tl(context, 'Password Mode')),
                           items: const [
-                            DropdownMenuItem(value: 'persistent', child: Text('Persistent')),
-                            DropdownMenuItem(value: 'one-time', child: Text('One-time (clears on switch)')),
-                            DropdownMenuItem(value: 'timed', child: Text('Timed (auto-expires)')),
+                            DropdownMenuItem(value: 'persistent', child: TText('Persistent')),
+                            DropdownMenuItem(value: 'one-time', child: TText('One-time (clears on switch)')),
+                            DropdownMenuItem(value: 'timed', child: TText('Timed (auto-expires)')),
                           ],
                           onChanged: (v) => setState(() => _passwordMode = v!),
                         ),
@@ -229,8 +230,8 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           const SizedBox(height: 12),
                           TextFormField(
                             initialValue: _passwordTTLMinutes.toString(),
-                            decoration: const InputDecoration(
-                              labelText: 'Expires after (minutes)',
+                            decoration: InputDecoration(
+                              labelText: tl(context, 'Expires after (minutes)'),
                             ),
                             keyboardType: TextInputType.number,
                             validator: (v) {
@@ -264,14 +265,14 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                   children: [
                     TextButton(
                       onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: const TText('Cancel'),
                     ),
                     const SizedBox(width: 8),
                     FilledButton(
                       onPressed: _isLoading ? null : _save,
                       child: _isLoading
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : Text(isEditing ? 'Save' : 'Create'),
+                          : TText(isEditing ? 'Save' : 'Create'),
                     ),
                   ],
                 ),

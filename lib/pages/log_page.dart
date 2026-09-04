@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:flutter/services.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -219,8 +220,8 @@ class _LogPageState extends State<LogPage> {
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search logs...',
+                  decoration: InputDecoration(
+                    hintText: tl(context, 'Search logs...'),
                     isDense: true,
                     prefixIcon: Icon(Icons.search, size: 16),
                     border: OutlineInputBorder(),
@@ -232,12 +233,12 @@ class _LogPageState extends State<LogPage> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                tooltip: 'Clear logs',
+                tooltip: tl(context, 'Clear logs'),
                 icon: const Icon(Icons.delete_outline, size: 18),
                 onPressed: () => setState(() => _logs.clear()),
               ),
               IconButton(
-                tooltip: 'Copy all',
+                tooltip: tl(context, 'Copy all'),
                 icon: const Icon(Icons.copy, size: 18),
                 onPressed: () {
                   final text = filtered
@@ -257,18 +258,18 @@ class _LogPageState extends State<LogPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Connection error:', style: TextStyle(color: Colors.red, fontSize: 12)),
+                      TText('Connection error:', style: TextStyle(color: Colors.red, fontSize: 12)),
                       const SizedBox(height: 4),
                       SelectableText(_error!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                       const SizedBox(height: 8),
-                      TextButton(onPressed: () { setState(() => _error = null); _connect(); }, child: const Text('Retry')),
+                      TextButton(onPressed: () { setState(() => _error = null); _connect(); }, child: const TText('Retry')),
                     ],
                   ),
                 )
               : filtered.isEmpty
               ? Center(
                   child: Text(
-                    _connected ? 'Waiting for logs...' : 'Connecting...',
+                    _connected ? tl(context, 'Waiting for logs...') : tl(context, 'Connecting...'),
                     style: const TextStyle(color: Colors.grey),
                   ),
                 )

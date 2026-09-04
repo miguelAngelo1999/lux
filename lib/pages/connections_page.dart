@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -163,8 +164,8 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search connections...',
+                  decoration: InputDecoration(
+                    hintText: tl(context, 'Search connections...'),
                     isDense: true,
                     prefixIcon: Icon(Icons.search, size: 16),
                     border: OutlineInputBorder(),
@@ -184,7 +185,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                tooltip: 'Close all connections',
+                tooltip: tl(context, 'Close all connections'),
                 icon: const Icon(Icons.close_fullscreen, size: 18),
                 onPressed: () => widget.coreManager.closeAllConnections(),
               ),
@@ -198,10 +199,10 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: const Row(
             children: [
-              SizedBox(width: 60, child: Text('Net', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              Expanded(flex: 3, child: Text('Host', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              Expanded(flex: 2, child: Text('Rule', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-              Expanded(flex: 2, child: Text('Process', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              SizedBox(width: 60, child: TText('Net', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              Expanded(flex: 3, child: TText('Host', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              Expanded(flex: 2, child: TText('Rule', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              Expanded(flex: 2, child: TText('Process', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
               SizedBox(width: 70, child: Text('↑↓', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
             ],
           ),
@@ -210,7 +211,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
         Expanded(
           child: filtered.isEmpty
               ? const Center(
-                  child: Text('No active connections',
+                  child: TText('No active connections',
                       style: TextStyle(color: Colors.grey)))
               : ListView.builder(
                   itemCount: filtered.length,

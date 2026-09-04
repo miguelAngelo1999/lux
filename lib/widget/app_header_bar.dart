@@ -10,6 +10,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:lux/util/t_text.dart';
+
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
 import '../tr.dart';
@@ -236,7 +238,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
         leading: Padding(
           padding: EdgeInsets.only(left: Platform.isMacOS ? 70 : 0),
           child: IconButton(
-              tooltip: 'Open web dashboard (advanced)',
+              tooltip: tl(context, 'Open web dashboard (advanced)'),
               onPressed: openWebDashboard,
               icon: const Icon(Icons.open_in_browser, size: 18)),
         ),

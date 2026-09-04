@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -231,7 +232,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(item == null ? 'Add Rule' : 'Edit Rule'),
+          title: TText(item == null ? 'Add Rule' : 'Edit Rule'),
           content: SizedBox(
             width: 380,
             child: Column(
@@ -240,7 +241,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 DropdownButtonFormField<String>(
                   initialValue: ruleType,
                   decoration:
-                      const InputDecoration(labelText: 'Type', isDense: true),
+                      InputDecoration(labelText: tl(context, 'Type'), isDense: true),
                   items: _ruleTypes
                       .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                       .toList(),
@@ -252,9 +253,9 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   TextFormField(
                     initialValue: dnsMapDomain,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Domain',
-                      hintText: 'example.com',
+                    decoration: InputDecoration(
+                      labelText: tl(context, 'Domain'),
+                      hintText: tl(context, 'example.com'),
                       isDense: true,
                     ),
                     onChanged: (v) => dnsMapDomain = v,
@@ -262,9 +263,9 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   const SizedBox(height: 12),
                   TextFormField(
                     initialValue: dnsMapIp,
-                    decoration: const InputDecoration(
-                      labelText: 'Resolve to IP',
-                      hintText: '127.0.0.1',
+                    decoration: InputDecoration(
+                      labelText: tl(context, 'Resolve to IP'),
+                      hintText: tl(context, '127.0.0.1'),
                       isDense: true,
                     ),
                     onChanged: (v) => dnsMapIp = v,
@@ -275,7 +276,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                     initialValue: payload,
                     autofocus: true,
                     decoration: InputDecoration(
-                      labelText: 'Payload',
+                      labelText: tl(context, 'Payload'),
                       hintText: _payloadHint(ruleType),
                       isDense: true,
                     ),
@@ -287,7 +288,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 DropdownButtonFormField<String>(
                   initialValue: _proxyNames.contains(policy) ? policy : 'PROXY',
                   decoration:
-                      const InputDecoration(labelText: 'Policy', isDense: true),
+                      InputDecoration(labelText: tl(context, 'Policy'), isDense: true),
                   items: _proxyNames
                       .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                       .toList(),
@@ -296,12 +297,12 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: network.isEmpty ? 'both' : network,
-                  decoration: const InputDecoration(
-                      labelText: 'Protocol', isDense: true),
+                  decoration: InputDecoration(
+                      labelText: tl(context, 'Protocol'), isDense: true),
                   items: const [
-                    DropdownMenuItem(value: 'both', child: Text('TCP and UDP')),
-                    DropdownMenuItem(value: 'tcp', child: Text('TCP only')),
-                    DropdownMenuItem(value: 'udp', child: Text('UDP only')),
+                    DropdownMenuItem(value: 'both', child: TText('TCP and UDP')),
+                    DropdownMenuItem(value: 'tcp', child: TText('TCP only')),
+                    DropdownMenuItem(value: 'udp', child: TText('UDP only')),
                   ],
                   onChanged: (v) =>
                       setDialogState(() => network = v == 'both' ? '' : v!),
@@ -312,11 +313,11 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
+              child: const TText('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save'),
+              child: const TText('Save'),
             ),
           ],
         ),
@@ -411,7 +412,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
         const Divider(height: 1),
         Expanded(
           child: _rules.isEmpty
-              ? const Center(child: Text('No rules yet'))
+              ? const Center(child: TText('No rules yet'))
               : ListView(
                   padding: const EdgeInsets.only(bottom: 24),
                   children: _buildGroupSections(),
@@ -432,7 +433,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
               child: TextField(
                 controller: _searchCtrl,
                 decoration: InputDecoration(
-                  hintText: 'Search rules',
+                  hintText: tl(context, 'Search rules'),
                   prefixIcon: const Icon(Icons.search, size: 16),
                   isDense: true,
                   border: const OutlineInputBorder(),
@@ -467,7 +468,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           FilledButton.icon(
             onPressed: () => _showAddEdit(),
             icon: const Icon(Icons.add, size: 15),
-            label: const Text('Add', style: TextStyle(fontSize: 12)),
+            label: const TText('Add', style: TextStyle(fontSize: 12)),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               minimumSize: const Size(0, 32),
@@ -533,7 +534,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
             if (!g.enabled)
               const Padding(
                 padding: EdgeInsets.only(right: 6),
-                child: Text('group off',
+                child: TText('group off',
                     style: TextStyle(fontSize: 10, color: Colors.grey)),
               ),
             busy
@@ -576,7 +577,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           children: [
             Icon(collapsed ? Icons.chevron_right : Icons.expand_more, size: 17),
             const SizedBox(width: 4),
-            const Text('Ungrouped',
+            const TText('Ungrouped',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(width: 6),
             Text('$count',
@@ -592,7 +593,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     if (rules.isEmpty) {
       return const Padding(
         padding: EdgeInsets.fromLTRB(24, 8, 0, 8),
-        child: Text('No rules in this group',
+        child: TText('No rules in this group',
             style: TextStyle(fontSize: 11, color: Colors.grey)),
       );
     }
@@ -790,17 +791,17 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                         ? Icons.toggle_off_outlined
                         : Icons.toggle_on,
                     iconSize: 19,
-                    tooltip: rule.disabled ? 'Enable' : 'Disable',
+                    tooltip: rule.disabled ? tl(context, 'Enable') : tl(context, 'Disable'),
                     onPressed: () => _toggle(rule),
                   ),
                   _rowAction(
                     icon: Icons.edit_outlined,
-                    tooltip: 'Edit',
+                    tooltip: tl(context, 'Edit'),
                     onPressed: () => _showAddEdit(item: rule),
                   ),
                   _rowAction(
                     icon: Icons.delete_outline,
-                    tooltip: 'Delete',
+                    tooltip: tl(context, 'Delete'),
                     onPressed: () => _confirmDelete(rule),
                   ),
                 ],
@@ -815,16 +816,16 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete rule'),
+        title: const TText('Delete rule'),
         content: Text('${rule.ruleType},${rule.payload} -> ${rule.policy}'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              child: const TText('Cancel')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: const TText('Delete'),
           ),
         ],
       ),
