@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/pages/connections_page.dart';
 import 'package:lux/pages/log_page.dart';
 import 'package:lux/pages/proxies_page.dart';
@@ -147,7 +148,7 @@ class _DashboardState extends State<Dashboard> with WindowListener {
             destinations: _tabs
                 .map((t) => NavigationRailDestination(
                       icon: Icon(t.icon, size: 20),
-                      label: Text(t.label,
+                      label: TText(t.label,
                           style: const TextStyle(fontSize: 10)),
                     ))
                 .toList(),
