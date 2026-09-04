@@ -34,6 +34,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
   late String _passwordMode;
   late int _passwordTTLMinutes;
   late bool _lockOnSave;
+  late String _pacUrl;
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -70,6 +71,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
     _passwordMode = iv?.raw['passwordMode'] as String? ?? 'persistent';
     _passwordTTLMinutes = (iv?.raw['passwordTTLMinutes'] as num?)?.toInt() ?? 60;
     _lockOnSave = false;
+    _pacUrl = iv?.raw['pacUrl'] as String? ?? '';
   }
 
   Future<void> _save() async {
@@ -87,6 +89,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
         'password': _password,
         'type': _type,
         'passwordMode': _passwordMode,
+        if (_pacUrl.isNotEmpty) 'pacUrl': _pacUrl,
       };
 
       if (_passwordMode == 'timed') {
@@ -180,6 +183,19 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                             return null;
                           },
                           onSaved: (v) => _port = int.tryParse(v ?? '') ?? 1080,
+                        ),
+                        const SizedBox(height: 12),
+                        // PAC URL (optional)
+                        TextFormField(
+                          initialValue: _pacUrl,
+                          decoration: InputDecoration(
+                            labelText: tl(context, 'PAC URL (optional)'),
+                            hintText: 'http://proxy.company.com/proxy.pac',
+                            helperText: tl(context, 'Auto-config script to decide when to use this proxy'),
+                            helperMaxLines: 2,
+                          ),
+                          keyboardType: TextInputType.url,
+                          onSaved: (v) => _pacUrl = v?.trim() ?? '',
                         ),
                         const SizedBox(height: 12),
                         // Username

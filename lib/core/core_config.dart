@@ -290,10 +290,11 @@ class ProxyItem {
   final String? subscription;
   final String? password;
   final bool passwordLocked;
+  final String? pacUrl;
 
   ProxyItem(
       this.id, this.name, this.server, this.port, this.subscription, this.type,
-      {this.password, this.passwordLocked = false});
+      {this.password, this.passwordLocked = false, this.pacUrl});
 
   ProxyItem.fromJson(Map<String, dynamic> json)
       : id = (json['id'] as String),
@@ -305,7 +306,8 @@ class ProxyItem {
             : null),
         port = (json['port'] is int ? json['port'] as int : null),
         password = (json['password'] is String ? json['password'] : null),
-        passwordLocked = (json['passwordLocked'] is bool ? json['passwordLocked'] : false);
+        passwordLocked = (json['passwordLocked'] is bool ? json['passwordLocked'] : false),
+        pacUrl = (json['pacUrl'] is String ? json['pacUrl'] as String : null);
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -505,6 +507,46 @@ class RuleDiagnostics {
   /// Shadow keyed by the shadowed rule's id, for quick row lookup.
   Map<String, RuleShadow> get shadowById =>
       {for (final s in shadowed) s.ruleId: s};
+}
+
+/// A single rule parsed from a PAC script.
+class PACRuleItem {
+  final String ruleType; // DOMAIN, DOMAIN-SUFFIX, IP-CIDR
+  final String payload;  // e.g. "example.com", "10.0.0.0/8"
+  final String policy;   // DIRECT or PROXY
+
+  const PACRuleItem({
+    required this.ruleType,
+    required this.payload,
+    required this.policy,
+  });
+
+  factory PACRuleItem.fromJson(Map<String, dynamic> json) => PACRuleItem(
+        ruleType: json['ruleType'] as String? ?? '',
+        payload:  json['payload']  as String? ?? '',
+        policy:   json['policy']   as String? ?? '',
+      );
+}
+
+/// Result of fetching and parsing a proxy's PAC URL.
+class PACRulesResult {
+  final String pacUrl;
+  final List<PACRuleItem> rules;
+  final String? error;
+
+  const PACRulesResult({
+    required this.pacUrl,
+    required this.rules,
+    this.error,
+  });
+
+  factory PACRulesResult.fromJson(Map<String, dynamic> json) => PACRulesResult(
+        pacUrl: json['pacUrl'] as String? ?? '',
+        rules: ((json['rules'] as List?) ?? [])
+            .map((e) => PACRuleItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        error: json['error'] as String?,
+      );
 }
 
 /// A display grouping for rules. Groups do not nest.

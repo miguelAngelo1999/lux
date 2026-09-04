@@ -178,7 +178,17 @@
       "Name": "Nome",
       "Username (optional)": "Nome de usuário (opcional)",
       "Password (optional)": "Senha (opcional)",
-      "Password Mode": "Modo de senha"
+      "Password Mode": "Modo de senha",
+      "PAC URL (optional)": "URL PAC (opcional)",
+      "Auto-config script to decide when to use this proxy": "Script de autoconfiguração para decidir quando usar este proxy",
+      "PAC": "PAC",
+      "Refresh PAC": "Atualizar PAC",
+      "Override": "Substituir",
+      "Override PAC Rule": "Substituir regra PAC",
+      "This adds a custom rule that overrides the PAC. The PAC may change and conflict with this override.": "Isso adiciona uma regra personalizada que substitui o PAC. O PAC pode mudar e conflitar com esta substituição.",
+      "Loading PAC rules...": "Carregando regras PAC...",
+      "No PAC rules found": "Nenhuma regra PAC encontrada",
+      "PAC fetch failed": "Falha ao buscar PAC"
     },
     "es": {
       "Proxies": "Proxies",
@@ -357,7 +367,17 @@
       "Name": "Nombre",
       "Username (optional)": "Nombre de usuario (opcional)",
       "Password (optional)": "Contraseña (opcional)",
-      "Password Mode": "Modo de contraseña"
+      "Password Mode": "Modo de contraseña",
+      "PAC URL (optional)": "URL PAC (opcional)",
+      "Auto-config script to decide when to use this proxy": "Script de autoconfiguración para decidir cuándo usar este proxy",
+      "PAC": "PAC",
+      "Refresh PAC": "Actualizar PAC",
+      "Override": "Anular",
+      "Override PAC Rule": "Anular regla PAC",
+      "This adds a custom rule that overrides the PAC. The PAC may change and conflict with this override.": "Esto agrega una regla personalizada que anula el PAC. El PAC puede cambiar y entrar en conflicto con esta anulación.",
+      "Loading PAC rules...": "Cargando reglas PAC...",
+      "No PAC rules found": "No se encontraron reglas PAC",
+      "PAC fetch failed": "Error al obtener PAC"
     },
     "it": {
       "Proxies": "Proxy",
@@ -536,7 +556,17 @@
       "Name": "Nome",
       "Username (optional)": "Nome utente (facoltativo)",
       "Password (optional)": "Password (facoltativo)",
-      "Password Mode": "Modalità password"
+      "Password Mode": "Modalità password",
+      "PAC URL (optional)": "URL PAC (opzionale)",
+      "Auto-config script to decide when to use this proxy": "Script di configurazione automatica per decidere quando usare questo proxy",
+      "PAC": "PAC",
+      "Refresh PAC": "Aggiorna PAC",
+      "Override": "Sostituisci",
+      "Override PAC Rule": "Sostituisci regola PAC",
+      "This adds a custom rule that overrides the PAC. The PAC may change and conflict with this override.": "Questo aggiunge una regola personalizzata che sostituisce il PAC. Il PAC potrebbe cambiare e conflittuare con questa sostituzione.",
+      "Loading PAC rules...": "Caricamento regole PAC...",
+      "No PAC rules found": "Nessuna regola PAC trovata",
+      "PAC fetch failed": "Recupero PAC fallito"
     },
     "fil": {
       "Proxies": "Mga Proxy",
@@ -715,7 +745,17 @@
       "Name": "Pangalan",
       "Username (optional)": "Username (opsyonal)",
       "Password (optional)": "Password (opsyonal)",
-      "Password Mode": "Password Mode"
+      "Password Mode": "Password Mode",
+      "PAC URL (optional)": "PAC URL (opsyonal)",
+      "Auto-config script to decide when to use this proxy": "Auto-config script para desisyunan kung kailan gagamitin ang proxy na ito",
+      "PAC": "PAC",
+      "Refresh PAC": "I-refresh ang PAC",
+      "Override": "I-override",
+      "Override PAC Rule": "I-override ang PAC Rule",
+      "This adds a custom rule that overrides the PAC. The PAC may change and conflict with this override.": "Nagdadagdag ito ng custom rule na nag-o-override sa PAC. Maaaring magbago ang PAC at magkonflict sa override na ito.",
+      "Loading PAC rules...": "Nilo-load ang mga PAC rule...",
+      "No PAC rules found": "Walang nahanap na PAC rule",
+      "PAC fetch failed": "Nabigo ang PAC fetch"
     },
     "zh": {
       "Proxies": "代理",
@@ -894,7 +934,17 @@
       "Name": "名称",
       "Username (optional)": "用户名（可选）",
       "Password (optional)": "密码（可选）",
-      "Password Mode": "密码模式"
+      "Password Mode": "密码模式",
+      "PAC URL (optional)": "PAC URL（可选）",
+      "Auto-config script to decide when to use this proxy": "自动配置脚本，决定何时使用此代理",
+      "PAC": "PAC",
+      "Refresh PAC": "刷新 PAC",
+      "Override": "覆盖",
+      "Override PAC Rule": "覆盖 PAC 规则",
+      "This adds a custom rule that overrides the PAC. The PAC may change and conflict with this override.": "这将添加一条覆盖 PAC 的自定义规则。PAC 可能会更改并与此覆盖冲突。",
+      "Loading PAC rules...": "正在加载 PAC 规则...",
+      "No PAC rules found": "未找到 PAC 规则",
+      "PAC fetch failed": "PAC 获取失败"
     }
   }
 }

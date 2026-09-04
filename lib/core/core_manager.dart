@@ -478,6 +478,14 @@ class CoreManager {
   }
 
 
+  /// Fetches and parses the PAC script for a proxy.
+  /// Returns an empty rules list if the proxy has no pacUrl.
+  Future<PACRulesResult> getPACRules(String proxyId) async {
+    final res = await dio.get('$baseHttpUrl/proxies/$proxyId/pac-rules',
+        options: Options(receiveTimeout: const Duration(seconds: 30)));
+    return PACRulesResult.fromJson(res.data as Map<String, dynamic>);
+  }
+
   /// Checks for SSL interception through a proxy by doing a TLS handshake.
   Future<CertCheckResult> checkCert({
     required String server,
