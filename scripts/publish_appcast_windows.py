@@ -127,11 +127,14 @@ def fetch_appcast(svc):
 def platform_entry(appcast, key):
     """Existing entry for a platform, normalised, or an empty one."""
     entry = appcast.get(key) or {}
-    return {
+    result = {
         "url": entry.get("url", ""),
         "sha256": entry.get("sha256", ""),
         "size": entry.get("size", 0),
     }
+    if entry.get("version"):
+        result["version"] = entry["version"]
+    return result
 
 
 def release_notes():
