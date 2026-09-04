@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lux/error.dart';
+import 'package:lux/util/app_log.dart';
 import 'package:lux/util/process_manager.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -152,7 +153,6 @@ class CoreManager {
         ));
   }
 
-  Future<void> start() async {
   /// Start the proxy. Retries up to 3 times on 500 (lux_core still initialising)
   /// with exponential backoff: 1s, 2s, 4s.
   Future<void> start() async {
