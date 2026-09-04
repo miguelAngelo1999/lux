@@ -1,12 +1,12 @@
 {
-  "version": "1.50.40",
+  "version": "1.50.41",
   "channel": "stable",
-  "notes": "fix: appcast macOS.version=1.50.40 windows.version=1.50.39 to prevent false update prompts",
+  "notes": "feat: multiline log selection via SelectableRegion",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "ce8867525aa5cf28081b9e185ccf3a528ef9a1b8bfd95268c7f29bb83769212a",
-    "size": 37764148,
-    "version": "1.50.40"
+    "sha256": "484b4c166a2394fb265ca68596b23cb68f36fd36929fddbe39deb8cf0d2966d7",
+    "size": 37930457,
+    "version": "1.50.41"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
