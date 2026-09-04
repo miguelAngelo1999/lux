@@ -1,12 +1,12 @@
 {
-  "version": "1.50.43",
+  "version": "1.50.44",
   "channel": "stable",
-  "notes": "fix: duplicate start() method in core_manager + import appLog",
+  "notes": "feat: pacUrl field in proxy edit dialog + PAC models",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "1d4e5cc355b3f9dee74d3a4fc09f0e5ee0c08e61ba8d26ebe664cbc75e70d58a",
-    "size": 37929829,
-    "version": "1.50.43"
+    "sha256": "b541e8d1ede1be1b35867df7efc74fc985a38390547964c7448e3e5522eabce9",
+    "size": 37945473,
+    "version": "1.50.44"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
