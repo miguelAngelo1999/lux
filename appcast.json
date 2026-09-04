@@ -1,12 +1,12 @@
 {
-  "version": "1.50.41",
+  "version": "1.50.43",
   "channel": "stable",
-  "notes": "feat: multiline log selection via SelectableRegion",
+  "notes": "fix: duplicate start() method in core_manager + import appLog",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "484b4c166a2394fb265ca68596b23cb68f36fd36929fddbe39deb8cf0d2966d7",
-    "size": 37930457,
-    "version": "1.50.41"
+    "sha256": "1d4e5cc355b3f9dee74d3a4fc09f0e5ee0c08e61ba8d26ebe664cbc75e70d58a",
+    "size": 37929829,
+    "version": "1.50.43"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
