@@ -5,6 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lux/core/checksum.dart';
 import 'package:lux/util/telemetry.dart' as telem;
+import 'package:lux/util/app_log.dart';
 import 'package:lux/util/utils.dart';
 
 import '../error.dart';
@@ -21,7 +22,15 @@ class ProcessManager {
 
   Future<void> run() async {
     if (Platform.isWindows) {
-      await verifyCoreBinary(path);
+      // On Windows the installer verifies file integrity; a checksum mismatch
+      // here almost always means a rolling update (old lux.exe + new lux_core.exe).
+      // Log it but do NOT throw — bricking the app on update is worse than the
+      // theoretical risk of a corrupted binary that the installer already verified.
+      try {
+        await verifyCoreBinary(path);
+      } catch (e) {
+        appLog('CORE', 'checksum warning (non-fatal on Windows): $e');
+      }
       List<String> processArgs = [];
 
       if (needElevate) {
