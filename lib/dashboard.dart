@@ -8,6 +8,7 @@ import 'package:lux/pages/proxies_page.dart';
 import 'package:lux/pages/rules_page.dart';
 import 'package:lux/pages/settings_page.dart';
 import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
+import 'package:lux/core/core_config.dart' show shouldSkipUpdateCheck, writeLastUpdateCheckAt;
 import 'package:lux/widget/app_bottom_bar.dart';
 import 'package:lux/widget/app_header_bar.dart';
 import 'package:window_manager/window_manager.dart';
@@ -46,17 +47,20 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     _runUpdateCheck();
   }
 
-  /// Checks for updates once the proxy is likely up.
-  ///
-  /// The appcast is fetched through the local proxy, so this has to wait for
-  /// lux_core to start and connect. Retries with backoff because on a cold
-  /// start the network is often not ready on the first attempt.
+  /// Checks for updates at most once every 24 hours.
+  /// Skips silently if checked recently to avoid nagging users after every launch.
   Future<void> _runUpdateCheck() async {
     await Future.delayed(const Duration(seconds: 15));
     if (!mounted) return;
+
+    // Skip if checked within the last 24 hours
+    if (await shouldSkipUpdateCheck(minHours: 24)) return;
+
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
         final info = await checkForUpdate();
+        // Record the check time regardless of outcome so we don't hammer the server
+        await writeLastUpdateCheckAt();
         if (info == null || !info.hasUpdate) return;
         if (!mounted) return;
         await showUpdateDialog(context, info);

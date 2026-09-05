@@ -56,6 +56,28 @@ Future<void> writeCustomAppcastUrl(String? url) async {
   await _writePrefs(prefs);
 }
 
+/// Returns true if the update check should be skipped because:
+/// - It was checked less than [minHours] hours ago (default 24h), OR
+/// - The app was just updated (installed version matches last-seen appcast version)
+Future<bool> shouldSkipUpdateCheck({int minHours = 24}) async {
+  final prefs = await _readPrefs();
+  final lastCheckStr = prefs['lastUpdateCheckAt'];
+  if (lastCheckStr is String) {
+    final last = DateTime.tryParse(lastCheckStr);
+    if (last != null) {
+      final hoursSince = DateTime.now().difference(last).inHours;
+      if (hoursSince < minHours) return true;
+    }
+  }
+  return false;
+}
+
+Future<void> writeLastUpdateCheckAt() async {
+  final prefs = await _readPrefs();
+  prefs['lastUpdateCheckAt'] = DateTime.now().toIso8601String();
+  await _writePrefs(prefs);
+}
+
 /// Usage-reporting level: "off", "ops" or "full". Absent means off, so a build
 /// that has never been configured reports nothing.
 Future<String> readTelemetryLevel() async {

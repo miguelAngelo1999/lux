@@ -584,6 +584,8 @@ Future<void> downloadAndInstall(
       await Process.start('bash', [relaunchScript.path],
           mode: ProcessStartMode.detached);
       await Future.delayed(const Duration(milliseconds: 300));
+      // Record that we just updated so the relaunched app doesn't prompt again
+      await writeLastUpdateCheckAt();
       exit(0);
     } else if (Platform.isWindows) {
       // Same pattern as macOS: write a standalone updater script, launch it
@@ -608,6 +610,8 @@ Future<void> downloadAndInstall(
       // Give script a moment to start, then exit
       await Future.delayed(const Duration(milliseconds: 500));
       appLog('UPDATE', 'exiting lux for updater');
+      // Record that we just updated so the relaunched app doesn't prompt again
+      await writeLastUpdateCheckAt();
       exit(0);
     }
   } catch (e) {
