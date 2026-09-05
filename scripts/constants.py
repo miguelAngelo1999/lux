@@ -17,6 +17,7 @@ BETA_APPCAST_FILE_NAME = 'appcast-beta.json'
 DMG_FILE_ID          = '1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-'
 # Beta DMG file ID — separate file so beta downloads don't affect stable URL
 BETA_DMG_FILE_ID     = '1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x'
+BETA_WIN_FILE_ID     = '1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU'
 # Stable Windows installer file ID - same in-place rule as the DMG. This is
 # the id every appcast from 1.41.0 to 1.46.9 pointed at; reusing it keeps the
 # download URL valid for clients already in the field.
