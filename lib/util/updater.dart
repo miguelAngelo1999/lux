@@ -189,14 +189,111 @@ UpdateInfo? _parseAppcast(String body, String current) {
   }
 }
 
-/// Shows the in-app update dialog. Returns true if user accepted.
+/// Shows a non-blocking snackbar notification that a new version is available.
+/// Tapping "Update" starts the download progress in a second snackbar.
+/// Does NOT block the interface — users can keep using Lux while it downloads.
 Future<bool> showUpdateDialog(BuildContext context, UpdateInfo info) async {
-  final result = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => _UpdateDialog(info: info),
+  if (!context.mounted) return false;
+
+  final lang = _getLang(context);
+  final updateLabel    = _t(lang, 'Update',             'Update');
+  final availableLabel = _t(lang, 'available',          'available');
+
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text('Lux ${info.latestVersion} $availableLabel'),
+      duration: const Duration(seconds: 20),
+      action: SnackBarAction(
+        label: updateLabel,
+        onPressed: () {
+          messenger.hideCurrentSnackBar();
+          _startInlineUpdate(context, info);
+        },
+      ),
+    ),
   );
-  return result == true;
+  return false;
+}
+
+/// Starts the download and shows progress inside a persistent snackbar.
+void _startInlineUpdate(BuildContext context, UpdateInfo info) {
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: _DownloadProgressBar(info: info),
+      duration: const Duration(hours: 1),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+    ),
+  );
+}
+
+String _getLang(BuildContext context) {
+  try { return Localizations.localeOf(context).languageCode; } catch (_) { return 'en'; }
+}
+
+String _t(String lang, String key, String fallback) {
+  const strings = <String, Map<String, String>>{
+    'pt': {'Update': 'Atualizar', 'available': 'disponível', 'Later': 'Mais tarde', 'Download & Install': 'Baixar e instalar'},
+    'es': {'Update': 'Actualizar', 'available': 'disponible', 'Later': 'Más tarde', 'Download & Install': 'Descargar e instalar'},
+    'it': {'Update': 'Aggiorna', 'available': 'disponibile', 'Later': 'Più tardi', 'Download & Install': 'Scarica e installa'},
+    'fil': {'Update': 'I-update', 'available': 'available', 'Later': 'Mamaya', 'Download & Install': 'I-download at i-install'},
+    'zh': {'Update': '更新', 'available': '可用', 'Later': '稍后', 'Download & Install': '下载并安装'},
+  };
+  return strings[lang]?[key] ?? fallback;
+}
+
+class _DownloadProgressBar extends StatefulWidget {
+  final UpdateInfo info;
+  const _DownloadProgressBar({required this.info});
+  @override
+  State<_DownloadProgressBar> createState() => _DownloadProgressBarState();
+}
+
+class _DownloadProgressBarState extends State<_DownloadProgressBar> {
+  double? _progress;
+  String _status = '';
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    setState(() { _status = 'Preparing…'; _progress = 0.01; });
+    await downloadAndInstall(
+      context,
+      widget.info,
+      onProgress:     (p) { if (mounted) setState(() => _progress = p); },
+      onStatusChange: (s) { if (mounted) setState(() => _status = s); },
+    );
+    // Only returns on failure — success calls exit(0)
+    if (mounted) setState(() { _failed = true; _status = 'Download failed. Try again later.'; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _failed ? _status : 'Updating to ${widget.info.latestVersion}…',
+          style: const TextStyle(fontSize: 13),
+        ),
+        if (!_failed && _progress != null) ...[
+          const SizedBox(height: 6),
+          LinearProgressIndicator(value: (_progress ?? 0) < 0.02 ? null : _progress),
+          if (_status.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(_status, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+          ],
+        ],
+      ],
+    );
+  }
 }
 
 /// Downloads the DMG/EXE to a temp file and opens it.
@@ -879,106 +976,3 @@ rm -f /tmp/lux_updater.sh
 ''';
 }
 
-// ── Dialog widget ──────────────────────────────────────────────────────────────
-
-class _UpdateDialog extends StatefulWidget {
-  final UpdateInfo info;
-  const _UpdateDialog({required this.info});
-
-  @override
-  State<_UpdateDialog> createState() => _UpdateDialogState();
-}
-
-class _UpdateDialogState extends State<_UpdateDialog> {
-  double? _progress; // null = not downloading, 0-1 = progress
-  bool _done = false;
-  String _statusText = '';
-
-  Future<void> _download() async {
-    setState(() => _progress = 0);
-    await downloadAndInstall(
-      context,
-      widget.info,
-      onProgress: (p) => setState(() => _progress = p),
-      onStatusChange: (s) { if (mounted) setState(() => _statusText = s); },
-    );
-    // Only close dialog if we actually got to exit(0) — if download failed,
-    // the snackbar is shown and we stay open so user can retry or dismiss.
-    // downloadAndInstall only returns (without calling exit) on failure.
-    if (mounted) {
-      setState(() { _progress = null; }); // reset so buttons reappear
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final info = widget.info;
-    return AlertDialog(
-      title: Row(children: [
-        const Icon(Icons.system_update_alt, size: 20),
-        const SizedBox(width: 8),
-        Text('Lux ${info.latestVersion} available'),
-      ]),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Current: ${info.currentVersion}  →  Latest: ${info.latestVersion}',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            if (info.notes.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                'What\'s new',
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(info.notes, style: const TextStyle(fontSize: 12)),
-              ),
-            ],
-            if (_progress != null) ...[
-              const SizedBox(height: 14),
-              LinearProgressIndicator(value: _done ? 1.0 : _progress),
-              const SizedBox(height: 4),
-              Text(
-                _statusText.isNotEmpty
-                    ? _statusText
-                    : 'Downloading… ${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: _progress != null
-          ? null // hide buttons while downloading
-          : [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Later'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop(false);
-                  await launchUrl(Uri.parse(releasesPageUrl));
-                },
-                child: const Text('Open in browser'),
-              ),
-              FilledButton.icon(
-                icon: const Icon(Icons.download, size: 16),
-                label: const Text('Download & Install'),
-                onPressed: _download,
-              ),
-            ],
-    );
-  }
-}
