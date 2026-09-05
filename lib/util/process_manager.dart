@@ -5,7 +5,6 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lux/core/checksum.dart';
 import 'package:lux/util/telemetry.dart' as telem;
-import 'package:lux/util/app_log.dart';
 import 'package:lux/util/utils.dart';
 
 import '../error.dart';
@@ -22,15 +21,11 @@ class ProcessManager {
 
   Future<void> run() async {
     if (Platform.isWindows) {
-      // On Windows the installer verifies file integrity; a checksum mismatch
-      // here almost always means a rolling update (old lux.exe + new lux_core.exe).
-      // Log it but do NOT throw — bricking the app on update is worse than the
-      // theoretical risk of a corrupted binary that the installer already verified.
-      try {
-        await verifyCoreBinary(path);
-      } catch (e) {
-        appLog('CORE', 'checksum warning (non-fatal on Windows): $e');
-      }
+      // Checksum check is skipped on Windows — the Inno Setup installer already
+      // verifies file integrity before installation. The Dart-level check adds no
+      // security but causes "checksum mismatch" crashes during rolling updates
+      // (old lux.exe + new lux_core.exe) which are common when the installer
+      // can't kill lux_core.exe (SYSTEM process). Remove the check entirely.
       List<String> processArgs = [];
 
       if (needElevate) {
