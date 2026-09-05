@@ -91,13 +91,13 @@ if [ "${SKIP_BUILD:-}" != "1" ]; then
   # Force remove hidden dotfiles that Windows attrib misses
   win_ps_script "cleanup_dotfiles.ps1" '
 $dir = "C:\lux-build\lux"
-$dotfiles = @(".flutter-plugins", ".flutter-plugins-dependencies")
-foreach ($f in $dotfiles) {
-    $path = Join-Path $dir $f
+$targets = @(".flutter-plugins", ".flutter-plugins-dependencies", ".dart_tool\hooks_runner")
+foreach ($t in $targets) {
+    $path = Join-Path $dir $t
     if (Test-Path $path) {
-        attrib -R -H $path
-        Remove-Item -Force $path -ErrorAction SilentlyContinue
-        Write-Host "Removed: $f"
+        attrib -R -H $path /S /D 2>$null
+        Remove-Item -Force -Recurse $path -ErrorAction SilentlyContinue
+        Write-Host "Removed: $t"
     }
 }
 '

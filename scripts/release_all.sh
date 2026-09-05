@@ -103,6 +103,9 @@ win "echo VM_READY"
 win "robocopy \\\\Mac\\Home\\lux-clean C:\\lux-build\\lux /E /XD .git build dist dist2 /XF *.dmg *.exe pubspec.yaml /NP /NFL /NDL 2>nul & exit 0"
 win "attrib -R C:\\lux-build\\lux\\*.* /S /D >nul 2>&1 & exit 0"
 win "del /F C:\\lux-build\\lux\\.flutter-plugins C:\\lux-build\\lux\\.flutter-plugins-dependencies >nul 2>&1 & exit 0"
+# Also remove hooks_runner which can be locked as Hidden+ReadOnly after robocopy
+win "if exist C:\\lux-build\\lux\\.dart_tool\\hooks_runner attrib -R -H C:\\lux-build\\lux\\.dart_tool\\hooks_runner /S /D >nul 2>&1 & exit 0"
+win "if exist C:\\lux-build\\lux\\.dart_tool\\hooks_runner rmdir /S /Q C:\\lux-build\\lux\\.dart_tool\\hooks_runner >nul 2>&1 & exit 0"
 
 # Write pubspec with Windows version
 PUBSPEC_WIN=$(sed "s/^version: .*/version: ${VERSION}+1/" "$REPO/pubspec.yaml")
