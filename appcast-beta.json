@@ -1,17 +1,17 @@
 {
-  "version": "1.50.40-beta.1",
+  "version": "1.50.50",
   "channel": "beta",
-  "notes": "fix: add macOS.version to appcast \u2014 prevents false update prompt on macOS 1.50.36",
+  "notes": "rollback: Windows installer reverted to 1.50.41 (last known working)",
   "macOS": {
-    "url": "https://drive.usercontent.google.com/download?id=1Qkg_6MK0zjGGy64f-BJt-3l1OEmVvt4X&export=download&confirm=t",
-    "sha256": "457e85844fb597276ae5a4b8f2b276a4e9e4b575845e55f72c6ca3e0c944ca1c",
-    "size": 37762218,
-    "version": "1.50.40-beta.1"
+    "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
+    "sha256": "2e0006c829ac2e8dcec8064d4fd7eb46b29911c33ecbc2e582e4822ab0950fd4",
+    "size": 37950310,
+    "version": "1.50.50"
   },
   "windows": {
-    "url": "",
-    "sha256": "",
-    "size": 0,
-    "version": ""
+    "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
+    "sha256": "9ff5c74657ff9186c75ca02bc8acfad6f9eee0a159c5aba351635cd670fc4d3a",
+    "size": 22459079,
+    "version": "1.50.50"
   }
 }

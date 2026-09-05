@@ -1,7 +1,7 @@
 {
-  "version": "1.50.49",
+  "version": "1.50.44",
   "channel": "stable",
-  "notes": "rollback: Windows installer reverted to 1.50.41 (last known working)",
+  "notes": "stable",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "802d0a4dfce3a68721b3b8a9c3f075fd5cb3961ae1e129bf11d8f8e6a1c8c176",
@@ -10,8 +10,8 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "cffc8657a2818b76e936ff5059b180541b1c88615cd7834ee281a125d91e6a25",
-    "size": 22463697,
-    "version": "1.50.49"
+    "sha256": "ebfa62c4409a7644e431c4bda6227054eadeb79b5e8a1e90d06f6255f35e95a8",
+    "size": 22458748,
+    "version": "1.50.41"
   }
 }

@@ -43,7 +43,7 @@ sys.path.insert(0, SCRIPT_DIR)
 
 import requests  # noqa: E402
 import urllib3  # noqa: E402
-from constants import APPCAST_FILE_ID, GDRIVE_FOLDER_ID, WINDOWS_FILE_ID  # noqa: E402
+from constants import APPCAST_FILE_ID, BETA_APPCAST_FILE_ID, BETA_DMG_FILE_ID, GDRIVE_FOLDER_ID, WINDOWS_FILE_ID  # noqa: E402
 from google.auth.transport.requests import Request  # noqa: E402
 from google.oauth2.credentials import Credentials  # noqa: E402
 from googleapiclient.discovery import build  # noqa: E402
@@ -112,16 +112,26 @@ def upload_in_place(svc, file_id, name, media):
         return created["id"]
 
 
-def fetch_appcast(svc):
+def fetch_appcast(svc, appcast_file_id=APPCAST_FILE_ID):
     """The appcast as it stands on Drive, so the macOS entry survives."""
     try:
-        raw = svc.files().get_media(fileId=APPCAST_FILE_ID).execute()
+        raw = svc.files().get_media(fileId=appcast_file_id).execute()
         if isinstance(raw, bytes):
             raw = raw.decode()
         return json.loads(raw)
     except Exception as e:
         print("# could not read existing appcast ({}); starting fresh".format(e))
         return {}
+
+
+def _fetch_appcast(svc, appcast_file_id):
+    return fetch_appcast(svc, appcast_file_id)
+
+
+def fetch_appcast_wrapper(svc, appcast_file_id=None):
+    if appcast_file_id is None:
+        appcast_file_id = APPCAST_FILE_ID
+    return fetch_appcast(svc, appcast_file_id)
 
 
 def platform_entry(appcast, key):
@@ -156,11 +166,21 @@ def release_notes():
 
 
 def main():
-    if len(sys.argv) != 3:
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    channel = 'stable'
+    for a in sys.argv[1:]:
+        if a.startswith('--channel='):
+            channel = a.split('=', 1)[1].strip()
+        elif a == '--channel' and sys.argv.index(a) + 1 < len(sys.argv):
+            channel = sys.argv[sys.argv.index(a) + 1]
+            if channel in args:
+                args.remove(channel)
+
+    if len(args) != 2:
         print(__doc__.strip())
         return 2
 
-    version, exe_rel = sys.argv[1], sys.argv[2]
+    version, exe_rel = args[0], args[1]
     exe = exe_rel if os.path.isabs(exe_rel) else os.path.join(REPO, exe_rel)
     if not os.path.exists(exe):
         print("missing installer: {}".format(exe))
@@ -173,9 +193,10 @@ def main():
     svc = drive()
 
     exe_name = os.path.basename(exe)
+    target_exe_id = BETA_DMG_FILE_ID if channel == 'beta' else WINDOWS_FILE_ID
     exe_id = upload_in_place(
         svc,
-        WINDOWS_FILE_ID,
+        target_exe_id,
         exe_name,
         MediaFileUpload(exe, mimetype="application/octet-stream", resumable=True),
     )
@@ -190,7 +211,8 @@ def main():
         "?id={}&export=download&confirm=t".format(exe_id)
     )
 
-    current = fetch_appcast(svc)
+    current = fetch_appcast(svc, BETA_APPCAST_FILE_ID if channel == 'beta' else APPCAST_FILE_ID)
+    macos = platform_entry(current, "macOS")
     macos = platform_entry(current, "macOS")
     if macos["url"]:
         print("# preserving macOS entry, {} bytes".format(macos["size"]))
@@ -216,23 +238,23 @@ def main():
 
     appcast = {
         "version": top_version,
-        "channel": "stable",
+        "channel": channel,
         "notes": os.environ.get("LUX_RELEASE_NOTES", "").strip() or release_notes(),
-        # Carried over, never blanked. This script publishes the Windows build
-        # only; the macOS entry belongs to publish_appcast.py.
         "macOS": macos,
         "windows": {"url": url, "sha256": digest, "size": size, "version": version},
     }
     body = json.dumps(appcast, indent=2) + "\n"
 
+    target_appcast_id = BETA_APPCAST_FILE_ID if channel == 'beta' else APPCAST_FILE_ID
+    appcast_name = "appcast-beta.json" if channel == 'beta' else "appcast.json"
     upload_in_place(
         svc,
-        APPCAST_FILE_ID,
-        "appcast.json",
+        target_appcast_id,
+        appcast_name,
         MediaIoBaseUpload(io.BytesIO(body.encode()), mimetype="application/json"),
     )
 
-    with open(os.path.join(REPO, "appcast.json"), "w") as f:
+    with open(os.path.join(REPO, appcast_name), "w") as f:
         f.write(body)
 
     print("# appcast -> {}".format(version))
