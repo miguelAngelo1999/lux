@@ -1,17 +1,17 @@
 {
-  "version": "1.50.44",
+  "version": "1.50.45",
   "channel": "stable",
-  "notes": "feat: pacUrl field in proxy edit dialog + PAC models",
+  "notes": "fix: update prompt repeats after installing update",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "b541e8d1ede1be1b35867df7efc74fc985a38390547964c7448e3e5522eabce9",
-    "size": 37945473,
-    "version": "1.50.44"
+    "sha256": "4658dbc182d71b75bd8007f0147a20b43eaa577090944515e445ea090d7cee63",
+    "size": 37946826,
+    "version": "1.50.45"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "ebfa62c4409a7644e431c4bda6227054eadeb79b5e8a1e90d06f6255f35e95a8",
-    "size": 22458748,
-    "version": "1.50.43"
+    "sha256": "c5df688b835e16cf9ae0d96b8377e9cfe4edc2f2cfff4e934f602f6349e0c7c4",
+    "size": 22457531,
+    "version": "1.50.45"
   }
 }
