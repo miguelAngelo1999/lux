@@ -208,3 +208,40 @@ fi
 echo ""
 echo "==> $VERSION released on $CHANNEL (macOS + Windows)"
 echo "    push when ready: git push origin rebuild/clean-base"
+
+# ── Step 7: Update download page ──────────────────────────────────────────
+echo "==> Updating download page..."
+PAGE="$REPO/scripts/release-page/index.html"
+# Update version number in the page
+sed -i '' "s/v1\.[0-9]*\.[0-9]*/v${VERSION}/g" "$PAGE"
+
+# Publish to here.now
+python3 - << PYEOF
+import json, subprocess, os
+proxy = '$PROXY'
+api_key = open(os.path.expanduser('~/.herenow/credentials')).read().strip()
+slug = 'bright-mustard-qghz'
+index_size = os.path.getsize('$PAGE')
+icon_path = '$REPO/scripts/release-page/lux-icon.png'
+icon_size = os.path.getsize(icon_path)
+body = json.dumps({'files': [
+    {'path': 'index.html', 'size': index_size, 'contentType': 'text/html; charset=utf-8'},
+    {'path': 'lux-icon.png', 'size': icon_size, 'contentType': 'image/png'}
+]})
+r = subprocess.run(['curl', '-sS', '-X', 'PUT', '-H', f'Authorization: Bearer {api_key}',
+    '-H', 'Content-Type: application/json', '-H', 'X-HereNow-Account: lux',
+    '-H', 'X-HereNow-Client: kiro/direct-api', '--proxy', proxy,
+    f'https://here.now/api/v1/publish/{slug}', '-d', body], capture_output=True, text=True)
+data = json.loads(r.stdout)
+upload = data['upload']
+for u in upload['uploads']:
+    src = '$PAGE' if u['path'] == 'index.html' else icon_path
+    subprocess.run(['curl', '-sS', '-X', 'PUT', '-H', f"Content-Type: {u['headers']['Content-Type']}",
+        '--data-binary', f'@{src}', '--proxy', proxy, '-o', '/dev/null', u['url']], capture_output=True)
+r = subprocess.run(['curl', '-sS', '-X', 'POST', '-H', f'Authorization: Bearer {api_key}',
+    '-H', 'Content-Type: application/json', '-H', 'X-HereNow-Account: lux',
+    '--proxy', proxy, upload['finalizeUrl'],
+    '-d', json.dumps({'versionId': upload['versionId']})], capture_output=True, text=True)
+result = json.loads(r.stdout)
+print(f"Download page updated: {result.get('publishStatus',{}).get('state')}")
+PYEOF
