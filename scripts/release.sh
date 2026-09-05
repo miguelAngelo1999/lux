@@ -15,6 +15,13 @@ set -euo pipefail
 
 REPO=/Users/virgoh/lux-clean
 BUMP="${1:-patch}"
+CHANNEL="${2:-stable}"
+
+if [[ "$CHANNEL" != "stable" && "$CHANNEL" != "beta" ]]; then
+  echo "FATAL: channel must be 'stable' or 'beta', got '$CHANNEL'"
+  exit 1
+fi
+echo "# channel: $CHANNEL"
 
 export PATH="/opt/homebrew/bin:/Users/virgoh/flutter/bin:$PATH"
 # 1090 is Lux's own mixed port and 8079 the always-on preproxy. Prefer 1090 when
@@ -109,8 +116,13 @@ echo "# dmg: $(ls -lh "dist/$DMG_NAME" | awk '{print $5}')"
 bash "$REPO/scripts/sign_and_notarize.sh" dmg "dist/$DMG_NAME"
 
 echo "# uploading"
-python3 "$REPO/scripts/publish_appcast.py" "$VERSION" "dist/$DMG_NAME"
+python3 "$REPO/scripts/publish_appcast.py" "$VERSION" "dist/$DMG_NAME" --channel "$CHANNEL"
 
-git add pubspec.yaml appcast.json
-git commit -m "release: $VERSION"
+if [ "$CHANNEL" == "beta" ]; then
+  git add pubspec.yaml
+  git commit -m "release (beta): $VERSION"
+else
+  git add pubspec.yaml appcast.json
+  git commit -m "release: $VERSION"
+fi
 echo "# committed. push when ready: git push origin rebuild/clean-base"

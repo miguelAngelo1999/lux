@@ -40,7 +40,7 @@ for _var in ("CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE",
     os.environ.pop(_var, None)
 os.environ["PYTHONHTTPSVERIFY"] = "0"
 
-sys.path.insert(0, "/Users/virgoh/lux/scripts")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import requests  # noqa: E402
 import urllib3  # noqa: E402
@@ -48,6 +48,7 @@ from constants import (  # noqa: E402
     APPCAST_FILE_ID,
     BETA_APPCAST_FILE_ID,
     BETA_APPCAST_FILE_NAME,
+    BETA_DMG_FILE_ID,
     DMG_FILE_ID,
     GDRIVE_FOLDER_ID,
 )
@@ -226,33 +227,21 @@ def main():
 
     svc = drive()
 
-    # Beta and stable DMGs share the same Drive file id only for stable (fixed
-    # id baked into old clients). A beta build always gets a fresh Drive file —
-    # there is no old beta client depending on a stable beta URL, and reusing
-    # the stable DMG_FILE_ID would overwrite the current stable download.
+    # Beta uses its own stable file ID (BETA_DMG_FILE_ID) — update in-place
+    # same as stable, but on a separate file so stable clients are unaffected.
     dmg_name = os.path.basename(dmg)
-    if channel == "beta":
-        created = svc.files().create(
-            body={"name": f"{dmg_drive_name_prefix}{dmg_name}", "parents": [GDRIVE_FOLDER_ID]},
-            media_body=MediaFileUpload(dmg, mimetype="application/octet-stream", resumable=True),
-            fields="id",
-        ).execute()
-        svc.permissions().create(
-            fileId=created["id"], body={"type": "anyone", "role": "reader"}
-        ).execute()
-        dmg_id = created["id"]
-    else:
-        dmg_id = upload_in_place(
-            svc,
-            DMG_FILE_ID,
-            dmg_name,
-            MediaFileUpload(dmg, mimetype="application/octet-stream", resumable=True),
-        )
-        # Keep the visible name in step with the version even though the id is fixed.
-        try:
-            svc.files().update(fileId=dmg_id, body={"name": dmg_name}).execute()
-        except Exception as e:
-            print(f"# could not rename dmg: {e}")
+    target_dmg_id = BETA_DMG_FILE_ID if channel == "beta" else DMG_FILE_ID
+    dmg_id = upload_in_place(
+        svc,
+        target_dmg_id,
+        dmg_name,
+        MediaFileUpload(dmg, mimetype="application/octet-stream", resumable=True),
+    )
+    # Keep the visible name in step with the version
+    try:
+        svc.files().update(fileId=dmg_id, body={"name": dmg_name}).execute()
+    except Exception:
+        pass
 
     url = (
         f"https://drive.usercontent.google.com/download"

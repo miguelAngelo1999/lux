@@ -11,10 +11,12 @@ WINDOWS_BASENAME     = 'Lux-{version}-Windows-x64.exe'
 # The appcast.json file ID is stable — we overwrite its content each release
 APPCAST_FILE_NAME    = 'appcast.json'
 APPCAST_FILE_ID      = '1jf-8thv_VVPIQ3k_n83UhygzEKkydI2p'
-BETA_APPCAST_FILE_ID   = '1jf-8thv_VVPIQ3k_n83UhygzEKkydI2p'  # same as stable for now
-BETA_APPCAST_FILE_NAME = 'appcast.json'
+BETA_APPCAST_FILE_ID   = '1pvAmSjnhkf7tJbWetNj_hiNbjRhNPkyj'
+BETA_APPCAST_FILE_NAME = 'appcast-beta.json'
 # Stable DMG file ID — always update in-place so the download URL never changes
 DMG_FILE_ID          = '1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-'
+# Beta DMG file ID — separate file so beta downloads don't affect stable URL
+BETA_DMG_FILE_ID     = '1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x'
 # Stable Windows installer file ID - same in-place rule as the DMG. This is
 # the id every appcast from 1.41.0 to 1.46.9 pointed at; reusing it keeps the
 # download URL valid for clients already in the field.
