@@ -1,17 +1,17 @@
 {
-  "version": "1.50.45",
+  "version": "1.50.46",
   "channel": "stable",
-  "notes": "fix: update prompt repeats after installing update",
+  "notes": "fix: accept previous Windows checksum during rolling update",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "4658dbc182d71b75bd8007f0147a20b43eaa577090944515e445ea090d7cee63",
-    "size": 37946826,
-    "version": "1.50.45"
+    "sha256": "5ba393a96e78d5f604b36de94eb1396091d1b7d219df6a7846e92382331e93ba",
+    "size": 37951440,
+    "version": "1.50.46"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "c5df688b835e16cf9ae0d96b8377e9cfe4edc2f2cfff4e934f602f6349e0c7c4",
+    "sha256": "733db3e61d83f69d3fac21c6da32b4bf80c7363225e77cbfce9e305d9e0c7466",
     "size": 22457531,
-    "version": "1.50.45"
+    "version": "1.50.46"
   }
 }
