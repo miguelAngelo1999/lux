@@ -13,9 +13,9 @@ import 'elevate.dart';
 class ProcessManager {
   Process? process;
 
-  final String path;
-  final List<String> args;
-  final bool needElevate;
+  String path;
+  List<String> args;
+  bool needElevate;
 
   ProcessManager(this.path, this.args, this.needElevate);
 

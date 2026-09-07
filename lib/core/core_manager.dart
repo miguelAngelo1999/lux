@@ -155,7 +155,22 @@ class CoreManager {
 
   /// Start the proxy. Retries up to 3 times on 500 (lux_core still initialising)
   /// with exponential backoff: 1s, 2s, 4s.
+  ///
+  /// On Windows, re-reads the current proxy mode to determine if elevation
+  /// is needed — TUN/Mixed require UAC, System mode does not.
   Future<void> start() async {
+    // On Windows, update the elevation flag based on current mode before starting.
+    // The ProcessManager is created at app launch with the mode at that time,
+    // but the user may have changed mode since then.
+    if (Platform.isWindows && coreProcess != null) {
+      final proxyMode = await readProxyMode();
+      final needElevate = proxyMode != ProxyMode.system;
+      if (coreProcess!.needElevate != needElevate) {
+        coreProcess!.needElevate = needElevate;
+        appLog('CORE', 'start() — updated needElevate=$needElevate for mode=$proxyMode');
+      }
+    }
+
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         await dio.post('$baseHttpUrl/manager/start',
