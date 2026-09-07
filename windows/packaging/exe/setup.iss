@@ -67,3 +67,49 @@ Name: "{autodesktop}\\{{DISPLAY_NAME}}"; Filename: "{app}\\{{EXECUTABLE_NAME}}";
 [UninstallDelete]
 Type: filesandordirs; Name: "{localappdata}\..\Roaming\com.github.igoogolx\lux"
 ; NOTE: delete any file cautiously
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var ResultCode: Integer;
+begin
+  if CurStep = ssInstall then
+  begin
+    { ── Kill running Lux processes before installing ──────────────────────
+      lux_core.exe runs as SYSTEM via the LuxApp scheduled task.
+      A user-level taskkill CANNOT kill a SYSTEM process, so we MUST stop
+      the task first, then kill the remaining processes.
+      This order is permanent and must not be changed. }
+
+    { Step 1: Stop the LuxApp scheduled task — this terminates lux_core.exe }
+    Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(2000);
+
+    { Step 2: Kill any remaining process instances }
+    Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill.exe', '/F /IM lux_launcher.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(1000);
+
+    { Step 3: Second pass in case anything restarted }
+    Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(500);
+  end;
+
+  if CurStep = ssPostInstall then
+  begin
+    { Delete and recreate the LuxApp task pointing at the newly installed exe.
+      The installer runs as the current user, so the task is created for that
+      user with RunLevel=Highest so lux_core.exe gets elevated at login. }
+    Exec('schtasks.exe', '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('schtasks.exe',
+      '/create /tn LuxApp /tr "\"' + ExpandConstant('{localappdata}') +
+      '\Programs\lux\lux.exe\" --enable-software-rendering"' +
+      ' /sc ONLOGON /rl HIGHEST /f',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    { Launch Lux after install }
+    Exec(ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe',
+      '--enable-software-rendering', '', SW_HIDE, ewNoWait, ResultCode);
+  end;
+end;
