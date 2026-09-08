@@ -1,17 +1,17 @@
 {
-  "version": "1.50.50",
+  "version": "1.50.51",
   "channel": "beta",
-  "notes": "rollback: Windows installer reverted to 1.50.41 (last known working)",
+  "notes": "fix: re-read proxyMode before start() on Windows to get correct UAC elevation",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "2e0006c829ac2e8dcec8064d4fd7eb46b29911c33ecbc2e582e4822ab0950fd4",
-    "size": 37950310,
-    "version": "1.50.50"
+    "sha256": "607752388c72c6147c618c92ca82233a6b876c1ffc3f1ef337eb1feeb8cca979",
+    "size": 37951624,
+    "version": "1.50.51"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "9ff5c74657ff9186c75ca02bc8acfad6f9eee0a159c5aba351635cd670fc4d3a",
-    "size": 22459079,
-    "version": "1.50.50"
+    "sha256": "7c35ad8b037b2a4bdf5ea3f883ce725160b35581cd96895138b9eaf6db8c833f",
+    "size": 22462672,
+    "version": "1.50.51"
   }
 }
