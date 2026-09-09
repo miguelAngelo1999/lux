@@ -73,7 +73,16 @@ class ProcessManager {
       // macOS: lsof  |  Windows: netstat + taskkill
       try {
         if (Platform.isWindows) {
-          // Extract PID from: TCP  0.0.0.0:8000  ...  LISTENING  <PID>
+          // Step 1: stop via schtasks — this works even when lux_core runs as
+          // SYSTEM (e.g. after an update installer started it).  taskkill /F
+          // from user context cannot kill SYSTEM-owned processes, so we always
+          // try schtasks first and fall back to taskkill for non-SYSTEM cases.
+          await Process.run(
+              'schtasks', ['/end', '/tn', 'LuxApp'],
+              runInShell: false);
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          // Step 2: kill any remaining process still holding the port.
           final portArg = args.firstWhere(
               (a) => a.startsWith('-port='), orElse: () => '-port=8000');
           final port = portArg.split('=').last.trim();
@@ -87,10 +96,12 @@ class ProcessManager {
               .toSet()
               .toList();
           for (final pid in pids) {
+            // Also try name-based kill in case PID lookup is stale
+            await Process.run('taskkill', ['/F', '/IM', 'lux_core.exe', '/T']);
             await Process.run('taskkill', ['/F', '/PID', pid]);
           }
           if (pids.isNotEmpty) {
-            await Future.delayed(const Duration(milliseconds: 300));
+            await Future.delayed(const Duration(milliseconds: 500));
           }
         } else {
           final portArg = args.firstWhere(
