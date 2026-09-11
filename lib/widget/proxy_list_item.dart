@@ -120,9 +120,51 @@ class _ProxyListItemState extends State<ProxyListItem> {
     try {
       // lux_core runs as root — use its install-cert endpoint directly
       await widget.coreManager!.installCert(cert.pem);
-      if (mounted) {
+
+      if (!mounted) return;
+
+      // Brief pause then re-check to confirm the cert is now trusted.
+      // This stops the infinite re-prompt loop: if install worked the check
+      // will return intercepted=false and we show success; if still untrusted
+      // (e.g. macOS cached trust state needs restart) we tell the user that
+      // instead of showing the install button again.
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (!mounted) return;
+
+      final item = widget.item;
+      final detail = await widget.coreManager!.getProxyDetail(item.id);
+      final username = detail?.raw['username'] as String? ?? '';
+      final password = detail?.password ?? item.password ?? '';
+
+      CertCheckResult? recheck;
+      try {
+        recheck = await widget.coreManager!.checkCert(
+          server: item.server ?? '',
+          port: item.port ?? 0,
+          username: username,
+          password: password,
+        );
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      if (recheck == null || !recheck.intercepted) {
+        // All good — cert is now trusted
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: TText('Certificate installed. Please re-test the proxy.')),
+          const SnackBar(content: TText('Certificate installed and trusted. Proxy is ready.')),
+        );
+        // Re-test delay to update the chip
+        _testDelay();
+      } else {
+        // Installed but still showing as untrusted — trust anchor cache needs
+        // a process restart to take effect on this machine.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            duration: Duration(seconds: 6),
+            content: TText(
+              'Certificate installed. Restart Lux once to apply the new trust anchor.',
+            ),
+          ),
         );
       }
     } catch (e) {

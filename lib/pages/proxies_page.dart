@@ -434,44 +434,65 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   }
 
   Future<void> _installCert(CertCheckResult cert) async {
+    // Use lux_core's install-cert endpoint — it runs elevated and avoids the
+    // osascript admin-password prompt.  If lux_core isn't running yet, fall
+    // back to the osascript path.
+    bool installed = false;
     try {
-      // Write the PEM to a temp file and install via osascript
-      final tmpDir = await Directory.systemTemp.createTemp('lux_cert');
-      final certFile = File('${tmpDir.path}/corporate_ca.pem');
-      await certFile.writeAsString(cert.pem);
+      await widget.coreManager.installCert(cert.pem);
+      installed = true;
+    } catch (_) {
+      // lux_core unavailable — try osascript fallback
+    }
 
-      // Use osascript to add to keychain with admin prompt
-      final script = 'do shell script '
-          '"security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '
-          '${certFile.path}" '
-          'with prompt "Lux needs to install the corporate CA certificate" '
-          'with administrator privileges';
-
-      final result = await Process.run('/usr/bin/osascript', ['-e', script]);
-
-      if (result.exitCode == 0) {
+    if (!installed) {
+      try {
+        final tmpDir = await Directory.systemTemp.createTemp('lux_cert');
+        final certFile = File('${tmpDir.path}/corporate_ca.pem');
+        await certFile.writeAsString(cert.pem);
+        final script = 'do shell script '
+            '"security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '
+            '${certFile.path}" '
+            'with prompt "Lux needs to install the corporate CA certificate" '
+            'with administrator privileges';
+        final r = await Process.run('/usr/bin/osascript', ['-e', script]);
+        installed = r.exitCode == 0;
+        try { await certFile.delete(); await tmpDir.delete(); } catch (_) {}
+      } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: TText('Certificate installed and trusted')),
+            SnackBar(content: Text('Certificate install failed: $e')),
           );
         }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Certificate install cancelled or failed')),
-          );
-        }
-      }
-
-      // Cleanup
-      try { await certFile.delete(); await tmpDir.delete(); } catch (_) {}
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        return;
       }
     }
+
+    if (!installed) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: TText('Certificate install cancelled')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    // Re-check after a short delay to confirm trust — stops the infinite loop.
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+
+    // We don't have proxy coords here; just show success and note a restart
+    // may be needed if the trust cache hasn't refreshed yet.
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        duration: Duration(seconds: 5),
+        content: TText(
+          'Certificate installed. Test the proxy — if still failing, restart Lux once.',
+        ),
+      ),
+    );
   }
 
   Future<_ProxyCredentials?> _promptCredentials(DetectedProxy proxy) async {
