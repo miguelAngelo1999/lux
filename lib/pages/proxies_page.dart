@@ -483,13 +483,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
 
-    // We don't have proxy coords here; just show success and note a restart
-    // may be needed if the trust cache hasn't refreshed yet.
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         duration: Duration(seconds: 5),
         content: TText(
-          'Certificate installed. Test the proxy — if still failing, restart Lux once.',
+          'Certificate installed. Test the proxy — if still failing, the cert may not have installed correctly.',
         ),
       ),
     );

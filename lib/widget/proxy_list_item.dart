@@ -149,20 +149,22 @@ class _ProxyListItemState extends State<ProxyListItem> {
       if (!mounted) return;
 
       if (recheck == null || !recheck.intercepted) {
-        // All good — cert is now trusted
+        // All good — cert is now trusted by the system
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: TText('Certificate installed and trusted. Proxy is ready.')),
         );
         // Re-test delay to update the chip
         _testDelay();
       } else {
-        // Installed but still showing as untrusted — trust anchor cache needs
-        // a process restart to take effect on this machine.
+        // Still showing as untrusted right after install — the install likely
+        // failed silently (e.g. wrong cert extracted, permission issue).
+        // System trust is immediate; no restart is needed or helpful.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             duration: Duration(seconds: 6),
             content: TText(
-              'Certificate installed. Restart Lux once to apply the new trust anchor.',
+              'Certificate installed but proxy still reports untrusted. '
+              'Try running the proxy test again — if it persists, the cert may not have installed correctly.',
             ),
           ),
         );
