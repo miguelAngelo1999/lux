@@ -1,17 +1,17 @@
 {
-  "version": "1.50.53",
+  "version": "1.50.54",
   "channel": "beta",
-  "notes": "fix: cert install loop \u2014 re-check after install, stop re-prompting if already trusted",
+  "notes": "fix: remove incorrect 'restart Lux' message after cert install \u2014 trust is immediate",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "a527354cf1fb4d012f664248d9534b23dc7de9a733dd9c120d7dbc01f2dc82a2",
-    "size": 37951793,
-    "version": "1.50.53"
+    "sha256": "25d0ed60ad161bc7b664ace5c0538ff54585fece5ed989d164b5ea03f65e4983",
+    "size": 37953837,
+    "version": "1.50.54"
   },
   "windows": {
-    "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "7c35ad8b037b2a4bdf5ea3f883ce725160b35581cd96895138b9eaf6db8c833f",
-    "size": 22462672,
-    "version": "1.50.51"
+    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
+    "sha256": "31ae1c0cfcffa3397d5e749a219496606a3ef32430cf72c71e2a755fef1815f2",
+    "size": 22462625,
+    "version": "1.50.53"
   }
 }
