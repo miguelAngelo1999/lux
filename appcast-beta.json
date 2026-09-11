@@ -1,12 +1,12 @@
 {
-  "version": "1.50.51",
+  "version": "1.50.53",
   "channel": "beta",
-  "notes": "fix: re-read proxyMode before start() on Windows to get correct UAC elevation",
+  "notes": "fix: cert install loop \u2014 re-check after install, stop re-prompting if already trusted",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "607752388c72c6147c618c92ca82233a6b876c1ffc3f1ef337eb1feeb8cca979",
-    "size": 37951624,
-    "version": "1.50.51"
+    "sha256": "a527354cf1fb4d012f664248d9534b23dc7de9a733dd9c120d7dbc01f2dc82a2",
+    "size": 37951793,
+    "version": "1.50.53"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
