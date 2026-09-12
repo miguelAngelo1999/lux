@@ -60,6 +60,10 @@ class _HomeState extends State<Home>
   dynamic coreError;
   bool _quickEditMode = false;
   Timer? _watchdogTimer;
+  // Connectivity subscription for auto-switch trigger
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  // Auto-switch trigger debounce timer
+  Timer? _autoSwitchDebounce;
   // True when the user has explicitly started the core (or autoConnect did).
   // The watchdog only restarts when this is true, so a deliberate toggle-off
   // is respected.
@@ -172,6 +176,8 @@ class _HomeState extends State<Home>
           }
         });
         _refreshTray();
+        // Sync auto-switch config to lux_core on startup
+        _syncAutoSwitchOnReady();
       }
     });
     coreManager?.run().catchError((e) {
@@ -278,6 +284,26 @@ class _HomeState extends State<Home>
                   );
                 }
               }
+            case 'net_switch':
+              {
+                final data = message['data'] as Map<String, dynamic>?;
+                if (data == null) break;
+                final state     = data['state']     as String? ?? '';
+                final proxyName = data['proxyName'] as String? ?? '';
+                final msg = switch (state) {
+                  'corporate'   => proxyName.isNotEmpty
+                      ? 'Proxy switched to $proxyName'
+                      : 'Proxy switched',
+                  'direct'      => 'No proxy reachable — using direct connection',
+                  'no_internet' => 'No internet connection',
+                  _             => null,
+                };
+                if (msg != null && mounted) {
+                  notifier.show(msg);
+                  // Refresh proxy list so UI reflects the new selection
+                  // The dashboard re-emits state so the proxies page picks it up
+                }
+              }
           }
         });
       });
@@ -296,6 +322,37 @@ class _HomeState extends State<Home>
     // Watchdog: restart the core if it stops unexpectedly while the user
     // had it running. Checks every 30 seconds.
     _watchdogTimer = Timer.periodic(const Duration(seconds: 30), (_) => _watchdog());
+    // Subscribe to connectivity changes for auto-switch trigger.
+    // Fires on interface changes (WiFi on/off, Ethernet plug/unplug).
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((_) {
+      _scheduleAutoSwitchTrigger('connectivity-change');
+    });
+  }
+
+  /// Debounced auto-switch trigger. Waits 3s after the event to let the
+  /// network settle, then asks lux_core to run a probe cycle (if enabled).
+  void _scheduleAutoSwitchTrigger(String reason) {
+    _autoSwitchDebounce?.cancel();
+    _autoSwitchDebounce = Timer(const Duration(seconds: 3), () async {
+      if (coreManager == null) return;
+      final enabled = await readAutoSwitchEnabled();
+      if (!enabled) return;
+      appLog('AUTO-SWITCH', 'trigger: $reason');
+      await coreManager!.triggerNetSwitch();
+    });
+  }
+
+  /// On core ready: push persisted auto-switch config (enabled flag +
+  /// lastUserProxyId) into lux_core so the state machine has the right
+  /// baseline from the first probe cycle.
+  Future<void> _syncAutoSwitchOnReady() async {
+    if (coreManager == null) return;
+    final enabled = await readAutoSwitchEnabled();
+    await coreManager!.setNetSwitchEnabled(enabled);
+    if (enabled) {
+      final lastId = await readLastUserProxyId();
+      await coreManager!.syncNetSwitchConfig(lastId);
+    }
   }
 
   /// Watchdog — restarts the core if it stopped unexpectedly while the user
@@ -440,6 +497,8 @@ class _HomeState extends State<Home>
   @override
   void dispose() {
     _watchdogTimer?.cancel();
+    _connectivitySub?.cancel();
+    _autoSwitchDebounce?.cancel();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     powerMonitor.removeListener(this);
@@ -540,9 +599,7 @@ class _HomeState extends State<Home>
 
   @override
   onPowerMonitorWokeUp() async {
-    if (coreManager == null) {
-      return;
-    }
+    if (coreManager == null) return;
     if (needRestart) {
       needRestart = false;
       final List<ConnectivityResult> connectivityResult =
@@ -552,10 +609,12 @@ class _HomeState extends State<Home>
         return;
       }
       await Future.delayed(const Duration(seconds: 2));
-
       await coreManager!.start();
       notifier.show(tr().reconnectedMsg);
     }
+    // Wake is the highest-value trigger for auto-switch: laptop closed at
+    // home, opened at the office (or vice versa).
+    _scheduleAutoSwitchTrigger('wake');
   }
 
   @override

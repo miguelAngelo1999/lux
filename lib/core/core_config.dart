@@ -78,6 +78,46 @@ Future<void> writeLastUpdateCheckAt() async {
   await _writePrefs(prefs);
 }
 
+/// Whether the user has opted in to beta updates.
+Future<bool> readBetaUpdatesEnabled() async {
+  final prefs = await _readPrefs();
+  return prefs['betaUpdatesEnabled'] == true;
+}
+
+Future<void> writeBetaUpdatesEnabled(bool enabled) async {
+  final prefs = await _readPrefs();
+  prefs['betaUpdatesEnabled'] = enabled;
+  await _writePrefs(prefs);
+}
+
+// ── Auto-switch ────────────────────────────────────────────────────────────
+
+/// Whether the auto-proxy-switch feature is enabled (opt-in, default off).
+Future<bool> readAutoSwitchEnabled() async {
+  final prefs = await _readPrefs();
+  return prefs['autoSwitchEnabled'] == true;
+}
+
+Future<void> writeAutoSwitchEnabled(bool enabled) async {
+  final prefs = await _readPrefs();
+  prefs['autoSwitchEnabled'] = enabled;
+  await _writePrefs(prefs);
+}
+
+/// Last proxy the user manually selected — used by auto-switch as fallback
+/// when no internet and to restore the UI after auto-selection.
+Future<String?> readLastUserProxyId() async {
+  final prefs = await _readPrefs();
+  final v = prefs['lastUserProxyId'];
+  return v is String && v.isNotEmpty ? v : null;
+}
+
+Future<void> writeLastUserProxyId(String id) async {
+  final prefs = await _readPrefs();
+  prefs['lastUserProxyId'] = id;
+  await _writePrefs(prefs);
+}
+
 /// Usage-reporting level: "off", "ops" or "full". Absent means off, so a build
 /// that has never been configured reports nothing.
 Future<String> readTelemetryLevel() async {

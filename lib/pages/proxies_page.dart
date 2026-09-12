@@ -47,7 +47,57 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   var isCollapsedMap = <String, bool>{};
 
-  Future<void> refreshProxyList() async {
+  // ── Auto-switch ────────────────────────────────────────────────────────────
+  bool _autoSwitchEnabled = false;
+  bool _autoSwitching = false; // currently running a probe cycle
+  String _autoSwitchState = ''; // 'corporate'|'direct'|'no_internet'|''
+  String _autoSwitchProxyName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+    refreshData();
+    _loadAutoSwitchState();
+  }
+
+  Future<void> _loadAutoSwitchState() async {
+    final enabled = await readAutoSwitchEnabled();
+    if (!mounted) return;
+    setState(() => _autoSwitchEnabled = enabled);
+    if (enabled) {
+      final status = await widget.coreManager.getNetSwitchStatus();
+      if (!mounted) return;
+      setState(() {
+        _autoSwitchState = status['state'] as String? ?? '';
+        _autoSwitchProxyName = status['activeProxyName'] as String? ?? '';
+        _autoSwitching = status['probing'] as bool? ?? false;
+      });
+    }
+  }
+
+  Future<void> _triggerAutoSwitch() async {
+    if (_autoSwitching) return;
+    setState(() => _autoSwitching = true);
+    await widget.coreManager.triggerNetSwitch();
+    // Poll until probing finishes (max 15s)
+    for (int i = 0; i < 15; i++) {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
+      final status = await widget.coreManager.getNetSwitchStatus();
+      final probing = status['probing'] as bool? ?? false;
+      setState(() {
+        _autoSwitchState = status['state'] as String? ?? '';
+        _autoSwitchProxyName = status['activeProxyName'] as String? ?? '';
+        _autoSwitching = probing;
+      });
+      if (!probing) {
+        await refreshProxyList(); // reflect new selection
+        return;
+      }
+    }
+    if (mounted) setState(() => _autoSwitching = false);
+  }
     final proxyList = await widget.coreManager.getProxyList();
     final subscriptionListValue =
         await widget.coreManager.getSubscriptionList();
@@ -78,41 +128,35 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   }
 
   Future<void> handleSelectProxy(String? id) async {
-    if (id == null) {
-      return;
-    }
+    if (id == null) return;
     try {
-      setState(() {
-        isLoadingProxyRadio = true;
-      });
+      setState(() => isLoadingProxyRadio = true);
       await widget.coreManager.selectProxy(id);
       setState(() {
         proxyListGroup.selectedId = id;
         Provider.of<AppStateModel>(context, listen: false)
             .updateSelectedProxyId(id);
         var curProxy = proxyListGroup.allProxies.firstWhere((p) => p.id == id);
-
         var newCurProxyInfo = curProxy.name.isNotEmpty
             ? curProxy.name
             : "${curProxy.server}:${curProxy.port}";
         widget.onCurProxyInfoChange(newCurProxyInfo);
       });
+      // Record manual selection for auto-switch: sets 10-min hold + lastUserProxy
+      final proxy = proxyListGroup.allProxies.firstWhere(
+          (p) => p.id == id, orElse: () => ProxyItem(id, '', null, null, null, ''));
+      final name = proxy.name.isNotEmpty
+          ? proxy.name
+          : '${proxy.server ?? ''}:${proxy.port ?? ''}';
+      await writeLastUserProxyId(id);
+      await widget.coreManager.notifyManualSelect(id, name);
     } finally {
-      setState(() {
-        isLoadingProxyRadio = false;
-      });
+      setState(() => isLoadingProxyRadio = false);
     }
   }
 
   @override
   void onWindowFocus() {
-    refreshData();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    windowManager.addListener(this);
     refreshData();
   }
 
@@ -231,11 +275,36 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Toolbar with detect button
+        // Toolbar
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
           child: Row(
             children: [
+              // Auto-switch trigger button (only when enabled)
+              if (_autoSwitchEnabled) ...[
+                _autoSwitching
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 1.5))
+                    : Tooltip(
+                        message: 'Check network and auto-select best proxy',
+                        child: IconButton(
+                          icon: const Icon(Icons.swap_horiz, size: 18),
+                          onPressed: _triggerAutoSwitch,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 28, minHeight: 28),
+                        ),
+                      ),
+                // Status chip
+                if (_autoSwitchState.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  _AutoSwitchChip(
+                      state: _autoSwitchState,
+                      proxyName: _autoSwitchProxyName),
+                  const SizedBox(width: 4),
+                ],
+              ],
               const Spacer(),
               _isDetecting
                   ? SizedBox(
@@ -834,4 +903,39 @@ class _ProxyCredentials {
     required this.passwordMode,
     required this.ttlMinutes,
   });
+}
+
+/// Small status chip shown next to the auto-switch button.
+class _AutoSwitchChip extends StatelessWidget {
+  final String state;
+  final String proxyName;
+  const _AutoSwitchChip({required this.state, required this.proxyName});
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, icon, label) = switch (state) {
+      'corporate' => (Colors.green, Icons.business, proxyName.isNotEmpty ? proxyName : 'Proxy'),
+      'direct'    => (Colors.blue, Icons.home_outlined, 'Direct'),
+      'no_internet' => (Colors.red, Icons.signal_wifi_off, 'No internet'),
+      _ => (Colors.grey, Icons.swap_horiz, state),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withAlpha(30),
+        border: Border.all(color: color.withAlpha(120)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 3),
+          Text(label,
+              style: TextStyle(fontSize: 10, color: color),
+              overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
 }

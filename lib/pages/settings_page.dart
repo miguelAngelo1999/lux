@@ -227,6 +227,33 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               onChanged: saving ? null : (v) => _save(s.copyWith(allowLan: v)),
             ),
           ),
+          SettingRow(
+            title: 'Auto-switch proxy',
+            keywords: ['auto', 'switch', 'home', 'office', 'network', 'detect', 'bypass'],
+            build: (ctx) => FutureBuilder<bool>(
+              future: readAutoSwitchEnabled(),
+              builder: (ctx, snap) => switchTile(
+                title: 'Auto-switch proxy',
+                subtitle:
+                    'When the selected proxy stops working, Lux tries other '
+                    'proxies, then direct. Off by default.',
+                value: snap.data ?? false,
+                onChanged: (v) async {
+                  await writeAutoSwitchEnabled(v);
+                  await widget.coreManager.setNetSwitchEnabled(v);
+                  if (v) {
+                    // Sync persisted lastUserProxyId into lux_core on enable
+                    final lastId = await readLastUserProxyId();
+                    await widget.coreManager.syncNetSwitchConfig(lastId);
+                  }
+                  _notify(v
+                      ? tl(context, 'Auto-switch enabled')
+                      : tl(context, 'Auto-switch disabled'));
+                  if (mounted) setState(() {});
+                },
+              ),
+            ),
+          ),
         ];
 
       case 'dns':
@@ -348,6 +375,27 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               icon: Icons.refresh,
               busy: _checkingUpdate,
               onPressed: _checkingUpdate ? null : _runUpdateCheck,
+            ),
+          ),
+          SettingRow(
+            title: 'Beta updates',
+            keywords: ['beta', 'early', 'pre-release', 'test'],
+            build: (ctx) => FutureBuilder<bool>(
+              future: readBetaUpdatesEnabled(),
+              builder: (ctx, snap) => switchTile(
+                title: 'Beta updates',
+                subtitle: 'Get early builds before they reach everyone else. '
+                    'Off by default — turn on only if you want to help test '
+                    'pre-release versions.',
+                value: snap.data ?? false,
+                onChanged: (v) async {
+                  await writeBetaUpdatesEnabled(v);
+                  _notify(v
+                      ? tl(context, 'Beta updates enabled')
+                      : tl(context, 'Beta updates disabled'));
+                  if (mounted) setState(() {});
+                },
+              ),
             ),
           ),
           SettingRow(

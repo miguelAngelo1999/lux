@@ -370,6 +370,49 @@ class CoreManager {
     await dio.post('$baseHttpUrl/selected/proxy', data: {'id': id});
   }
 
+  // ── Auto-switch ────────────────────────────────────────────────────────────
+
+  /// Notify lux_core that the user manually selected a proxy.
+  /// Records the user's intent and sets a 10-min auto-switch suppression hold.
+  Future<void> notifyManualSelect(String proxyId, String proxyName) async {
+    try {
+      await dio.post('$baseHttpUrl/net-switch/manual-select',
+          data: {'proxyId': proxyId, 'proxyName': proxyName});
+    } catch (_) {}
+  }
+
+  /// Trigger an immediate auto-switch probe cycle.
+  Future<void> triggerNetSwitch() async {
+    try {
+      await dio.post('$baseHttpUrl/net-switch/trigger');
+    } catch (_) {}
+  }
+
+  /// Get the current auto-switch state.
+  Future<Map<String, dynamic>> getNetSwitchStatus() async {
+    try {
+      final res = await dioFast.get('$baseHttpUrl/net-switch/status');
+      return Map<String, dynamic>.from(res.data as Map);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Enable or disable the auto-switch feature in lux_core.
+  Future<void> setNetSwitchEnabled(bool enabled) async {
+    try {
+      await dio.post('$baseHttpUrl/net-switch/config', data: {'enabled': enabled});
+    } catch (_) {}
+  }
+
+  /// Push the persisted lastUserProxyId into lux_core on startup.
+  Future<void> syncNetSwitchConfig(String? lastUserProxyId) async {
+    try {
+      await dio.post('$baseHttpUrl/net-switch/config',
+          data: {'lastUserProxyId': lastUserProxyId ?? ''});
+    } catch (_) {}
+  }
+
   Future<void> selectRule(String id) async {
     await dio.post('$baseHttpUrl/selected/rule', data: {'id': id});
   }
