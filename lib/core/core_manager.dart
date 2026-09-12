@@ -391,7 +391,8 @@ class CoreManager {
   /// Get the current auto-switch state.
   Future<Map<String, dynamic>> getNetSwitchStatus() async {
     try {
-      final res = await dioFast.get('$baseHttpUrl/net-switch/status');
+      final res = await dio.get('$baseHttpUrl/net-switch/status',
+          options: Options(receiveTimeout: const Duration(seconds: 3)));
       return Map<String, dynamic>.from(res.data as Map);
     } catch (_) {
       return {};

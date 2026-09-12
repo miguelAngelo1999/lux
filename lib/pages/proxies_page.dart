@@ -98,6 +98,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     }
     if (mounted) setState(() => _autoSwitching = false);
   }
+
+  Future<void> refreshProxyList() async {
     final proxyList = await widget.coreManager.getProxyList();
     final subscriptionListValue =
         await widget.coreManager.getSubscriptionList();
