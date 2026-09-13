@@ -1,17 +1,17 @@
 {
-  "version": "1.50.53",
+  "version": "1.50.56",
   "channel": "stable",
-  "notes": "release (beta): 1.50.53",
+  "notes": "release (beta): 1.50.56 \u2014 auto-proxy switch feature",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "a527354cf1fb4d012f664248d9534b23dc7de9a733dd9c120d7dbc01f2dc82a2",
-    "size": 37951793,
-    "version": "1.50.53"
+    "sha256": "467244493d78e618e28c73be314149f78e9a241a3510df0b46179b284a63ce11",
+    "size": 37968865,
+    "version": "1.50.56"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "31ae1c0cfcffa3397d5e749a219496606a3ef32430cf72c71e2a755fef1815f2",
-    "size": 22462625,
-    "version": "1.50.53"
+    "sha256": "ebc26eb2e5ff2768954fe5e68183ab6b8f9a4db1c7532e17d4890d091bdebf67",
+    "size": 37624185,
+    "version": "1.50.56"
   }
 }
