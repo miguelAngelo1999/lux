@@ -229,6 +229,9 @@ Future<bool> showUpdateDialog(BuildContext context, UpdateInfo info) async {
   final availableLabel = _t(lang, 'available',          'available');
 
   final messenger = ScaffoldMessenger.of(context);
+  // Clear any stale snackbars (failed download, previous "available" notice)
+  // before showing the new one so they don't stack.
+  messenger.clearSnackBars();
   messenger.showSnackBar(
     SnackBar(
       content: Text('Lux ${info.latestVersion} $availableLabel'),
@@ -291,7 +294,7 @@ class _DownloadProgressBarState extends State<_DownloadProgressBar> {
   }
 
   Future<void> _run() async {
-    setState(() { _status = 'Preparing…'; _progress = 0.01; });
+    setState(() { _status = 'Preparing…'; _progress = 0.01; _failed = false; });
     await downloadAndInstall(
       context,
       widget.info,
@@ -299,26 +302,39 @@ class _DownloadProgressBarState extends State<_DownloadProgressBar> {
       onStatusChange: (s) { if (mounted) setState(() => _status = s); },
     );
     // Only returns on failure — success calls exit(0)
-    if (mounted) setState(() { _failed = true; _status = 'Download failed. Try again later.'; });
+    if (mounted) setState(() { _failed = true; _status = 'Download failed.'; });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(
-          _failed ? _status : 'Updating to ${widget.info.latestVersion}…',
-          style: const TextStyle(fontSize: 13),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _failed ? _status : 'Updating to ${widget.info.latestVersion}…',
+                style: const TextStyle(fontSize: 13),
+              ),
+              if (!_failed && _progress != null) ...[
+                const SizedBox(height: 6),
+                LinearProgressIndicator(value: (_progress ?? 0) < 0.02 ? null : _progress),
+                if (_status.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(_status, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                ],
+              ],
+            ],
+          ),
         ),
-        if (!_failed && _progress != null) ...[
-          const SizedBox(height: 6),
-          LinearProgressIndicator(value: (_progress ?? 0) < 0.02 ? null : _progress),
-          if (_status.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(_status, style: const TextStyle(fontSize: 11, color: Colors.white70)),
-          ],
+        if (_failed) ...[
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: _run,
+            child: const Text('Retry', style: TextStyle(color: Colors.orange)),
+          ),
         ],
       ],
     );
@@ -513,7 +529,7 @@ Future<void> downloadAndInstall(
         onStatusChange?.call('Download size mismatch — retrying in 30s…');
         await Future.delayed(const Duration(seconds: 30));
 
-        // Re-download with a fresh timestamp
+        // Re-download with a fresh timestamp using a NEW client (old one is closed)
         final retryUrl = url.contains('drive.usercontent.google.com')
             ? '$url${url.contains('?') ? '&' : '?'}'
                 '_t=${DateTime.now().millisecondsSinceEpoch}'
@@ -522,13 +538,17 @@ Future<void> downloadAndInstall(
         if (await retryFile.exists()) await retryFile.delete();
 
         onStatusChange?.call('Re-downloading…');
-        final retryRequest = await client.getUrl(Uri.parse(retryUrl));
+        final retryClient = HttpClient();
+        retryClient.badCertificateCallback = (_, __, ___) => true;
+        retryClient.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
+        final retryRequest = await retryClient.getUrl(Uri.parse(retryUrl));
         retryRequest.followRedirects = true;
         retryRequest.headers.set('Cache-Control', 'no-cache, no-store');
         final retryResponse = await retryRequest.close()
             .timeout(const Duration(minutes: 10));
         final retrySink = retryFile.openWrite();
         await retryResponse.pipe(retrySink);
+        retryClient.close();
         final retrySize = await retryFile.length();
 
         if (retrySize != info.size) {
