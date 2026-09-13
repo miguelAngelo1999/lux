@@ -717,15 +717,21 @@ Future<void> downloadAndInstall(
       final relaunchScript = File('/tmp/lux_reopen.sh');
       await relaunchScript.writeAsString(
         '#!/bin/bash\n'
-        '# Wait for old Lux process ($myPid) to fully exit\n'
+        '# Wait for this Dart process ($myPid) to exit\n'
         'for i in \$(seq 1 20); do\n'
         '  kill -0 $myPid 2>/dev/null || break\n'
         '  sleep 0.5\n'
         'done\n'
-        '# Kill lux_core_real so it releases port 1090 before the new app starts.\n'
-        '# Without this the new Lux crashes with "bind: address already in use".\n'
+        '# Kill ALL remaining Lux app processes — prevents double-instance after update.\n'
+        '# The macOS app shell can linger briefly after the Dart process exits.\n'
+        'pkill -x Lux 2>/dev/null || true\n'
         'sudo -n pkill -9 -f lux_core_real 2>/dev/null || true\n'
-        'sleep 1\n'
+        '# Wait for all Lux processes to fully die before opening new instance\n'
+        'for i in \$(seq 1 20); do\n'
+        '  pgrep -x Lux > /dev/null 2>&1 || break\n'
+        '  sleep 0.3\n'
+        'done\n'
+        'sleep 0.5\n'
         '/usr/bin/open -a /Applications/Lux.app\n'
         'rm -f /tmp/lux_reopen.sh\n',
       );

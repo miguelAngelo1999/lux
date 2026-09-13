@@ -49,6 +49,14 @@ Future<Map<String, dynamic>> readJsonFile(String filePath) async {
 }
 
 void exitApp() async {
+  // Remove the single-instance lock file so a future launch isn't blocked
+  if (Platform.isMacOS) {
+    try {
+      final appDir = Platform.environment['HOME'] ?? '';
+      final lockFile = File('$appDir/Library/Application Support/com.github.igoogolx.lux/1.0/lux_app.lock');
+      if (await lockFile.exists()) await lockFile.delete();
+    } catch (_) {}
+  }
   exit(0);
 }
 
