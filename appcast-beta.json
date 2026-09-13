@@ -1,17 +1,17 @@
 {
-  "version": "1.50.59",
+  "version": "1.50.60",
   "channel": "beta",
-  "notes": "fix: retry uses closed HttpClient (Client is closed crash); add Retry button; clear stale snackbars on re-check",
+  "notes": "fix: double-instance after update \u2014 single-instance lock file + kill all Lux processes in relaunch script",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "e3d83fa7356456c745dbbc1aecb47724f542db9bf398b067c40011bd54ba1163",
-    "size": 38027351,
-    "version": "1.50.59"
+    "sha256": "c5d1cac09fc0b7ae925ef35d2afacd0a1f2f44c1dee1df98eec7fe6a525b52cb",
+    "size": 38035660,
+    "version": "1.50.60"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "1c3eaa6b9572db59cd814d0044fa27ed8e0acbca4d6631136ccb6687e92484b1",
-    "size": 37656765,
-    "version": "1.50.59"
+    "sha256": "e783f16cd0dedcd079db2af85d136c8291c95997faa815507bc2ae8f0f2e9364",
+    "size": 37656735,
+    "version": "1.50.60"
   }
 }
