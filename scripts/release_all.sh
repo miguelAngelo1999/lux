@@ -190,12 +190,17 @@ echo "==> Windows installer ready: $(ls -lh "$WIN_INSTALLER" | awk '{print $5, $
 # ── Step 5: Upload BOTH platforms, then update appcast atomically ──────────
 echo "==> Uploading both platforms..."
 
+# Use python3.11 for Drive uploads — python3.14 has SSL issues with the corp
+# proxy CA (missing KeyUsage extension breaks OpenSSL 3.x certificate chain).
+PY311=/Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+UPLOAD_PY="${PY311:-python3}"
+
 # Upload macOS DMG
-python3 "$REPO/scripts/publish_appcast.py" "$VERSION" "dist/$DMG_NAME" --channel "$CHANNEL"
+$UPLOAD_PY "$REPO/scripts/publish_appcast.py" "$VERSION" "dist/$DMG_NAME" --channel "$CHANNEL"
 
 # Upload Windows installer
 cp /Users/virgoh/lux/scripts/.oauth_token.json "$REPO/scripts/.oauth_token.json"
-python3 "$REPO/scripts/publish_appcast_windows.py" "$VERSION" "$WIN_INSTALLER"
+$UPLOAD_PY "$REPO/scripts/publish_appcast_windows.py" "$VERSION" "$WIN_INSTALLER" --channel "$CHANNEL"
 rm -f "$REPO/scripts/.oauth_token.json"
 
 # ── Step 6: Commit and push ────────────────────────────────────────────────

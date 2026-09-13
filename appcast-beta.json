@@ -1,17 +1,17 @@
 {
-  "version": "1.50.58",
+  "version": "1.50.59",
   "channel": "beta",
-  "notes": "fix: update check CDN cache retry + kill lux_core before relaunch to fix port bind crash",
+  "notes": "fix: retry uses closed HttpClient (Client is closed crash); add Retry button; clear stale snackbars on re-check",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "501ce01374c62c0f5f8b0ac809b432bb815f02ea3cc95a1d94a85d56db99db54",
-    "size": 38034299,
-    "version": "1.50.58"
+    "sha256": "e3d83fa7356456c745dbbc1aecb47724f542db9bf398b067c40011bd54ba1163",
+    "size": 38027351,
+    "version": "1.50.59"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "a4c670689c12b48f1031e86920f5db04531a1864f98b2ac862ccf0d2e4857dd7",
-    "size": 37654728,
-    "version": "1.50.58"
+    "sha256": "1c3eaa6b9572db59cd814d0044fa27ed8e0acbca4d6631136ccb6687e92484b1",
+    "size": 37656765,
+    "version": "1.50.59"
   }
 }
