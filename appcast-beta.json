@@ -1,17 +1,17 @@
 {
-  "version": "1.50.57",
+  "version": "1.50.58",
   "channel": "beta",
-  "notes": "feat: add Denied quick-filter chip to log page",
+  "notes": "fix: update check CDN cache retry + kill lux_core before relaunch to fix port bind crash",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "94121e6fa56d5d01671075827d5f908e533e058052b9e8e283dd5f9ec889d3ea",
-    "size": 38028897,
-    "version": "1.50.57"
+    "sha256": "501ce01374c62c0f5f8b0ac809b432bb815f02ea3cc95a1d94a85d56db99db54",
+    "size": 38034299,
+    "version": "1.50.58"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "8233017513e483231bce52a55d29fcf5dd147ca12d1427417db256b148f17b15",
-    "size": 37650894,
-    "version": "1.50.57"
+    "sha256": "a4c670689c12b48f1031e86920f5db04531a1864f98b2ac862ccf0d2e4857dd7",
+    "size": 37654728,
+    "version": "1.50.58"
   }
 }
