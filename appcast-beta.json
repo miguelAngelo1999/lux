@@ -1,17 +1,17 @@
 {
-  "version": "1.50.56",
+  "version": "1.50.57",
   "channel": "beta",
-  "notes": "fix: missing refreshProxyList method header + dioFast \u2192 dio in net-switch status",
+  "notes": "feat: add Denied quick-filter chip to log page",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "467244493d78e618e28c73be314149f78e9a241a3510df0b46179b284a63ce11",
-    "size": 37968865,
-    "version": "1.50.56"
+    "sha256": "94121e6fa56d5d01671075827d5f908e533e058052b9e8e283dd5f9ec889d3ea",
+    "size": 38028897,
+    "version": "1.50.57"
   },
   "windows": {
-    "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "31ae1c0cfcffa3397d5e749a219496606a3ef32430cf72c71e2a755fef1815f2",
-    "size": 22462625,
-    "version": "1.50.53"
+    "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
+    "sha256": "8233017513e483231bce52a55d29fcf5dd147ca12d1427417db256b148f17b15",
+    "size": 37650894,
+    "version": "1.50.57"
   }
 }

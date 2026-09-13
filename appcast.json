@@ -1,7 +1,7 @@
 {
-  "version": "1.50.56",
+  "version": "1.50.57",
   "channel": "stable",
-  "notes": "release (beta): 1.50.56 \u2014 auto-proxy switch feature",
+  "notes": "feat: add Denied quick-filter chip to log page",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
     "sha256": "467244493d78e618e28c73be314149f78e9a241a3510df0b46179b284a63ce11",
@@ -10,8 +10,8 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "ebc26eb2e5ff2768954fe5e68183ab6b8f9a4db1c7532e17d4890d091bdebf67",
-    "size": 37624185,
-    "version": "1.50.56"
+    "sha256": "8233017513e483231bce52a55d29fcf5dd147ca12d1427417db256b148f17b15",
+    "size": 37650894,
+    "version": "1.50.57"
   }
 }

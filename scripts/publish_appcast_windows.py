@@ -43,7 +43,7 @@ sys.path.insert(0, SCRIPT_DIR)
 
 import requests  # noqa: E402
 import urllib3  # noqa: E402
-from constants import APPCAST_FILE_ID, BETA_APPCAST_FILE_ID, BETA_DMG_FILE_ID, GDRIVE_FOLDER_ID, WINDOWS_FILE_ID  # noqa: E402
+from constants import APPCAST_FILE_ID, BETA_APPCAST_FILE_ID, BETA_DMG_FILE_ID, BETA_WIN_FILE_ID, GDRIVE_FOLDER_ID, WINDOWS_FILE_ID  # noqa: E402
 from google.auth.transport.requests import Request  # noqa: E402
 from google.oauth2.credentials import Credentials  # noqa: E402
 from googleapiclient.discovery import build  # noqa: E402
@@ -193,7 +193,7 @@ def main():
     svc = drive()
 
     exe_name = os.path.basename(exe)
-    target_exe_id = BETA_DMG_FILE_ID if channel == 'beta' else WINDOWS_FILE_ID
+    target_exe_id = BETA_WIN_FILE_ID if channel == 'beta' else WINDOWS_FILE_ID
     exe_id = upload_in_place(
         svc,
         target_exe_id,
