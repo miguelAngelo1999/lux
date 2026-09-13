@@ -217,6 +217,31 @@ class _LogPageState extends State<LogPage> {
                 },
               ),
               const SizedBox(width: 8),
+              // Quick-filter button for denied requests
+              FilterChip(
+                label: const Text('Denied', style: TextStyle(fontSize: 11)),
+                selected: _searchText == '[deny]',
+                onSelected: (on) {
+                  setState(() {
+                    if (on) {
+                      _searchCtrl.text = '[DENY]';
+                    } else {
+                      _searchCtrl.text = '';
+                    }
+                  });
+                },
+                selectedColor: Colors.orange.withAlpha(60),
+                checkmarkColor: Colors.orange,
+                side: BorderSide(
+                    color: _searchText == '[deny]'
+                        ? Colors.orange
+                        : Colors.grey.withAlpha(80)),
+                padding: EdgeInsets.zero,
+                labelPadding:
+                    const EdgeInsets.symmetric(horizontal: 4),
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
