@@ -118,6 +118,25 @@ Future<void> writeLastUserProxyId(String id) async {
   await _writePrefs(prefs);
 }
 
+/// Persists the latest available version when an update is found but not yet installed.
+/// Cleared when the user installs the update or when "up to date" is confirmed.
+/// This survives app restarts so the Settings tile always shows the badge.
+Future<String?> readPendingUpdateVersion() async {
+  final prefs = await _readPrefs();
+  final v = prefs['pendingUpdateVersion'];
+  return v is String && v.isNotEmpty ? v : null;
+}
+
+Future<void> writePendingUpdateVersion(String? version) async {
+  final prefs = await _readPrefs();
+  if (version == null || version.isEmpty) {
+    prefs.remove('pendingUpdateVersion');
+  } else {
+    prefs['pendingUpdateVersion'] = version;
+  }
+  await _writePrefs(prefs);
+}
+
 /// Usage-reporting level: "off", "ops" or "full". Absent means off, so a build
 /// that has never been configured reports nothing.
 Future<String> readTelemetryLevel() async {

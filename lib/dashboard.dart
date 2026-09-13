@@ -8,7 +8,7 @@ import 'package:lux/pages/proxies_page.dart';
 import 'package:lux/pages/rules_page.dart';
 import 'package:lux/pages/settings_page.dart';
 import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
-import 'package:lux/core/core_config.dart' show shouldSkipUpdateCheck, writeLastUpdateCheckAt;
+import 'package:lux/core/core_config.dart' show shouldSkipUpdateCheck, writeLastUpdateCheckAt, writePendingUpdateVersion;
 import 'package:lux/widget/app_bottom_bar.dart';
 import 'package:lux/widget/app_header_bar.dart';
 import 'package:window_manager/window_manager.dart';
@@ -63,6 +63,8 @@ class _DashboardState extends State<Dashboard> with WindowListener {
         await writeLastUpdateCheckAt();
         if (info == null || !info.hasUpdate) return;
         if (!mounted) return;
+        // Persist so settings tile shows badge even if snackbar is missed
+        await writePendingUpdateVersion(info.latestVersion);
         await showUpdateDialog(context, info);
         return;
       } catch (_) {

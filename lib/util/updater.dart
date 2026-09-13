@@ -100,10 +100,14 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
     final pkg = await PackageInfo.fromPlatform();
     final current = pkg.version;
 
-    // Use custom appcast URL if set in prefs, otherwise fall back to default
+    // Use custom appcast URL if set in prefs; beta URL if beta enabled; else default
     final customUrl = await readCustomAppcastUrl();
-    final baseUrl =
-        (customUrl != null && customUrl.isNotEmpty) ? customUrl : appcastUrl;
+    final betaEnabled = await readBetaUpdatesEnabled();
+    final baseUrl = (customUrl != null && customUrl.isNotEmpty)
+        ? customUrl
+        : betaEnabled
+            ? betaAppcastUrl
+            : appcastUrl;
 
     // Use Dart's HttpClient directly with proxy + SSL bypass
     final client = HttpClient();
@@ -137,7 +141,32 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
     }
     client.close();
     appLog('UPDATE', 'appcast fetched status=${response.statusCode} body=${body.substring(0, body.length.clamp(0, 200))}');
-    return _parseAppcast(body, current);
+    final result = _parseAppcast(body, current);
+
+    // GDrive CDN sometimes serves a stale cached revision for ~30s after a new
+    // upload, returning the previous version.  When the manual "Check" button
+    // is tapped and the fetched version equals the current version (which means
+    // "you are up to date" — but could be a cache hit), retry once after 3s
+    // with a fresh timestamp to bust the CDN cache.
+    if (result != null && !result.hasUpdate && baseUrl.contains('drive.usercontent.google.com')) {
+      appLog('UPDATE', 'appcast returned same version as current — possible CDN cache hit, retrying in 3s');
+      await Future.delayed(const Duration(seconds: 3));
+      final retryUrl = Uri.parse('$baseUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}');
+      final client2 = HttpClient();
+      client2.badCertificateCallback = (_, __, ___) => true;
+      client2.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
+      final req2 = await client2.getUrl(retryUrl);
+      req2.followRedirects = true;
+      req2.headers.set('Cache-Control', 'no-cache, no-store');
+      req2.headers.set('Pragma', 'no-cache');
+      final resp2 = await req2.close().timeout(const Duration(seconds: 15));
+      final body2 = await resp2.transform(const SystemEncoding().decoder).join();
+      client2.close();
+      appLog('UPDATE', 'retry appcast fetched status=${resp2.statusCode} body=${body2.substring(0, body2.length.clamp(0, 200))}');
+      return _parseAppcast(body2, current);
+    }
+
+    return result;
   } catch (e) {
     debugPrint('[Updater] check failed: $e');
     return null;
@@ -673,6 +702,9 @@ Future<void> downloadAndInstall(
         '  kill -0 $myPid 2>/dev/null || break\n'
         '  sleep 0.5\n'
         'done\n'
+        '# Kill lux_core_real so it releases port 1090 before the new app starts.\n'
+        '# Without this the new Lux crashes with "bind: address already in use".\n'
+        'sudo -n pkill -9 -f lux_core_real 2>/dev/null || true\n'
         'sleep 1\n'
         '/usr/bin/open -a /Applications/Lux.app\n'
         'rm -f /tmp/lux_reopen.sh\n',
