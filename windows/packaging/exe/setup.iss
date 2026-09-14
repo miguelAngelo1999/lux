@@ -19,6 +19,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableFinishedPage=yes
 AppMutex=lux.app.mutex,Global\lux.app.mutex
+; Do NOT use CloseApplications=force — it shows a "please close" dialog for
+; lux_core.exe because Inno cannot kill a SYSTEM-owned process. The [Code]
+; section handles killing via schtasks /end (the only way to stop SYSTEM procs).
 
 [Languages]
 {% for locale in LOCALES %}
