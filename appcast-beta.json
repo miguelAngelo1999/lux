@@ -1,7 +1,7 @@
 {
-  "version": "1.50.61",
+  "version": "1.50.62",
   "channel": "beta",
-  "notes": "fix: size check too strict \u2014 sha256 is the real guard, size only blocks >5% smaller (CDN stale); fixes 'Client is closed' retry loop",
+  "notes": "fix: remove CloseApplications=force from ISS \u2014 was prompting user to close Lux manually; [Code] handles kill via schtasks",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
     "sha256": "8b6578f73f1eb4c0b9c139112ee8046f0ad1791bf44e3ad5421e0a80018176ba",
@@ -10,8 +10,8 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "92356247406ed89d56554bf512e7559c17d5ba18a78f8336d931ccc2ea8677bd",
-    "size": 37656741,
-    "version": "1.50.61"
+    "sha256": "2072a83bc4e112256341f7026e162acde15a8d13828a4ac89810ce8c03cff827",
+    "size": 37656779,
+    "version": "1.50.62"
   }
 }
