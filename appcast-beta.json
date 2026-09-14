@@ -1,17 +1,17 @@
 {
-  "version": "1.50.60",
+  "version": "1.50.61",
   "channel": "beta",
-  "notes": "fix: double-instance after update \u2014 single-instance lock file + kill all Lux processes in relaunch script",
+  "notes": "fix: size check too strict \u2014 sha256 is the real guard, size only blocks >5% smaller (CDN stale); fixes 'Client is closed' retry loop",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "c5d1cac09fc0b7ae925ef35d2afacd0a1f2f44c1dee1df98eec7fe6a525b52cb",
-    "size": 38035660,
-    "version": "1.50.60"
+    "sha256": "8b6578f73f1eb4c0b9c139112ee8046f0ad1791bf44e3ad5421e0a80018176ba",
+    "size": 38030647,
+    "version": "1.50.61"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "e783f16cd0dedcd079db2af85d136c8291c95997faa815507bc2ae8f0f2e9364",
-    "size": 37656735,
-    "version": "1.50.60"
+    "sha256": "92356247406ed89d56554bf512e7559c17d5ba18a78f8336d931ccc2ea8677bd",
+    "size": 37656741,
+    "version": "1.50.61"
   }
 }
