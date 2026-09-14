@@ -510,62 +510,57 @@ Future<void> downloadAndInstall(
     }
 
     // Verify the download against the appcast before installing anything.
-    //
-    // This is the check that was missing when an update installed an older
-    // build: Drive served a cached revision of the fixed file id, the DMG was
-    // perfectly valid and well over the size floor, and nothing compared it to
-    // what the appcast said it should be. It is also the only integrity check in
-    // the chain, since the DMG is not code-signed.
+    // sha256 is the authoritative integrity check. Size is only used as a
+    // quick CDN-stale signal when sha256 is absent — a significantly smaller
+    // file (>5%) means we got a cached older revision.
     if (info.sha256.isNotEmpty || info.size > 0) {
       onStatusChange?.call('Verifying download…');
 
-      if (info.size > 0 && fileSize != info.size) {
-        appLog('UPDATE',
-            'size mismatch: got $fileSize, appcast says ${info.size} — retrying in 30s');
-        await file.delete();
-
-        // GDrive CDN sometimes serves a cached older revision for ~30–60s
-        // after a new file is uploaded. Wait and retry once automatically.
-        onStatusChange?.call('Download size mismatch — retrying in 30s…');
-        await Future.delayed(const Duration(seconds: 30));
-
-        // Re-download with a fresh timestamp using a NEW client (old one is closed)
-        final retryUrl = url.contains('drive.usercontent.google.com')
-            ? '$url${url.contains('?') ? '&' : '?'}'
-                '_t=${DateTime.now().millisecondsSinceEpoch}'
-            : url;
-        final retryFile = File('${file.parent.path}/Lux-${info.latestVersion}-retry$ext');
-        if (await retryFile.exists()) await retryFile.delete();
-
-        onStatusChange?.call('Re-downloading…');
-        final retryClient = HttpClient();
-        retryClient.badCertificateCallback = (_, __, ___) => true;
-        retryClient.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
-        final retryRequest = await retryClient.getUrl(Uri.parse(retryUrl));
-        retryRequest.followRedirects = true;
-        retryRequest.headers.set('Cache-Control', 'no-cache, no-store');
-        final retryResponse = await retryRequest.close()
-            .timeout(const Duration(minutes: 10));
-        final retrySink = retryFile.openWrite();
-        await retryResponse.pipe(retrySink);
-        retryClient.close();
-        final retrySize = await retryFile.length();
-
-        if (retrySize != info.size) {
+      // Size check: only block if sha256 is absent AND the file is >5% smaller
+      // than expected (CDN stale). A small size difference with a valid sha256
+      // is acceptable — appcast size fields can be slightly off after re-uploads.
+      if (info.sha256.isEmpty && info.size > 0) {
+        final tolerance = (info.size * 0.05).toInt();
+        if (fileSize < info.size - tolerance) {
           appLog('UPDATE',
-              'retry size mismatch: got $retrySize, appcast says ${info.size} — giving up');
-          await retryFile.delete();
-          _reportBadDownload(
-            context,
-            'Downloaded file is ${retrySize}B but the release says ${info.size}B. '
-            'It may be a cached copy of an older version. Try again in a minute.',
-          );
-          return;
+              'size too small: got $fileSize, appcast says ${info.size} (>5% smaller, likely stale CDN) — retrying in 30s');
+          await file.delete();
+          onStatusChange?.call('Download looks stale — retrying in 30s…');
+          await Future.delayed(const Duration(seconds: 30));
+
+          final retryUrl = url.contains('drive.usercontent.google.com')
+              ? '$url${url.contains('?') ? '&' : '?'}'
+                  '_t=${DateTime.now().millisecondsSinceEpoch}'
+              : url;
+          final retryFile = File('${file.parent.path}/Lux-${info.latestVersion}-retry$ext');
+          if (await retryFile.exists()) await retryFile.delete();
+
+          onStatusChange?.call('Re-downloading…');
+          final retryClient = HttpClient();
+          retryClient.badCertificateCallback = (_, __, ___) => true;
+          retryClient.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
+          final retryRequest = await retryClient.getUrl(Uri.parse(retryUrl));
+          retryRequest.followRedirects = true;
+          retryRequest.headers.set('Cache-Control', 'no-cache, no-store');
+          final retryResponse = await retryRequest.close().timeout(const Duration(minutes: 10));
+          final retrySink = retryFile.openWrite();
+          await retryResponse.pipe(retrySink);
+          retryClient.close();
+          final retrySize = await retryFile.length();
+
+          if (retrySize < info.size - tolerance) {
+            appLog('UPDATE', 'retry also too small: $retrySize vs ${info.size}');
+            await retryFile.delete();
+            _reportBadDownload(context,
+                'Downloaded file is ${retrySize}B but expected ~${info.size}B. Try again in a minute.');
+            return;
+          }
+          await retryFile.rename(file.path);
+          fileSize = retrySize;
+          appLog('UPDATE', 'retry download succeeded size=$retrySize');
+        } else {
+          appLog('UPDATE', 'size check passed: got $fileSize, appcast says ${info.size}');
         }
-        // Retry succeeded — continue with the retried file
-        await retryFile.rename(file.path);
-        fileSize = retrySize;
-        appLog('UPDATE', 'retry download succeeded size=$retrySize');
       }
 
       if (info.sha256.isNotEmpty) {
