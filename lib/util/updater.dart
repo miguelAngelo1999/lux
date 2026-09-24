@@ -749,10 +749,21 @@ Future<void> downloadAndInstall(
 
       appLog('UPDATE', 'launching detached updater script and exiting');
 
-      // Launch via cmd /c start "" /b — fully detached, no window, outlives lux
+      // Launch the bat via PowerShell Start-Process -WindowStyle Hidden.
+      // `cmd /c start /b` does NOT reliably hide the console window for the
+      // child cmd that runs the bat — it left a visible terminal open for the
+      // whole update. Start-Process -WindowStyle Hidden runs it with no window,
+      // detached (outlives lux.exe which exits right after).
       await Process.start(
-        'cmd.exe',
-        ['/c', 'start', '', '/b', 'cmd.exe', '/c', scriptPath],
+        'powershell.exe',
+        [
+          '-NonInteractive',
+          '-WindowStyle', 'Hidden',
+          '-Command',
+          "Start-Process -FilePath 'cmd.exe' "
+              "-ArgumentList '/c','$scriptPath' "
+              "-WindowStyle Hidden",
+        ],
         mode: ProcessStartMode.detached,
         runInShell: false,
       );
