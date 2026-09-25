@@ -747,23 +747,26 @@ Future<void> downloadAndInstall(
       final script = _buildWindowsUpdaterScript(file.path);
       await File(scriptPath).writeAsString(script);
 
-      appLog('UPDATE', 'launching detached updater script and exiting');
+      // Launch the bat via a VBScript shim. This is the ONLY Windows mechanism
+      // that reliably runs a process with NO visible window:
+      //   WScript.Shell.Run(cmd, 0, False)  — 0 = SW_HIDE, False = don't wait.
+      // Both `cmd /c start /b` and `powershell Start-Process -WindowStyle Hidden`
+      // leave a console window flashing/open for the whole update (the console
+      // is allocated before the style hint is honored). The VBS shim never
+      // allocates a visible console at all.
+      final vbsPath = '${file.parent.path}\\lux_updater.vbs';
+      // Escape the bat path for a VBS double-quoted string (double the quotes).
+      final batForVbs = scriptPath.replaceAll('"', '""');
+      final vbs =
+          'Set s = CreateObject("WScript.Shell")\r\n'
+          's.Run "cmd /c ""$batForVbs""", 0, False\r\n';
+      await File(vbsPath).writeAsString(vbs);
 
-      // Launch the bat via PowerShell Start-Process -WindowStyle Hidden.
-      // `cmd /c start /b` does NOT reliably hide the console window for the
-      // child cmd that runs the bat — it left a visible terminal open for the
-      // whole update. Start-Process -WindowStyle Hidden runs it with no window,
-      // detached (outlives lux.exe which exits right after).
+      appLog('UPDATE', 'launching hidden updater via VBS shim and exiting');
+
       await Process.start(
-        'powershell.exe',
-        [
-          '-NonInteractive',
-          '-WindowStyle', 'Hidden',
-          '-Command',
-          "Start-Process -FilePath 'cmd.exe' "
-              "-ArgumentList '/c','$scriptPath' "
-              "-WindowStyle Hidden",
-        ],
+        'wscript.exe',
+        [vbsPath],
         mode: ProcessStartMode.detached,
         runInShell: false,
       );
@@ -844,7 +847,8 @@ String _buildWindowsUpdaterScript(String installerPath) {
       '-Verb RunAs -Wait"\r\n'
       'echo Installer exited with code %errorlevel% >> "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
-      ':: Clean up this script\r\n'
+      ':: Clean up the VBS shim and this script\r\n'
+      'del "%~dp0lux_updater.vbs" >nul 2>&1\r\n'
       'del "%~f0"\r\n';
 }
 
