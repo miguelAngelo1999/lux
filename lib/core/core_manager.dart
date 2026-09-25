@@ -414,6 +414,27 @@ class CoreManager {
     } catch (_) {}
   }
 
+  // ── Config import / export / edit ───────────────────────────────────────────
+
+  /// Fetch the raw config.json content (for export or edit).
+  Future<String> exportConfig() async {
+    final res = await dio.get('$baseHttpUrl/config',
+        options: Options(responseType: ResponseType.plain));
+    return res.data as String;
+  }
+
+  /// Replace config.json with [content]. Throws with the server error message
+  /// if the content is invalid JSON or not a valid config.
+  Future<void> importConfig(String content) async {
+    await dio.put('$baseHttpUrl/config',
+        data: content,
+        options: Options(
+          contentType: 'application/json',
+          // Send the string as-is; don't let dio re-encode it.
+          requestEncoder: (s, _) => utf8.encode(s),
+        ));
+  }
+
   Future<void> selectRule(String id) async {
     await dio.post('$baseHttpUrl/selected/rule', data: {'id': id});
   }

@@ -1,5 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/model/app.dart';
@@ -492,9 +497,154 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                     : (v) => _save(s.copyWith(autoModeUrl: v)),
               ),
             ),
+          SettingRow(
+            title: 'Configuration file',
+            keywords: ['config', 'config.json', 'import', 'export', 'edit', 'backup', 'restore'],
+            build: (ctx) => ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: const TText('Configuration file'),
+              subtitle: const TText(
+                'Export a backup, import one, or edit config.json directly.',
+                style: TextStyle(fontSize: 11),
+              ),
+              trailing: Wrap(
+                spacing: 4,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.upload_file, size: 15),
+                    label: const TText('Export', style: TextStyle(fontSize: 12)),
+                    onPressed: _exportConfig,
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.edit_note, size: 15),
+                    label: const TText('Edit', style: TextStyle(fontSize: 12)),
+                    onPressed: _editConfig,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ];
     }
     return [];
+  }
+
+  // ── Config import / export / edit ──────────────────────────────────────────
+
+  /// Export: write config.json to the app support dir and show the path (with
+  /// a copy-to-clipboard action).
+  Future<void> _exportConfig() async {
+    try {
+      final content = await widget.coreManager.exportConfig();
+      final dir = await getApplicationSupportDirectory();
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '-')
+          .split('.')
+          .first;
+      final file = File('${dir.path}/config-backup-$stamp.json');
+      await file.writeAsString(content);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Config exported to ${file.path}'),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Copy path',
+            onPressed: () => Clipboard.setData(ClipboardData(text: file.path)),
+          ),
+        ),
+      );
+    } catch (e) {
+      _notify('Export failed: $e', isError: true);
+    }
+  }
+
+  /// Edit: load config.json into a scrollable text field. Save calls import.
+  /// The same dialog handles "import" — the user can paste an entire config in.
+  Future<void> _editConfig() async {
+    String content;
+    try {
+      content = await widget.coreManager.exportConfig();
+    } catch (e) {
+      _notify('Could not load config: $e', isError: true);
+      return;
+    }
+    if (!mounted) return;
+    final ctrl = TextEditingController(text: content);
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.edit_note, size: 20),
+          SizedBox(width: 8),
+          TText('Edit config.json'),
+        ]),
+        content: SizedBox(
+          width: 560,
+          height: 440,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const TText(
+                'Paste a backup here to import it, or edit and save. '
+                'Invalid JSON will be rejected.',
+                style: TextStyle(fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: TextField(
+                  controller: ctrl,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  style: const TextStyle(
+                      fontSize: 11, fontFamily: 'monospace'),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(8),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const TText('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const TText('Save & Apply'),
+          ),
+        ],
+      ),
+    );
+
+    if (save != true) return;
+    // Validate JSON client-side first for a friendlier error.
+    try {
+      jsonDecode(ctrl.text);
+    } catch (e) {
+      _notify('Not valid JSON — not saved.', isError: true);
+      return;
+    }
+    try {
+      await widget.coreManager.importConfig(ctrl.text);
+      if (!mounted) return;
+      _notify('Config applied. Restart the connection if needed.');
+      // Refresh proxies list — imported config may have new proxies
+      Provider.of<AppStateModel>(context, listen: false).bumpProxyList();
+    } catch (e) {
+      final msg = e is DioException
+          ? (e.response?.data is Map
+              ? (e.response!.data['message'] ?? e.message)
+              : e.message)
+          : e.toString();
+      _notify('Import rejected: $msg', isError: true);
+    }
   }
 
   // ── Individual complex rows ────────────────────────────────────────────────

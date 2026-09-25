@@ -53,12 +53,31 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   String _autoSwitchState = ''; // 'corporate'|'direct'|'no_internet'|''
   String _autoSwitchProxyName = '';
 
+  AppStateModel? _appState;
+  int _lastProxyRevision = 0;
+
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
     refreshData();
     _loadAutoSwitchState();
+    // Listen for proxy-list changes triggered elsewhere (e.g. add from the
+    // header bar) so the list refreshes without a manual page switch.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _appState = Provider.of<AppStateModel>(context, listen: false);
+      _lastProxyRevision = _appState!.proxyListRevision;
+      _appState!.addListener(_onAppStateChanged);
+    });
+  }
+
+  void _onAppStateChanged() {
+    if (!mounted || _appState == null) return;
+    if (_appState!.proxyListRevision != _lastProxyRevision) {
+      _lastProxyRevision = _appState!.proxyListRevision;
+      refreshData();
+    }
   }
 
   Future<void> _loadAutoSwitchState() async {
@@ -165,6 +184,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   @override
   void dispose() {
     _detectTimer?.cancel();
+    _appState?.removeListener(_onAppStateChanged);
     super.dispose();
     windowManager.removeListener(this);
   }

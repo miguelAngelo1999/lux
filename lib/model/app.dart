@@ -42,4 +42,15 @@ class AppStateModel extends ChangeNotifier {
     _selectedProxyId = newSelectedProxyId;
     notifyListeners();
   }
+
+  // Bumped whenever the proxy list changes (add/import/delete) from anywhere
+  // in the UI. The proxies page listens and re-fetches so a proxy added from
+  // the header bar shows immediately without switching pages.
+  int _proxyListRevision = 0;
+  int get proxyListRevision => _proxyListRevision;
+
+  void bumpProxyList() {
+    _proxyListRevision++;
+    notifyListeners();
+  }
 }

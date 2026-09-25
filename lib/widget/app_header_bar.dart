@@ -214,7 +214,14 @@ class _State extends State<AppHeaderBar> with WindowListener {
       context: context,
       builder: (context) => ProxyEditDialog(
         coreManager: widget.coreManager,
-        onSaved: () => refreshData(),
+        onSaved: () {
+          refreshData();
+          // Notify the proxies page so a newly-added proxy shows immediately
+          // without the user having to switch pages and back.
+          if (mounted) {
+            Provider.of<AppStateModel>(context, listen: false).bumpProxyList();
+          }
+        },
       ),
     );
   }
