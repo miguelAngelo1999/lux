@@ -1,17 +1,17 @@
 {
-  "version": "1.50.62",
+  "version": "1.50.64",
   "channel": "beta",
-  "notes": "chore: update download page to v1.50.61",
+  "notes": "feat: config import/export/edit UI in Advanced settings; fix proxy list not refreshing after add from header bar",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "9e590807579b832943ce7dcf1facb36ab3eb7cd6ea87448a97d554391334416f",
-    "size": 38075661,
-    "version": "1.50.62"
+    "sha256": "cb3cf28da12203ba31b6b952d00c26b5348a0f751679644f3316b24f6f40ad2a",
+    "size": 38098486,
+    "version": "1.50.64"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "edc215f42bc1d1f787139ac2208458c94b62d116d1aa57ddd71db588779e8373",
-    "size": 37694932,
-    "version": "1.50.62"
+    "sha256": "094312cdcb23b12da1aac97600b42527f1e2645384e7ab2b424717879e0ff1b7",
+    "size": 37702473,
+    "version": "1.50.64"
   }
 }
