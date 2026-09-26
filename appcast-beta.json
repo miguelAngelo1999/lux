@@ -1,17 +1,17 @@
 {
-  "version": "1.50.64",
+  "version": "1.50.66",
   "channel": "beta",
-  "notes": "feat: config import/export/edit UI in Advanced settings; fix proxy list not refreshing after add from header bar",
+  "notes": "feat: show -beta suffix in version label when beta channel on (A); Lux boots first \u2014 Windows task priority 4 via XML, macOS RunAtLoad LaunchAgent",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "cb3cf28da12203ba31b6b952d00c26b5348a0f751679644f3316b24f6f40ad2a",
-    "size": 38098486,
-    "version": "1.50.64"
+    "sha256": "571679b0ca5e4062fe609cb7fbdc6832970b6e42e0eeb161e296fbe177556541",
+    "size": 38101628,
+    "version": "1.50.66"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "094312cdcb23b12da1aac97600b42527f1e2645384e7ab2b424717879e0ff1b7",
-    "size": 37702473,
-    "version": "1.50.64"
+    "sha256": "a15e6f248c175b479e3bfc5885b1c84448f6a89a6297963ce727b83a6bed1729",
+    "size": 37703727,
+    "version": "1.50.66"
   }
 }
