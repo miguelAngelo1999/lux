@@ -72,6 +72,41 @@ Type: filesandordirs; Name: "{localappdata}\..\Roaming\com.github.igoogolx\lux"
 ; NOTE: delete any file cautiously
 
 [Code]
+
+{ Writes the LuxApp scheduled-task XML to {tmp}\luxapp_task.xml.
+  - LogonTrigger with no <Delay> → runs immediately at logon
+  - <Priority>4</Priority> → higher than the default 7 so Lux starts first
+  - RunLevel=HighestAvailable → lux_core elevates
+  - Battery/idle conditions disabled so it always runs }
+procedure WriteLuxTaskXml();
+var
+  Xml: string;
+  ExePath: string;
+begin
+  ExePath := ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe';
+  Xml :=
+    '<?xml version="1.0" encoding="UTF-16"?>' + #13#10 +
+    '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
+    '  <RegistrationInfo><Description>Lux proxy — start first at logon</Description></RegistrationInfo>' + #13#10 +
+    '  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>' + #13#10 +
+    '  <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
+    '  <Settings>' + #13#10 +
+    '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>' + #13#10 +
+    '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>' + #13#10 +
+    '    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>' + #13#10 +
+    '    <AllowHardTerminate>true</AllowHardTerminate>' + #13#10 +
+    '    <StartWhenAvailable>true</StartWhenAvailable>' + #13#10 +
+    '    <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>' + #13#10 +
+    '    <AllowStartOnDemand>true</AllowStartOnDemand>' + #13#10 +
+    '    <Enabled>true</Enabled>' + #13#10 +
+    '    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>' + #13#10 +
+    '    <Priority>4</Priority>' + #13#10 +
+    '  </Settings>' + #13#10 +
+    '  <Actions Context="Author"><Exec><Command>' + ExePath + '</Command><Arguments>--enable-software-rendering</Arguments></Exec></Actions>' + #13#10 +
+    '</Task>';
+  SaveStringToFile(ExpandConstant('{tmp}') + '\luxapp_task.xml', Xml, False);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var ResultCode: Integer;
 begin
@@ -102,14 +137,23 @@ begin
   if CurStep = ssPostInstall then
   begin
     { Delete and recreate the LuxApp task pointing at the newly installed exe.
-      The installer runs as the current user, so the task is created for that
-      user with RunLevel=Highest so lux_core.exe gets elevated at login. }
+      Created from XML so we can set a high priority and NO start delay — Lux
+      must come up first at logon because other services depend on the proxy.
+
+      Priority 4 = interactive/high (default is 7; 0=highest, 10=lowest). The
+      /create command line cannot set priority, so we import task XML. }
     Exec('schtasks.exe', '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    WriteLuxTaskXml();
     Exec('schtasks.exe',
-      '/create /tn LuxApp /tr "\"' + ExpandConstant('{localappdata}') +
-      '\Programs\lux\lux.exe\" --enable-software-rendering"' +
-      ' /sc ONLOGON /rl HIGHEST /f',
+      '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { Fallback: if XML import failed (older Windows), use the plain command. }
+    if ResultCode <> 0 then
+      Exec('schtasks.exe',
+        '/create /tn LuxApp /tr "\"' + ExpandConstant('{localappdata}') +
+        '\Programs\lux\lux.exe\" --enable-software-rendering"' +
+        ' /sc ONLOGON /rl HIGHEST /f',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     { Launch Lux after install }
     Exec(ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe',

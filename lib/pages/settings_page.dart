@@ -88,7 +88,14 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       final ifaces = await widget.coreManager.getSettingInterfaces();
       final level = await readTelemetryLevel();
       final uuid = await readOrCreateTelemetryUuid();
-      final version = await getAppVersionString();
+      var version = await getAppVersionString();
+      // Show a "-beta" suffix in the UI when the beta channel is enabled so
+      // testers can see they're on a beta. The numeric version is unchanged —
+      // this is display-only (semver pre-release tags don't survive Flutter's
+      // macOS build, so the channel is metadata, not part of the version).
+      if (await readBetaUpdatesEnabled()) {
+        version = '$version-beta';
+      }
       final pending = await readPendingUpdateVersion();
       if (!mounted) return;
       setState(() {
@@ -443,6 +450,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   _notify(v
                       ? tl(context, 'Beta updates enabled')
                       : tl(context, 'Beta updates disabled'));
+                  // Reload so the version label picks up / drops the -beta suffix
+                  await _load();
                   if (mounted) setState(() {});
                 },
               ),

@@ -917,6 +917,35 @@ if [ -n "$USER_NAME" ] && [ -f "$REAL" ]; then
     rm -f /etc/sudoers.d/lux_core
   fi
 fi
+
+# Install a LaunchAgent so Lux starts FIRST at login — other services depend
+# on the proxy being up. A LaunchAgent with RunAtLoad loads earlier and more
+# reliably than a login item; ProcessType=Interactive gives it foreground
+# scheduling priority. This replaces the login-item approach for boot order.
+if [ -n "$USER_NAME" ]; then
+  LA_DIR="/Users/$USER_NAME/Library/LaunchAgents"
+  mkdir -p "$LA_DIR"
+  cat > "$LA_DIR/io.github.lux.boot.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.github.lux.boot</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/open</string>
+    <string>-a</string>
+    <string>/Applications/Lux.app</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+</dict>
+</plist>
+PLIST
+  chown "$USER_NAME":staff "$LA_DIR/io.github.lux.boot.plist" 2>/dev/null || true
+  chmod 644 "$LA_DIR/io.github.lux.boot.plist"
+fi
 echo "Elevation setup complete at $(date)"
 """;
 }
