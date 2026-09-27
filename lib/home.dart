@@ -19,6 +19,7 @@ import 'package:lux/util/telemetry.dart' as telem;
 import 'package:flutter/services.dart';
 import 'package:lux/util/process_manager.dart';
 import 'package:lux/widget/quick_edit_window.dart';
+import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/util/utils.dart';
 import 'package:lux/widget/progress_indicator.dart';
 import 'package:path/path.dart' as path;
@@ -372,118 +373,48 @@ class _HomeState extends State<Home>
     }
   }
 
-  /// When proxy credentials expire and ALL proxies are exhausted (the Go side
-  /// already tried switching to each one), bring the window to front and show
-  /// a dialog prompting for new credentials.
+  /// When proxy credentials expire / stop authenticating and ALL proxies are
+  /// exhausted (the Go side already tried switching to each one), bring the
+  /// window to front and open the proxy edit dialog focused on the password
+  /// field so the user can retype it. A grace timer disconnects if ignored.
   Future<void> _handleCredentialExpired(List<String> proxyIds) async {
-    // The Go side already tried every other proxy and none worked.
-    // Bring the window to front immediately.
     await windowManager.show();
     await windowManager.focus();
+    if (!mounted || coreManager == null) return;
 
-    if (!mounted) return;
-
-    // Show re-auth dialog with a grace period timer.
-    // If ignored for 5 minutes, stop the core to prevent leaking traffic
-    // with invalid credentials (some proxies log failed auth attempts).
     final proxyId = proxyIds.first;
-    final usernameController = TextEditingController();
-    final passwordController = TextEditingController();
-    bool submitted = false;
 
-    // Grace period: auto-disconnect after 5 minutes if dialog is ignored
+    // Grace period: auto-disconnect after 5 minutes if left unanswered, so we
+    // don't keep hammering the proxy with a bad password.
+    bool answered = false;
     final graceTimer = Timer(const Duration(minutes: 5), () {
-      if (!submitted && mounted) {
+      if (!answered && mounted) {
         coreManager?.stop();
         appLog('CRED-EXPIRY', 'grace period elapsed — stopped core');
-        final appState = Provider.of<AppStateModel>(context, listen: false);
-        appState.userWantsRunning = false;
+        Provider.of<AppStateModel>(context, listen: false).userWantsRunning = false;
       }
     });
 
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.key_off, size: 22, color: Colors.orange),
-          SizedBox(width: 8),
-          TText('Proxy Credentials Expired'),
-        ]),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Your timed proxy password has expired and the internet '
-              'is unreachable. Enter new credentials to reconnect.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Lux will disconnect in 5 minutes if not re-authenticated.',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: usernameController,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: tl(context, 'Username'),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: tl(context, 'New password'),
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) => Navigator.pop(ctx),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              passwordController.clear();
-              usernameController.clear();
-              Navigator.pop(ctx);
-            },
-            child: const TText('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const TText('Reconnect'),
-          ),
-        ],
-      ),
-    );
-
-    final newUsername = usernameController.text;
-    final newPassword = passwordController.text;
-    usernameController.dispose();
-    passwordController.dispose();
-    submitted = true;
-    graceTimer.cancel();
-
-    if (newPassword.isEmpty) return;
-
-    // Update the proxy credentials via the API
     try {
-      final data = <String, dynamic>{'password': newPassword};
-      if (newUsername.isNotEmpty) data['username'] = newUsername;
-      await coreManager?.updateProxy(proxyId, data);
-      // Restart to pick up new credentials
-      await coreManager?.restart();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update credentials: $e')),
-        );
-      }
+      final detail = await coreManager!.getProxyDetail(proxyId);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => ProxyEditDialog(
+          coreManager: coreManager!,
+          initialValue: detail,
+          focusPasswordForReauth: true,
+          onSaved: () async {
+            answered = true;
+            // Restart to pick up the new credentials
+            await coreManager?.restart();
+          },
+        ),
+      );
+    } finally {
+      answered = true;
+      graceTimer.cancel();
     }
   }
 

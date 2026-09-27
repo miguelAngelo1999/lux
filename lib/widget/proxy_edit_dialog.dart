@@ -2,20 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
-import 'package:lux/util/elevation_helper.dart';
 
 /// Dialog for creating or editing a proxy configuration.
 /// Supports HTTP, SOCKS5, and Shadowsocks proxy types.
+///
+/// Password model (per product requirements):
+///  - A NEW password (creating a proxy, or retyping an existing one) is the
+///    user's own fresh input, so it is freely revealable while typing — no
+///    admin auth needed.
+///  - Once a password is SAVED, it is not editable. The field shows a locked
+///    placeholder and a "Retype password" button. The stored password is never
+///    shown back.
+///  - Pressing "Retype password" clears the field and re-enters typing mode,
+///    freely revealable again.
+///  - Pressing Enter in the password field saves and closes the dialog.
 class ProxyEditDialog extends StatefulWidget {
   final CoreManager coreManager;
   final ProxyDetail? initialValue; // null = create new
   final VoidCallback onSaved;
+
+  /// When true the dialog opens focused on the password field and shows a
+  /// banner explaining the current password no longer authenticates. Used by
+  /// the credential-expiry flow.
+  final bool focusPasswordForReauth;
 
   const ProxyEditDialog({
     super.key,
     required this.coreManager,
     this.initialValue,
     required this.onSaved,
+    this.focusPasswordForReauth = false,
   });
 
   @override
@@ -24,39 +40,28 @@ class ProxyEditDialog extends StatefulWidget {
 
 class _ProxyEditDialogState extends State<ProxyEditDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _passwordCtrl = TextEditingController();
+  final _passwordFocus = FocusNode();
 
   late String _name;
   late String _server;
   late int _port;
   late String _username;
-  late String _password;
   late String _type;
   late String _passwordMode;
   late int _passwordTTLMinutes;
-  late bool _lockOnSave;
   late String _pacUrl;
 
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  bool get isEditing => widget.initialValue != null;
+  // Whether the user is entering a fresh password right now. New proxy = always
+  // true. Existing proxy = false until the user hits "Retype password".
+  bool _retyping = false;
+  // Whether the existing (edited) proxy already has a stored password.
+  bool _hasStoredPassword = false;
 
-  /// Prompts for macOS system authentication before revealing the password.
-  /// Blocks reveal entirely for one-time and timed passwords.
-  Future<bool> _authenticateToReveal() async {
-    // One-time and timed passwords must never be revealed — not even to admins
-    if (_passwordMode == 'one-time' || _passwordMode == 'timed') {
-      if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: TText('This password mode does not allow revealing the password')),
-      );
-      return false;
-    }
-    return await ElevationHelper.requestElevation(
-      message: 'Authenticate to reveal proxy password',
-      context: context,
-    );
-  }
+  bool get isEditing => widget.initialValue != null;
 
   @override
   void initState() {
@@ -66,12 +71,45 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
     _server = iv?.server ?? '';
     _port = iv?.port ?? 1080;
     _username = iv?.raw['username'] as String? ?? '';
-    _password = iv?.password ?? '';
     _type = iv?.type ?? 'http';
     _passwordMode = iv?.raw['passwordMode'] as String? ?? 'persistent';
     _passwordTTLMinutes = (iv?.raw['passwordTTLMinutes'] as num?)?.toInt() ?? 60;
-    _lockOnSave = false;
     _pacUrl = iv?.raw['pacUrl'] as String? ?? '';
+
+    _hasStoredPassword = isEditing && (iv?.password ?? '').isNotEmpty;
+    // New proxy → typing from the start. Existing proxy with a stored password
+    // → locked until the user chooses to retype. Existing proxy WITHOUT a
+    // stored password → typing from the start.
+    _retyping = !_hasStoredPassword;
+
+    // Re-auth flow: force retype mode and focus the password field.
+    if (widget.focusPasswordForReauth) {
+      _retyping = true;
+      _passwordCtrl.clear();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _passwordFocus.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _passwordCtrl.dispose();
+    _passwordFocus.dispose();
+    super.dispose();
+  }
+
+  /// Begin retyping the password from scratch: clear the field, enter typing
+  /// mode (freely revealable), and focus it.
+  void _startRetype() {
+    setState(() {
+      _retyping = true;
+      _obscurePassword = true;
+      _passwordCtrl.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _passwordFocus.requestFocus();
+    });
   }
 
   Future<void> _save() async {
@@ -86,11 +124,21 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
         'server': _server,
         'port': _port,
         'username': _username,
-        'password': _password,
         'type': _type,
         'passwordMode': _passwordMode,
         if (_pacUrl.isNotEmpty) 'pacUrl': _pacUrl,
       };
+
+      // Only send the password when the user actually typed a new one. If they
+      // left an existing proxy's password untouched (not retyping), omit it so
+      // the stored value is preserved.
+      if (_retyping) {
+        proxyData['password'] = _passwordCtrl.text;
+      } else if (isEditing) {
+        proxyData['password'] = widget.initialValue!.password ?? '';
+      } else {
+        proxyData['password'] = '';
+      }
 
       if (_passwordMode == 'timed') {
         proxyData['passwordTTLMinutes'] = _passwordTTLMinutes;
@@ -101,10 +149,6 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
         await widget.coreManager.updateProxy(widget.initialValue!.id, proxyData);
       } else {
         await widget.coreManager.addProxy(proxyData);
-      }
-
-      if (_lockOnSave && isEditing) {
-        await widget.coreManager.lockProxyPassword(widget.initialValue!.id);
       }
 
       if (mounted) {
@@ -122,11 +166,57 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
     }
   }
 
+  Widget _buildPasswordField() {
+    // Locked view: existing stored password, not retyping. Show a masked
+    // placeholder that cannot be edited, plus a "Retype password" action.
+    if (!_retyping) {
+      return InputDecorator(
+        decoration: InputDecoration(
+          labelText: tl(context, 'Password'),
+          suffixIcon: TextButton(
+            onPressed: _startRetype,
+            child: TText('Retype', style: const TextStyle(fontSize: 12)),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text('••••••••••',
+                  style: TextStyle(fontSize: 16, letterSpacing: 2)),
+            ),
+            const Icon(Icons.lock_outline, size: 16, color: Colors.grey),
+          ],
+        ),
+      );
+    }
+
+    // Typing view: the user is entering a fresh password → freely revealable,
+    // no admin auth. Enter saves and closes.
+    return TextFormField(
+      controller: _passwordCtrl,
+      focusNode: _passwordFocus,
+      decoration: InputDecoration(
+        labelText: tl(context, 'Password (optional)'),
+        helperText: _hasStoredPassword
+            ? tl(context, 'Type the new password')
+            : null,
+        suffixIcon: IconButton(
+          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+          tooltip: _obscurePassword ? 'Show' : 'Hide',
+          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+        ),
+      ),
+      obscureText: _obscurePassword,
+      textInputAction: TextInputAction.done,
+      onFieldSubmitted: (_) => _save(), // Enter saves + closes
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 450, maxHeight: 600),
+        constraints: const BoxConstraints(maxWidth: 450, maxHeight: 620),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Form(
@@ -139,13 +229,34 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                   isEditing ? 'Edit Proxy' : 'Create Proxy',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
+                if (widget.focusPasswordForReauth) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.12),
+                      border: Border.all(color: Colors.orange.shade600),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(children: [
+                      Icon(Icons.key_off, size: 16, color: Colors.orange),
+                      SizedBox(width: 6),
+                      Flexible(
+                        child: TText(
+                          'The current password no longer authenticates. '
+                          'Enter a new one to reconnect.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Flexible(
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Proxy type
                         DropdownButtonFormField<String>(
                           value: _type,
                           decoration: InputDecoration(labelText: tl(context, 'Type')),
@@ -157,14 +268,12 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           onChanged: isEditing ? null : (v) => setState(() => _type = v!),
                         ),
                         const SizedBox(height: 12),
-                        // Name
                         TextFormField(
                           initialValue: _name,
                           decoration: InputDecoration(labelText: tl(context, 'Name')),
                           onSaved: (v) => _name = v ?? '',
                         ),
                         const SizedBox(height: 12),
-                        // Server
                         TextFormField(
                           initialValue: _server,
                           decoration: InputDecoration(labelText: tl(context, 'Server')),
@@ -172,7 +281,6 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           onSaved: (v) => _server = v ?? '',
                         ),
                         const SizedBox(height: 12),
-                        // Port
                         TextFormField(
                           initialValue: _port.toString(),
                           decoration: InputDecoration(labelText: tl(context, 'Port')),
@@ -185,7 +293,6 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           onSaved: (v) => _port = int.tryParse(v ?? '') ?? 1080,
                         ),
                         const SizedBox(height: 12),
-                        // PAC URL (optional)
                         TextFormField(
                           initialValue: _pacUrl,
                           decoration: InputDecoration(
@@ -198,40 +305,14 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           onSaved: (v) => _pacUrl = v?.trim() ?? '',
                         ),
                         const SizedBox(height: 12),
-                        // Username
                         TextFormField(
                           initialValue: _username,
                           decoration: InputDecoration(labelText: tl(context, 'Username (optional)')),
                           onSaved: (v) => _username = v ?? '',
                         ),
                         const SizedBox(height: 12),
-                        // Password
-                        TextFormField(
-                          initialValue: _password,
-                          decoration: InputDecoration(
-                            labelText: tl(context, 'Password (optional)'),
-                            suffixIcon: (_passwordMode == 'one-time' || _passwordMode == 'timed')
-                                ? const Tooltip(
-                                    message: 'Password cannot be revealed in this mode',
-                                    child: Icon(Icons.lock, size: 20, color: Colors.grey),
-                                  )
-                                : IconButton(
-                                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                                    onPressed: () async {
-                                      if (_obscurePassword) {
-                                        final ok = await _authenticateToReveal();
-                                        if (ok) setState(() => _obscurePassword = false);
-                                      } else {
-                                        setState(() => _obscurePassword = true);
-                                      }
-                                    },
-                                  ),
-                          ),
-                          obscureText: _obscurePassword || _passwordMode == 'one-time' || _passwordMode == 'timed',
-                          onSaved: (v) => _password = v ?? '',
-                        ),
+                        _buildPasswordField(),
                         const SizedBox(height: 16),
-                        // Password Mode
                         DropdownButtonFormField<String>(
                           value: _passwordMode,
                           decoration: InputDecoration(labelText: tl(context, 'Password Mode')),
@@ -256,19 +337,6 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                               return null;
                             },
                             onSaved: (v) => _passwordTTLMinutes = int.tryParse(v ?? '') ?? 60,
-                          ),
-                        ],
-                        if (isEditing) ...[
-                          const SizedBox(height: 12),
-                          CheckboxListTile(
-                            value: _lockOnSave,
-                            onChanged: (v) => setState(() => _lockOnSave = v ?? false),
-                            title: const Text(
-                              'Lock password after saving',
-                              style: TextStyle(fontSize: 13, color: Colors.red),
-                            ),
-                            controlAffinity: ListTileControlAffinity.leading,
-                            contentPadding: EdgeInsets.zero,
                           ),
                         ],
                       ],
