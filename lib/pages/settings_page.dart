@@ -420,6 +420,16 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                             onPressed: () async {
                               final info = await checkForUpdate();
                               if (!mounted || info == null || !info.hasUpdate) return;
+                              // Re-sync the badge to this fresh check so it can't
+                              // show a stale version (e.g. badge said 1.50.65
+                              // while the download fetched 1.50.68). The badge
+                              // reads _pendingUpdateVersion, which may have been
+                              // persisted by an earlier background check.
+                              await writePendingUpdateVersion(info.latestVersion);
+                              if (mounted) {
+                                setState(() => _pendingUpdateVersion = info.latestVersion);
+                              }
+                              if (!mounted) return;
                               await showUpdateDialog(context, info);
                             },
                           ),
