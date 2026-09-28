@@ -1,7 +1,7 @@
 {
   "version": "1.50.67",
   "channel": "beta",
-  "notes": "feat: proxy password UX \u2014 reveal while typing (no admin), locked-unless-retyped, Enter saves+closes, re-auth opens edit dialog focused on password",
+  "notes": "release (beta): 1.50.67 \u2014 proxy password UX + 407 retype trigger",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
     "sha256": "892cc9dd5b4944023f4f899f95ec16d8174d4a2697c7942f5ba0a42e2e89a90b",
@@ -10,8 +10,8 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "97e085412352e228d6b7af1ceba49d6ecdaf675eade552bd2ac98ef33afb58d2",
-    "size": 37679150,
+    "sha256": "81f0487974f72133f5dd877e6343a589fb7448540320f3aa3d3e1d10c07d9bd0",
+    "size": 37679105,
     "version": "1.50.67"
   }
 }

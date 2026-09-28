@@ -18,7 +18,9 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableFinishedPage=yes
-AppMutex=lux.app.mutex,Global\lux.app.mutex
+; Do NOT set AppMutex — it makes Inno show a blocking "please close Lux" prompt
+; and refuses to continue while Lux is running, BEFORE our [Code] kill logic can
+; run. Instead we kill Lux in InitializeSetup() (runs first, before any prompt).
 ; Do NOT use CloseApplications=force — it shows a "please close" dialog for
 ; lux_core.exe because Inno cannot kill a SYSTEM-owned process. The [Code]
 ; section handles killing via schtasks /end (the only way to stop SYSTEM procs).
@@ -107,31 +109,46 @@ begin
   SaveStringToFile(ExpandConstant('{tmp}') + '\luxapp_task.xml', Xml, False);
 end;
 
+{ Kills all running Lux processes. lux_core.exe runs as SYSTEM via the LuxApp
+  scheduled task, and a user-level taskkill CANNOT kill a SYSTEM process, so we
+  MUST stop the task first (schtasks /end), then kill the remaining processes.
+  This order is permanent and must not be changed. }
+procedure KillLux();
+var ResultCode: Integer;
+begin
+  { Step 1: Stop the LuxApp scheduled task — this terminates lux_core.exe }
+  Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(2000);
+
+  { Step 2: Kill any remaining process instances }
+  Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM lux_launcher.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1000);
+
+  { Step 3: Second pass in case anything restarted }
+  Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(500);
+end;
+
+{ Runs BEFORE the wizard shows anything. Killing Lux here (rather than at
+  ssInstall) means there is no running instance to block the install — this is
+  why we removed AppMutex, which would otherwise prompt "please close Lux". }
+function InitializeSetup(): Boolean;
+begin
+  KillLux();
+  Result := True;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var ResultCode: Integer;
 begin
   if CurStep = ssInstall then
   begin
-    { ── Kill running Lux processes before installing ──────────────────────
-      lux_core.exe runs as SYSTEM via the LuxApp scheduled task.
-      A user-level taskkill CANNOT kill a SYSTEM process, so we MUST stop
-      the task first, then kill the remaining processes.
-      This order is permanent and must not be changed. }
-
-    { Step 1: Stop the LuxApp scheduled task — this terminates lux_core.exe }
-    Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(2000);
-
-    { Step 2: Kill any remaining process instances }
-    Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec('taskkill.exe', '/F /IM lux_launcher.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(1000);
-
-    { Step 3: Second pass in case anything restarted }
-    Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(500);
+    { Safety net: kill again right before files are written, in case the app
+      auto-restarted between InitializeSetup and now. }
+    KillLux();
   end;
 
   if CurStep = ssPostInstall then
