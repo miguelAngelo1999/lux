@@ -1,7 +1,15 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
+
+/// Thrown by a reconnect/validation step when the freshly-saved credentials
+/// fail to authenticate through the proxy. Carries no raw server body, so the
+/// dialog shows a clean "wrong password" message instead of an HTML 500 page.
+class ReauthFailed implements Exception {
+  const ReauthFailed();
+}
 
 /// Dialog for creating or editing a proxy configuration.
 /// Supports HTTP, SOCKS5, and Shadowsocks proxy types.
@@ -26,12 +34,20 @@ class ProxyEditDialog extends StatefulWidget {
   /// the credential-expiry flow.
   final bool focusPasswordForReauth;
 
+  /// Optional action run AFTER the proxy is saved but BEFORE the dialog closes
+  /// (used by the credential-expiry flow to restart the core with the new
+  /// credentials). If it throws, the dialog stays open with an error so the
+  /// user can correct the password and retry — instead of closing and giving
+  /// up. Awaited inside _save().
+  final Future<void> Function()? reconnectAfterSave;
+
   const ProxyEditDialog({
     super.key,
     required this.coreManager,
     this.initialValue,
     required this.onSaved,
     this.focusPasswordForReauth = false,
+    this.reconnectAfterSave,
   });
 
   @override
@@ -151,19 +167,71 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
         await widget.coreManager.addProxy(proxyData);
       }
 
+      // Reconnect (restart the core) BEFORE closing, so a failure keeps the
+      // dialog open for a retry instead of closing and giving up. Only the
+      // credential-expiry flow passes this; other callers close immediately.
+      if (widget.reconnectAfterSave != null) {
+        await widget.reconnectAfterSave!();
+      }
+
       if (mounted) {
         widget.onSaved();
         Navigator.of(context).pop();
       }
     } catch (e) {
+      // Keep the dialog OPEN on failure. Re-enter typing mode and focus the
+      // password so the user can immediately correct it — the whole point of
+      // the credential-expiry flow. Show a short, human message, never the raw
+      // HTML error body a proxy/core 500 returns.
       if (mounted) {
+        setState(() {
+          _retyping = true;
+          _obscurePassword = true;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _passwordFocus.requestFocus();
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save: $e')),
+          SnackBar(
+            content: Text(_friendlyError(e)),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 6),
+          ),
         );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Turns a raw exception (which for a proxy/core 500 can be a whole HTML
+  /// error page) into one short line. Never surface HTML or a stack of headers
+  /// to the user.
+  String _friendlyError(Object e) {
+    if (e is ReauthFailed) {
+      return tl(context, 'That password didn\'t work — please try again.');
+    }
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 407 || code == 401) {
+        return tl(context, 'Wrong password — please try again.');
+      }
+      if (code != null) {
+        return tl(context, 'Could not reconnect (error $code). '
+            'Check the password and try again.');
+      }
+      // timeout / no response
+      return tl(context, 'Could not reach the proxy. '
+          'Check the password and your connection, then try again.');
+    }
+    // Fallback: first line only, stripped of any HTML.
+    var msg = e.toString().replaceAll(RegExp(r'<[^>]*>'), ' ').trim();
+    final nl = msg.indexOf('\n');
+    if (nl > 0) msg = msg.substring(0, nl);
+    if (msg.length > 140) msg = '${msg.substring(0, 140)}…';
+    return msg.isEmpty
+        ? tl(context, 'Could not save. Please try again.')
+        : msg;
   }
 
   Widget _buildPasswordField() {

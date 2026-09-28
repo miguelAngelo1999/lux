@@ -405,10 +405,29 @@ class _HomeState extends State<Home>
           coreManager: coreManager!,
           initialValue: detail,
           focusPasswordForReauth: true,
-          onSaved: () async {
+          // After saving, VALIDATE the new password by actually testing an
+          // authenticated request through the proxy (the /proxies/delay test),
+          // rather than doing a blind full process restart. The old code did a
+          // fire-and-forget restart() whose transient 500 (HTML error page)
+          // escaped to the global error handler as the raw "500 + firefox"
+          // message, and closed the dialog even on success/failure alike.
+          //
+          // testProxyDelay returns >=0 when the proxy authenticates and answers,
+          // and -1 on any failure (wrong password / 407 / unreachable). On -1 we
+          // throw so _save() keeps the dialog open and asks the user to retype.
+          reconnectAfterSave: () async {
+            final mgr = coreManager;
+            if (mgr == null) return;
+            // The core's updateProxy already restarted the tunnel manager with
+            // the new credentials; give it a beat to come up, then probe.
+            await Future.delayed(const Duration(milliseconds: 400));
+            final delay = await mgr.testProxyDelay(proxyId);
+            if (delay < 0) {
+              throw const ReauthFailed();
+            }
+          },
+          onSaved: () {
             answered = true;
-            // Restart to pick up the new credentials
-            await coreManager?.restart();
           },
         ),
       );
