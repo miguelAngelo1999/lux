@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_config.dart';
@@ -122,7 +123,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _error('Could not load rules: $e');
+        _error('${tl(context, 'Could not load rules')}: ${_friendlyRuleError(e)}');
       }
     }
   }
@@ -162,11 +163,34 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       await action();
       await _load();
     } catch (e) {
-      _error('$e');
+      _error(_friendlyRuleError(e));
       await _load();
     } finally {
       if (mounted) setState(() => _busy.remove(id));
     }
+  }
+
+  /// Short, human message for a failed rule action. A 404 here means the UI
+  /// acted on a rule/group that no longer exists on the core (stale list) — we
+  /// reload right after, so the list self-heals; the user just needs a readable
+  /// note, not the raw multi-line DioException dump.
+  String _friendlyRuleError(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 404) {
+        return tl(context, 'That rule no longer exists — the list was refreshed.');
+      }
+      // Prefer the core's JSON error message if present.
+      final data = e.response?.data;
+      if (data is Map && data['message'] is String) {
+        return data['message'] as String;
+      }
+      if (code != null) {
+        return tl(context, 'Could not apply the change (error $code).');
+      }
+      return tl(context, 'Could not reach the proxy engine. Please try again.');
+    }
+    return tl(context, 'Could not apply the change. Please try again.');
   }
 
   Future<void> _toggle(CustomizedRuleItem item) async {
