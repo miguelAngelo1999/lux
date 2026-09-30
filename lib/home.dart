@@ -306,7 +306,23 @@ class _HomeState extends State<Home>
                 }
               }
           }
-        });
+        },
+          // When the core restarts (e.g. saving a proxy calls manager.Close()+
+          // Start() server-side), this WebSocket drops. Without onError/onDone
+          // the resulting stream error was unhandled and escaped to the global
+          // PlatformDispatcher handler. Swallow it and drop the stale channel so
+          // it reconnects on next core-ready, instead of surfacing a crash-like
+          // error to the user.
+          onError: (Object e) {
+            appLog('EVENT', 'event channel error (core restart?): $e');
+            eventChannel = null;
+          },
+          onDone: () {
+            appLog('EVENT', 'event channel closed');
+            eventChannel = null;
+          },
+          cancelOnError: true,
+        );
       });
     }
   }

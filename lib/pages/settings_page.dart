@@ -12,6 +12,7 @@ import 'package:lux/util/t_text.dart';
 import 'package:lux/util/telemetry.dart' as telem;
 import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
 import 'package:lux/widget/setting_tiles.dart';
+import 'package:version/version.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -88,7 +89,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       final ifaces = await widget.coreManager.getSettingInterfaces();
       final level = await readTelemetryLevel();
       final uuid = await readOrCreateTelemetryUuid();
-      var version = await getAppVersionString();
+      final rawVersion = await getAppVersionString();
+      var version = rawVersion;
       // Show a "-beta" suffix in the UI when the beta channel is enabled so
       // testers can see they're on a beta. The numeric version is unchanged —
       // this is display-only (semver pre-release tags don't survive Flutter's
@@ -96,7 +98,18 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (await readBetaUpdatesEnabled()) {
         version = '$version-beta';
       }
-      final pending = await readPendingUpdateVersion();
+      var pending = await readPendingUpdateVersion();
+      // Clear a STALE pending version: after the app updates, the persisted
+      // "pending" still points at the version we just installed (or older),
+      // which made the tile show "Update available" with an Update button that
+      // did nothing (checkForUpdate finds nothing newer and returns silently).
+      // Compare against the raw numeric version (not the -beta display string).
+      if (pending != null && pending.isNotEmpty) {
+        if (!_isNewerThanCurrent(pending, rawVersion)) {
+          await writePendingUpdateVersion(null);
+          pending = null;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _setting = setting;
@@ -111,6 +124,18 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (!mounted) return;
       setState(() => _isLoading = false);
       _notify('Could not load settings: $e', isError: true);
+    }
+  }
+
+  /// True if [candidate] is a strictly newer semver than [current]. Used to
+  /// decide whether a persisted "pending update" is still real or is stale
+  /// (already installed). Falls back to string inequality if either can't be
+  /// parsed, so a malformed value never wrongly suppresses a real update.
+  bool _isNewerThanCurrent(String candidate, String current) {
+    try {
+      return Version.parse(candidate).compareTo(Version.parse(current)) > 0;
+    } catch (_) {
+      return candidate != current;
     }
   }
 
