@@ -444,12 +444,23 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                             ),
                             onPressed: () async {
                               final info = await checkForUpdate();
-                              if (!mounted || info == null || !info.hasUpdate) return;
+                              if (!mounted) return;
+                              // No genuinely newer version (the pending badge was
+                              // stale). Clear it so the tile reverts to
+                              // "Check for Updates" and tell the user they're
+                              // current — instead of an "Update" button that
+                              // silently does nothing.
+                              if (info == null || !info.hasUpdate) {
+                                await writePendingUpdateVersion(null);
+                                if (mounted) {
+                                  setState(() => _pendingUpdateVersion = '');
+                                  _notify(tl(context, 'You are up to date'));
+                                }
+                                return;
+                              }
                               // Re-sync the badge to this fresh check so it can't
                               // show a stale version (e.g. badge said 1.50.65
-                              // while the download fetched 1.50.68). The badge
-                              // reads _pendingUpdateVersion, which may have been
-                              // persisted by an earlier background check.
+                              // while the download fetched 1.50.68).
                               await writePendingUpdateVersion(info.latestVersion);
                               if (mounted) {
                                 setState(() => _pendingUpdateVersion = info.latestVersion);
