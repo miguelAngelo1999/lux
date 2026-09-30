@@ -1,17 +1,17 @@
 {
-  "version": "1.50.68",
+  "version": "1.50.70",
   "channel": "beta",
-  "notes": "fix(windows): kill Lux in InitializeSetup, drop AppMutex so installer no longer refuses to install while Lux is running",
+  "notes": "fix(rules): show friendly message on rule action error instead of raw DioException",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "44b1c2c3278eba6936b6e97e1cf763e192a27ec3e56b08c3fa77aefd9fa69cf3",
-    "size": 38055922,
-    "version": "1.50.68"
+    "sha256": "af9964fa7996a8cd3f38a1c6bc3ef489baf61ca42895afe7575f12507c89754a",
+    "size": 38058832,
+    "version": "1.50.70"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "ae0623cbd937b9fdecc044511ca4c54776432e5f2239ca45608768029b0bc8ea",
-    "size": 37683308,
-    "version": "1.50.68"
+    "sha256": "8386750a8539024ca2815aac51cef3f21ea2e68f40d5e943c65f508adba2f2b9",
+    "size": 37684478,
+    "version": "1.50.70"
   }
 }
