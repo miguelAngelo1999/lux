@@ -1,17 +1,17 @@
 {
-  "version": "1.50.70",
+  "version": "1.50.71",
   "channel": "beta",
-  "notes": "fix(rules): show friendly message on rule action error instead of raw DioException",
+  "notes": "build(macos): force Pods MACOSX_DEPLOYMENT_TARGET to 12.0 for Xcode 27",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "af9964fa7996a8cd3f38a1c6bc3ef489baf61ca42895afe7575f12507c89754a",
-    "size": 38058832,
-    "version": "1.50.70"
+    "sha256": "6a0ecf588b9fdcede5ff3505994acdbe882ee2751a5bb169e4aed16ce3c7fd7c",
+    "size": 37965432,
+    "version": "1.50.71"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "8386750a8539024ca2815aac51cef3f21ea2e68f40d5e943c65f508adba2f2b9",
-    "size": 37684478,
-    "version": "1.50.70"
+    "sha256": "66eda7615a7b37bc4057c5c2ad48c5130c7a105ce9588da39da2f62cf54ebef2",
+    "size": 37684587,
+    "version": "1.50.71"
   }
 }
