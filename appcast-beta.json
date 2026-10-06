@@ -1,17 +1,17 @@
 {
-  "version": "1.50.71",
+  "version": "1.50.72",
   "channel": "beta",
-  "notes": "build(macos): force Pods MACOSX_DEPLOYMENT_TARGET to 12.0 for Xcode 27",
+  "notes": "release (beta): 1.50.71 \u2014 widened Windows CA export (Root+CA+AuthRoot stores)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "6a0ecf588b9fdcede5ff3505994acdbe882ee2751a5bb169e4aed16ce3c7fd7c",
-    "size": 37965432,
-    "version": "1.50.71"
+    "sha256": "389fc15247968a1a3728a5ac083fbfe1eadd573ce61c1b643c5cf2ac266e869e",
+    "size": 37965472,
+    "version": "1.50.72"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "66eda7615a7b37bc4057c5c2ad48c5130c7a105ce9588da39da2f62cf54ebef2",
-    "size": 37684587,
-    "version": "1.50.71"
+    "sha256": "8d0dd7bfbb70e7398d8892670f5aa268cba63c6924bda7cb5802dea6b6777eeb",
+    "size": 37685314,
+    "version": "1.50.72"
   }
 }
