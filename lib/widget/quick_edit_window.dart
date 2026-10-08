@@ -85,6 +85,18 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
       updated['username'] = _username;
       updated['password'] = _password;
       await widget.coreManager.updateProxy(_selectedId, updated);
+      // Select the edited proxy as active and turn Lux on so saving the
+      // credentials immediately connects (user expects Save = start).
+      try {
+        await widget.coreManager.selectProxy(_selectedId);
+      } catch (_) {}
+      try {
+        final isStarted =
+            await widget.coreManager.getIsStarted().catchError((_) => false);
+        if (!isStarted) {
+          await widget.coreManager.start();
+        }
+      } catch (_) {}
       widget.onDone();
     } catch (e) {
       setState(() => _error = e.toString());
@@ -182,6 +194,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
                     // Username
                     TextFormField(
                       initialValue: _username,
+                      autofocus: true,
                       decoration: _inputDecoration(tl(context, 'Username'), isDark),
                       style: const TextStyle(fontSize: 13),
                       onChanged: (v) => _username = v,
