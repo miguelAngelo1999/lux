@@ -1,17 +1,17 @@
 {
-  "version": "1.50.72",
+  "version": "1.50.74",
   "channel": "beta",
-  "notes": "release (beta): 1.50.71 \u2014 widened Windows CA export (Root+CA+AuthRoot stores)",
+  "notes": "feat(quick-edit): Save selects proxy + starts Lux; autofocus username",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "389fc15247968a1a3728a5ac083fbfe1eadd573ce61c1b643c5cf2ac266e869e",
-    "size": 37965472,
-    "version": "1.50.72"
+    "sha256": "94b862d80c582995d132843353ac665743220ddb27e55691f7b69f31cdf8386c",
+    "size": 37973339,
+    "version": "1.50.74"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "8d0dd7bfbb70e7398d8892670f5aa268cba63c6924bda7cb5802dea6b6777eeb",
-    "size": 37685314,
-    "version": "1.50.72"
+    "sha256": "5bc43eabaf975898f4ea5a31ab7b5e6c603c3018377367d84827d12cd9a9da68",
+    "size": 37701103,
+    "version": "1.50.74"
   }
 }
