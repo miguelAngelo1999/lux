@@ -1,17 +1,17 @@
 {
-  "version": "1.50.74",
+  "version": "1.50.75",
   "channel": "beta",
-  "notes": "feat(quick-edit): Save selects proxy + starts Lux; autofocus username",
+  "notes": "release (beta): 1.50.74 \u2014 quick-edit Save starts Lux, proxy exception list preserved + DIRECT rules bypass",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "94b862d80c582995d132843353ac665743220ddb27e55691f7b69f31cdf8386c",
-    "size": 37973339,
-    "version": "1.50.74"
+    "sha256": "0705c58f500d40ea1d92bf2ae28e82627ae4c14773d071b5255c2fe007c9face",
+    "size": 37973164,
+    "version": "1.50.75"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "5bc43eabaf975898f4ea5a31ab7b5e6c603c3018377367d84827d12cd9a9da68",
-    "size": 37701103,
-    "version": "1.50.74"
+    "sha256": "90ec3c312a12a7c2d86bd7f0fa1ac7808c98a2bdc4bde5e69d929f8f5bc1038d",
+    "size": 37701346,
+    "version": "1.50.75"
   }
 }
