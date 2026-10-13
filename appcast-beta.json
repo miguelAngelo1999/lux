@@ -1,17 +1,17 @@
 {
-  "version": "1.50.75",
+  "version": "1.50.76",
   "channel": "beta",
-  "notes": "release (beta): 1.50.74 \u2014 quick-edit Save starts Lux, proxy exception list preserved + DIRECT rules bypass",
+  "notes": "feat(ui): intuitive mode chooser + create-rule-from-search",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "0705c58f500d40ea1d92bf2ae28e82627ae4c14773d071b5255c2fe007c9face",
-    "size": 37973164,
-    "version": "1.50.75"
+    "sha256": "b956b50c6d3b8dad7bfefb43fa4ce839e2b2310e77bcf56d74b66fd2ab78ad5f",
+    "size": 37982140,
+    "version": "1.50.76"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "90ec3c312a12a7c2d86bd7f0fa1ac7808c98a2bdc4bde5e69d929f8f5bc1038d",
-    "size": 37701346,
-    "version": "1.50.75"
+    "sha256": "3057ba0d38096e3f1564f33d1cc39d200c65e297c257f2b22668e8a9f4b4f249",
+    "size": 37705671,
+    "version": "1.50.76"
   }
 }
