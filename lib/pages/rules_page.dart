@@ -237,9 +237,10 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
         () => widget.coreManager.toggleRuleGroup(g.id));
   }
 
-  Future<void> _showAddEdit({CustomizedRuleItem? item}) async {
+  Future<void> _showAddEdit({CustomizedRuleItem? item, String? initialPayload}) async {
     String ruleType = item?.ruleType ?? 'DOMAIN';
-    String payload = item?.payload ?? '';
+    // When creating a rule, seed the payload from the search term if given.
+    String payload = item?.payload ?? initialPayload ?? '';
     String policy = item?.policy ?? 'PROXY';
     String network = item?.network ?? '';
 
@@ -434,6 +435,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       children: [
         _toolbar(visibleCount, brokenCount),
         const Divider(height: 1),
+        if (_search.isNotEmpty) _createFromSearchBanner(visibleCount),
         Expanded(
           child: _rules.isEmpty
               ? const Center(child: TText('No rules yet'))
@@ -443,6 +445,52 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 ),
         ),
       ],
+    );
+  }
+
+  /// Shown under the search bar whenever a term is typed: a one-tap "create a
+  /// rule using this term as the payload" action. Emphasized (and labeled "no
+  /// matches") when the search finds nothing, so searching for a domain that
+  /// isn't ruled yet flows straight into creating a rule for it.
+  Widget _createFromSearchBanner(int visibleCount) {
+    final term = _searchCtrl.text.trim();
+    if (term.isEmpty) return const SizedBox.shrink();
+    final noMatches = visibleCount == 0;
+    return Material(
+      color: noMatches
+          ? Theme.of(context).colorScheme.primary.withAlpha(24)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: () => _showAddEdit(initialPayload: term),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.add_circle_outline,
+                  size: 16, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: tl(context, 'Create rule for ')),
+                    TextSpan(
+                        text: '"$term"',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    if (noMatches)
+                      TextSpan(
+                          text: '  (${tl(context, 'no matches')})',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(context).hintColor)),
+                  ]),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 16),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -463,9 +511,26 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   border: const OutlineInputBorder(),
                   suffixIcon: _search.isEmpty
                       ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear, size: 14),
-                          onPressed: () => _searchCtrl.clear(),
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Create a rule using the current search term as the
+                            // payload — fast path for "I searched for a domain,
+                            // it's not there, make a rule for it".
+                            IconButton(
+                              tooltip: tl(context, 'Create rule for this term'),
+                              icon: const Icon(Icons.add_circle_outline, size: 16),
+                              onPressed: () {
+                                final term = _searchCtrl.text.trim();
+                                if (term.isEmpty) return;
+                                _showAddEdit(initialPayload: term);
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.clear, size: 14),
+                              onPressed: () => _searchCtrl.clear(),
+                            ),
+                          ],
                         ),
                 ),
                 style: const TextStyle(fontSize: 12),

@@ -148,8 +148,46 @@ class _State extends State<AppHeaderBar> with WindowListener {
         return tr().bypassCNRuleLabel;
       case "bypass_all":
         return tr().bypassAllRuleLabel;
+      case "bypass_except_proxy":
+        return tl(context, 'Bypass (keep proxy rules)');
       default:
         return name;
+    }
+  }
+
+  // One-line description shown under each mode in the chooser so it's obvious
+  // what each does without trial and error.
+  String getRuleDescription(String name) {
+    switch (name) {
+      case "proxy_all":
+        return tl(context, 'Everything through the proxy');
+      case "proxy_gfw":
+        return tl(context, 'Proxy blocked sites, rest direct');
+      case "bypass_cn":
+        return tl(context, 'Direct for local sites, proxy the rest');
+      case "bypass_all":
+        return tl(context, 'Everything direct (ads still blocked)');
+      case "bypass_except_proxy":
+        return tl(context, 'Direct, but your per-proxy rules still apply');
+      default:
+        return '';
+    }
+  }
+
+  IconData getRuleIcon(String name) {
+    switch (name) {
+      case "proxy_all":
+        return Icons.shield;
+      case "proxy_gfw":
+        return Icons.public;
+      case "bypass_cn":
+        return Icons.home_outlined;
+      case "bypass_all":
+        return Icons.flash_on;
+      case "bypass_except_proxy":
+        return Icons.alt_route;
+      default:
+        return Icons.rule;
     }
   }
 
@@ -231,8 +269,25 @@ class _State extends State<AppHeaderBar> with WindowListener {
     final List<DropdownMenuEntry<String>> menuEntries =
         UnmodifiableListView<DropdownMenuEntry<String>>(
       ruleList.rules.map<DropdownMenuEntry<String>>((String name) {
-        String label = getRuleLabel(name);
-        return DropdownMenuEntry(value: name, label: label);
+        final String label = getRuleLabel(name);
+        final String desc = getRuleDescription(name);
+        return DropdownMenuEntry(
+          value: name,
+          label: label,
+          leadingIcon: Icon(getRuleIcon(name), size: 18),
+          // Rich label: mode name + a one-line description underneath, so the
+          // chooser explains each mode instead of showing bare names.
+          labelWidget: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              if (desc.isNotEmpty)
+                Text(desc,
+                    style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
+            ],
+          ),
+        );
       }),
     );
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
