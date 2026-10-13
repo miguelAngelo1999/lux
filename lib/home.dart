@@ -61,6 +61,19 @@ class _HomeState extends State<Home>
   dynamic coreError;
   bool _quickEditMode = false;
   Timer? _watchdogTimer;
+  // Mirrors AppStateModel.isStarted so the tray tooltip can be refreshed the
+  // moment the live connection state changes (auto-connect, watchdog restart,
+  // net-switch), not only on explicit user actions. Prevents the tray showing
+  // a stale "Disconnected" while actually connected.
+  AppStateModel? _appStateForTray;
+  bool? _lastTrayConnected;
+  void _onAppStateChanged() {
+    final s = _appStateForTray;
+    if (s == null) return;
+    if (_lastTrayConnected == s.isStarted) return;
+    _lastTrayConnected = s.isStarted;
+    _refreshTray();
+  }
   // Connectivity subscription for auto-switch trigger
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   // Auto-switch trigger debounce timer
@@ -115,6 +128,11 @@ class _HomeState extends State<Home>
 
   void _init(AppStateModel appState) async {
     trayManager.addListener(this);
+    // Refresh the tray whenever the live connection state changes, so the
+    // tooltip never goes stale (false "Disconnected" while connected).
+    _appStateForTray = appState;
+    _lastTrayConnected = appState.isStarted;
+    appState.addListener(_onAppStateChanged);
     await windowManager.setPreventClose(true);
     var corePath = path.join(Paths.assetsBin.path, LuxCoreName.name);
     var curHomeDir = await getHomeDir();
@@ -163,7 +181,9 @@ class _HomeState extends State<Home>
     });
 
     if (Platform.isWindows || Platform.isMacOS) {
-      initSystemTray();
+      // _refreshTray() builds the tray with the real connection state. Do NOT
+      // precede it with a bare initSystemTray() — that defaults
+      // isConnected:false and flashes a wrong "Disconnected" tooltip.
       _refreshTray();
     }
 
@@ -229,7 +249,10 @@ class _HomeState extends State<Home>
                 }
                 appState.updateLocale(convertLocale(message['value']));
                 if (Platform.isWindows) {
-                  initSystemTray();
+                  // Rebuild via _refreshTray so the tooltip keeps the REAL
+                  // connection state. A bare initSystemTray() defaults
+                  // isConnected:false and wrongly showed "Disconnected".
+                  _refreshTray();
                 }
               }
             case "set_auto_launch":
@@ -465,6 +488,7 @@ class _HomeState extends State<Home>
     _watchdogTimer?.cancel();
     _connectivitySub?.cancel();
     _autoSwitchDebounce?.cancel();
+    _appStateForTray?.removeListener(_onAppStateChanged);
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     powerMonitor.removeListener(this);
