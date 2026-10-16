@@ -1,17 +1,17 @@
 {
-  "version": "1.50.76",
+  "version": "1.50.77",
   "channel": "beta",
-  "notes": "feat(ui): intuitive mode chooser + create-rule-from-search",
+  "notes": "feat(ui): allow PAC-only proxy (blank Server + PAC URL)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "b956b50c6d3b8dad7bfefb43fa4ce839e2b2310e77bcf56d74b66fd2ab78ad5f",
-    "size": 37982140,
-    "version": "1.50.76"
+    "sha256": "f7f292d12cebbd0a457c55ef0a70874adb2cafd5a6dd2520e4f738b298a16516",
+    "size": 37997432,
+    "version": "1.50.77"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "3057ba0d38096e3f1564f33d1cc39d200c65e297c257f2b22668e8a9f4b4f249",
-    "size": 37705671,
-    "version": "1.50.76"
+    "sha256": "bc36bcc4b7dd87919b012997f2985be206e050106553c2d86e6fdc3737afbbf5",
+    "size": 27310029,
+    "version": "1.50.77"
   }
 }
