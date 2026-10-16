@@ -7,7 +7,7 @@ import sys
 
 TEMPLATE = r"windows\packaging\exe\setup.iss"
 OUT = r"dist-setup.iss"
-VERSION = "1.50.77"
+VERSION = "1.50.78"
 
 # Values from windows/packaging/exe/make_config.yaml + Flutter build layout.
 TOKENS = {

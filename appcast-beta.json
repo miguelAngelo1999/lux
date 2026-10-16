@@ -1,17 +1,17 @@
 {
-  "version": "1.50.77",
+  "version": "1.50.78",
   "channel": "beta",
-  "notes": "feat(ui): allow PAC-only proxy (blank Server + PAC URL)",
+  "notes": "feat(ui): mode chooser is a cycle button with a Dock-style fan",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "f7f292d12cebbd0a457c55ef0a70874adb2cafd5a6dd2520e4f738b298a16516",
-    "size": 37997432,
-    "version": "1.50.77"
+    "sha256": "59d9e9bbd2a3a9b09471b91054ffe7c0a16f440e50aed89b36d3985a675082fe",
+    "size": 45006011,
+    "version": "1.50.78"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "bc36bcc4b7dd87919b012997f2985be206e050106553c2d86e6fdc3737afbbf5",
-    "size": 27310029,
-    "version": "1.50.77"
+    "sha256": "77e653abe52afcb6db1b7dee614cdf61bb11e26da0651a99607c5b29ead4f630",
+    "size": 27260832,
+    "version": "1.50.78"
   }
 }
