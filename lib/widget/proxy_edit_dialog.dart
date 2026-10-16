@@ -58,6 +58,8 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
   final _formKey = GlobalKey<FormState>();
   final _passwordCtrl = TextEditingController();
   final _passwordFocus = FocusNode();
+  final _pacCtrl = TextEditingController();
+  final _serverCtrl = TextEditingController();
 
   late String _name;
   late String _server;
@@ -91,6 +93,8 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
     _passwordMode = iv?.raw['passwordMode'] as String? ?? 'persistent';
     _passwordTTLMinutes = (iv?.raw['passwordTTLMinutes'] as num?)?.toInt() ?? 60;
     _pacUrl = iv?.raw['pacUrl'] as String? ?? '';
+    _pacCtrl.text = _pacUrl;
+    _serverCtrl.text = _server;
 
     _hasStoredPassword = isEditing && (iv?.password ?? '').isNotEmpty;
     // New proxy → typing from the start. Existing proxy with a stored password
@@ -112,8 +116,16 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
   void dispose() {
     _passwordCtrl.dispose();
     _passwordFocus.dispose();
+    _pacCtrl.dispose();
+    _serverCtrl.dispose();
     super.dispose();
   }
+
+  /// True when this is a PAC-only proxy: the user supplied a PAC URL and left
+  /// the Server blank. The PAC then supplies the upstream address per
+  /// connection, so Server/Port are not required.
+  bool get _isPacOnly =>
+      _pacCtrl.text.trim().isNotEmpty && _serverCtrl.text.trim().isEmpty;
 
   /// Begin retyping the password from scratch: clear the field, enter typing
   /// mode (freely revealable), and focus it.
@@ -343,17 +355,41 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
-                          initialValue: _server,
-                          decoration: InputDecoration(labelText: tl(context, 'Server')),
-                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                          controller: _serverCtrl,
+                          decoration: InputDecoration(
+                            labelText: _isPacOnly
+                                ? tl(context, 'Server (from PAC)')
+                                : tl(context, 'Server'),
+                            hintText: _isPacOnly
+                                ? tl(context, 'Supplied by the PAC URL below')
+                                : null,
+                          ),
+                          enabled: !_isPacOnly,
+                          // Required UNLESS a PAC URL is set (PAC-only proxy):
+                          // then the PAC supplies the upstream per connection.
+                          validator: (v) {
+                            if (_pacCtrl.text.trim().isNotEmpty) return null;
+                            return (v == null || v.isEmpty) ? 'Required' : null;
+                          },
+                          onChanged: (_) => setState(() {}),
                           onSaved: (v) => _server = v ?? '',
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
                           initialValue: _port.toString(),
-                          decoration: InputDecoration(labelText: tl(context, 'Port')),
+                          decoration: InputDecoration(
+                            labelText: _isPacOnly
+                                ? tl(context, 'Port (from PAC)')
+                                : tl(context, 'Port'),
+                          ),
+                          enabled: !_isPacOnly,
                           keyboardType: TextInputType.number,
                           validator: (v) {
+                            // PAC-only: port comes from the PAC directive.
+                            if (_pacCtrl.text.trim().isNotEmpty &&
+                                _serverCtrl.text.trim().isEmpty) {
+                              return null;
+                            }
                             final p = int.tryParse(v ?? '');
                             if (p == null || p < 1 || p > 65535) return 'Invalid port';
                             return null;
@@ -362,14 +398,19 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
-                          initialValue: _pacUrl,
+                          controller: _pacCtrl,
                           decoration: InputDecoration(
                             labelText: tl(context, 'PAC URL (optional)'),
                             hintText: 'http://proxy.company.com/proxy.pac',
-                            helperText: tl(context, 'Auto-config script to decide when to use this proxy'),
-                            helperMaxLines: 2,
+                            helperText: _isPacOnly
+                                ? tl(context, 'PAC-only: this PAC picks the upstream proxy per site. '
+                                    'Any username/password below is used for every proxy it selects.')
+                                : tl(context, 'Leave Server blank to use the PAC alone, or set a Server to '
+                                    'gate that server with this PAC.'),
+                            helperMaxLines: 3,
                           ),
                           keyboardType: TextInputType.url,
+                          onChanged: (_) => setState(() {}),
                           onSaved: (v) => _pacUrl = v?.trim() ?? '',
                         ),
                         const SizedBox(height: 12),
