@@ -1,10 +1,10 @@
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
+import 'package:lux/widget/mode_fan_button.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -266,30 +266,6 @@ class _State extends State<AppHeaderBar> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    final List<DropdownMenuEntry<String>> menuEntries =
-        UnmodifiableListView<DropdownMenuEntry<String>>(
-      ruleList.rules.map<DropdownMenuEntry<String>>((String name) {
-        final String label = getRuleLabel(name);
-        final String desc = getRuleDescription(name);
-        return DropdownMenuEntry(
-          value: name,
-          label: label,
-          leadingIcon: Icon(getRuleIcon(name), size: 18),
-          // Rich label: mode name + a one-line description underneath, so the
-          // chooser explains each mode instead of showing bare names.
-          labelWidget: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-              if (desc.isNotEmpty)
-                Text(desc,
-                    style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
-            ],
-          ),
-        );
-      }),
-    );
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
         // dashboard.dart wraps this in a 50px PreferredSize; without
@@ -306,17 +282,14 @@ class _State extends State<AppHeaderBar> with WindowListener {
         ),
         title: Row(
           children: [
-            SizedBox(
-              height: 32,
-              child: FittedBox(
-                child: DropdownMenu<String>(
-                  width: 184,
-                  initialSelection: ruleList.selectedId,
-                  onSelected: isLoadingRuleDropdown ? null : handleSelectRule,
-                  dropdownMenuEntries: menuEntries,
-                  textStyle: TextStyle(fontSize: 20),
-                ),
-              ),
+            ModeFanButton(
+              modes: ruleList.rules,
+              selected: ruleList.selectedId,
+              labelOf: getRuleLabel,
+              descriptionOf: getRuleDescription,
+              iconOf: getRuleIcon,
+              enabled: !isLoadingRuleDropdown,
+              onSelected: (id) => handleSelectRule(id),
             ),
             SizedBox(width: 4),
             IconButton(
