@@ -129,10 +129,12 @@ class _ModeFanButtonState extends State<ModeFanButton>
         CompositedTransformFollower(
           link: _link,
           showWhenUnlinked: false,
-          // Anchor the fan's base at the top-center of the button.
-          targetAnchor: Alignment.topCenter,
-          followerAnchor: Alignment.bottomCenter,
-          offset: const Offset(0, -8),
+          // The button lives in the AppBar at the TOP of the window, so the fan
+          // must open DOWNWARD. Anchor the fan's top-center to the button's
+          // bottom-center.
+          targetAnchor: Alignment.bottomCenter,
+          followerAnchor: Alignment.topCenter,
+          offset: const Offset(0, 8),
           child: AnimatedBuilder(
             animation: _fan,
             builder: (context, _) {
@@ -212,9 +214,10 @@ class _ModeFanButtonState extends State<ModeFanButton>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: AnimatedRotation(
+                    // Points down (fan opens downward); flips up when open.
                     turns: _isOpen ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.keyboard_arrow_up,
+                    child: Icon(Icons.keyboard_arrow_down,
                         size: 20, color: scheme.onSurfaceVariant),
                   ),
                 ),
@@ -249,12 +252,12 @@ class _FanStack extends StatelessWidget {
       height: fullHeight * progress + 0.1,
       child: Stack(
         clipBehavior: Clip.none,
-        alignment: Alignment.bottomCenter,
+        alignment: Alignment.topCenter,
         children: [
           for (int i = 0; i < n; i++)
-            // Item 0 sits closest to the button; higher items rise further.
+            // Item 0 sits closest to the button; lower items drop further down.
             Positioned(
-              bottom: (i * (itemHeight + gap)) * progress,
+              top: (i * (itemHeight + gap)) * progress,
               // Slight horizontal splay like the Dock fan.
               left: math.sin(i * 0.6) * 6 * progress,
               right: -math.sin(i * 0.6) * 6 * progress,
