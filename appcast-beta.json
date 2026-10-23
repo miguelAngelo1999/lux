@@ -1,17 +1,17 @@
 {
-  "version": "1.50.79",
+  "version": "1.50.80",
   "channel": "beta",
-  "notes": "fix(ui): fan opens downward so it is visible under the top-bar button",
+  "notes": "feat(windows): exempt all UWP/Store apps (incl. the Store) from loopback isolation",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "408242e1df74683db75771a57c2f6666a8823ec9ef742222d78674bcccb3cee1",
-    "size": 45006057,
-    "version": "1.50.79"
+    "sha256": "f47ae50baa5a438f90bbb0547c1755981cb493897fc05f1e987356c2385933f0",
+    "size": 45006121,
+    "version": "1.50.80"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "b2884c443eb4e126d47f8a00667bbb20ef21af04ec0ab348b7c215a323ce113a",
-    "size": 27265324,
-    "version": "1.50.79"
+    "sha256": "773a55c940d9b20fddc3b0ab9f6d8a7b96f60f10fef9d004786aaa537544457d",
+    "size": 27259092,
+    "version": "1.50.80"
   }
 }
