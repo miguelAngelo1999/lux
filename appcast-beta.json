@@ -1,17 +1,17 @@
 {
-  "version": "1.50.80",
+  "version": "1.50.81",
   "channel": "beta",
-  "notes": "feat(windows): exempt all UWP/Store apps (incl. the Store) from loopback isolation",
+  "notes": "fix(proxy-env): set HTTP_PROXY/NODE_EXTRA_CA_CERTS on every start path",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "f47ae50baa5a438f90bbb0547c1755981cb493897fc05f1e987356c2385933f0",
-    "size": 45006121,
-    "version": "1.50.80"
+    "sha256": "bef17c22e985a3ee08f2c42bbd9b5b10bacc50f6782dedd8977c4b428ca911c5",
+    "size": 45007609,
+    "version": "1.50.81"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "773a55c940d9b20fddc3b0ab9f6d8a7b96f60f10fef9d004786aaa537544457d",
-    "size": 27259092,
-    "version": "1.50.80"
+    "sha256": "b99fc370e0be22009fc14a46c9a566966e0961151b7a67ed5e5e76794fc8582d",
+    "size": 27261472,
+    "version": "1.50.81"
   }
 }
