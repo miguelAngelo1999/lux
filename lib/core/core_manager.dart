@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:lux/error.dart';
 import 'package:lux/util/app_log.dart';
 import 'package:lux/util/process_manager.dart';
+import 'package:lux/util/proxy_env.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../tr.dart';
@@ -151,6 +152,9 @@ class CoreManager {
           sendTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         ));
+    // Clear the proxy env vars so Node/Electron tools stop trying to route
+    // through a proxy that is no longer running.
+    unawaited(clearProxyEnv());
   }
 
   /// Start the proxy. Retries up to 3 times on 500 (lux_core still initialising)
@@ -178,6 +182,12 @@ class CoreManager {
               sendTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 15),
             ));
+        // Set HTTP_PROXY/HTTPS_PROXY + NODE_EXTRA_CA_CERTS so Node/Electron
+        // tools (Antigravity, VS Code, npm, …) route through lux. Done here —
+        // the single funnel every start path goes through (toggle, tray,
+        // auto-connect, watchdog, wake) — so it can never be missed. Fire and
+        // forget: a slow launchctl/powershell call must not delay start.
+        unawaited(applyProxyEnv());
         return; // success
       } on DioException catch (e) {
         final status = e.response?.statusCode;
