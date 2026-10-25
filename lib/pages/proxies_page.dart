@@ -224,6 +224,40 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     );
   }
 
+  /// Create a copy of a proxy: take its full raw config, drop the id/select
+  /// state, rename to "… (copy)", and add it as a new proxy. The core assigns
+  /// a fresh id on add.
+  void _handleDuplicateItem(ProxyItem item) async {
+    final detail = await widget.coreManager.getProxyDetail(item.id);
+    if (!mounted || detail == null) return;
+    try {
+      final data = Map<String, dynamic>.from(detail.raw);
+      // Never carry over identity/selection or subscription linkage.
+      data.remove('id');
+      data.remove('subscription');
+      // Start the copy with a fresh (unlocked) password state; the password
+      // value itself is kept so the copy works immediately.
+      data.remove('passwordLocked');
+      data.remove('passwordExpired');
+      data.remove('passwordSetAt');
+      final baseName = (data['name'] as String?)?.trim();
+      data['name'] = (baseName == null || baseName.isEmpty)
+          ? 'copy'
+          : '$baseName (copy)';
+      await widget.coreManager.addProxy(data);
+      await refreshData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tl(context, 'Proxy duplicated'))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to duplicate: $e')),
+      );
+    }
+  }
+
   void _handleQrCode(ProxyItem item) async {
     final editingUrl = "${widget.dashboardUrl}&mode=qrCode&proxyId=${item.id}";
     launchUrl(Uri.parse(editingUrl));
@@ -235,6 +269,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         _handleDeleteItem(item);
       case ProxyItemAction.edit:
         _handleEditItem(item);
+      case ProxyItemAction.duplicate:
+        _handleDuplicateItem(item);
       case ProxyItemAction.qrCode:
         _handleQrCode(item);
       case ProxyItemAction.peekPassword:

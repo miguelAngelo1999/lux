@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:provider/provider.dart';
 
 class ProxyItemActionMenu extends StatefulWidget {
@@ -51,6 +52,22 @@ class _ProxyItemActionMenuState extends State<ProxyItemActionMenu> {
                   width: 4,
                 ),
                 Text(tr().edit)
+              ],
+            )),
+        MenuItemButton(
+            onPressed: () {
+              widget.onClick(ProxyItemAction.duplicate);
+            },
+            child: Row(
+              children: [
+                Icon(
+                  Icons.copy_outlined,
+                  size: 16,
+                ),
+                SizedBox(
+                  width: 4,
+                ),
+                Text(tl(context, 'Duplicate'))
               ],
             )),
         MenuItemButton(

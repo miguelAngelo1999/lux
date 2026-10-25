@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:lux/widget/password_peek_dialog.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/widget/proxy_list_card.dart';
@@ -152,6 +153,36 @@ class _AppBodyState extends State<AppBody> with WindowListener {
     );
   }
 
+  /// Duplicate a proxy: copy its raw config, drop id/subscription, rename to
+  /// "… (copy)", and add as a new proxy.
+  void _handleDuplicateItem(ProxyItem item) async {
+    final detail = await widget.coreManager.getProxyDetail(item.id);
+    if (!mounted || detail == null) return;
+    try {
+      final data = Map<String, dynamic>.from(detail.raw);
+      data.remove('id');
+      data.remove('subscription');
+      data.remove('passwordLocked');
+      data.remove('passwordExpired');
+      data.remove('passwordSetAt');
+      final baseName = (data['name'] as String?)?.trim();
+      data['name'] = (baseName == null || baseName.isEmpty)
+          ? 'copy'
+          : '$baseName (copy)';
+      await widget.coreManager.addProxy(data);
+      await refreshData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tl(context, 'Proxy duplicated'))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to duplicate: $e')),
+      );
+    }
+  }
+
   void _handleQrCode(ProxyItem item) async {
     final editingUrl = "${widget.dashboardUrl}&mode=qrCode&proxyId=${item.id}";
     launchUrl(Uri.parse(editingUrl));
@@ -163,6 +194,8 @@ class _AppBodyState extends State<AppBody> with WindowListener {
         _handleDeleteItem(item);
       case ProxyItemAction.edit:
         _handleEditItem(item);
+      case ProxyItemAction.duplicate:
+        _handleDuplicateItem(item);
       case ProxyItemAction.qrCode:
         _handleQrCode(item);
       case ProxyItemAction.peekPassword:

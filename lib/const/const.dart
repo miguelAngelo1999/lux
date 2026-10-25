@@ -66,11 +66,17 @@ const latestReleaseUrl = 'https://github.com/igoogolx/lux/releases/latest';
 const appcastUrl =
     'https://drive.usercontent.google.com/download?id=1jf-8thv_VVPIQ3k_n83UhygzEKkydI2p&export=download&confirm=t';
 
+/// Beta appcast — early builds before they reach everyone.
+/// Toggled in Settings → Updates → "Beta updates".
+const betaAppcastUrl =
+    'https://drive.usercontent.google.com/download?id=1pvAmSjnhkf7tJbWetNj_hiNbjRhNPkyj&export=download&confirm=t';
+
 /// Fallback page opened when an in-app update cannot be completed.
 const releasesPageUrl = latestReleaseUrl;
 
 enum ProxyItemAction {
   edit,
+  duplicate,
   delete,
   qrCode,
   peekPassword,
