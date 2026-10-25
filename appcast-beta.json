@@ -1,17 +1,17 @@
 {
-  "version": "1.50.81",
+  "version": "1.50.82",
   "channel": "beta",
-  "notes": "fix(proxy-env): set HTTP_PROXY/NODE_EXTRA_CA_CERTS on every start path",
+  "notes": "feat(ui): duplicate a proxy from its action menu",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "bef17c22e985a3ee08f2c42bbd9b5b10bacc50f6782dedd8977c4b428ca911c5",
-    "size": 45007609,
-    "version": "1.50.81"
+    "sha256": "b56bce56048155ea5a9852cac757f819f850064c9b31b5db7e145d27f1b9fb8c",
+    "size": 45010273,
+    "version": "1.50.82"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "b99fc370e0be22009fc14a46c9a566966e0961151b7a67ed5e5e76794fc8582d",
-    "size": 27261472,
-    "version": "1.50.81"
+    "sha256": "1d9a9ffcfd2af1f9594efa495d7cabbfa170d3647ccfd9a3bdf34961ccb5473a",
+    "size": 27268904,
+    "version": "1.50.82"
   }
 }
