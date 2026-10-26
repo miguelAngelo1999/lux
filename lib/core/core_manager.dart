@@ -611,12 +611,21 @@ class CoreManager {
     final current = await dio.get('$baseHttpUrl/setting');
     final raw = Map<String, dynamic>.from(current.data['setting'] as Map);
 
-    // Only update fields the settings page manages
-    raw['mode'] = setting.mode == ProxyMode.tun
+    // Detect a proxy-mode change. The Go core reads setting.mode only when the
+    // manager (re)starts (executor.New), and only Close() tears down the old
+    // mode's OS state (TUN device / system-proxy entries). So a mode change
+    // must be applied with a stop→start while running — otherwise it silently
+    // does nothing until a full app restart.
+    final prevMode = raw['mode'] as String?;
+    final newMode = setting.mode == ProxyMode.tun
         ? 'tun'
         : setting.mode == ProxyMode.system
             ? 'system'
             : 'mixed';
+    final modeChanged = prevMode != null && prevMode != newMode;
+
+    // Only update fields the settings page manages
+    raw['mode'] = newMode;
     raw['autoLaunch'] = setting.autoLaunch;
     raw['autoConnect'] = setting.autoConnect;
     raw['defaultInterface'] = setting.defaultInterface;
@@ -650,6 +659,24 @@ class CoreManager {
     raw['autoMode'] = am;
 
     await dio.put('$baseHttpUrl/setting', data: raw);
+
+    // Apply a mode change live: if the core is running, restart the tunnel so
+    // the old mode tears down (TUN device / system-proxy restored) and the new
+    // mode is built by executor.New(). If it's not running, the next start
+    // picks up the new mode — no need to connect just because a dropdown
+    // changed. lux_core runs elevated via the sudoers wrapper, so no re-spawn
+    // or elevation prompt is needed for System↔TUN↔Mixed.
+    if (modeChanged) {
+      final running = await getIsStarted();
+      if (running) {
+        appLog('CORE', 'mode changed $prevMode→$newMode — restarting tunnel');
+        await stop();
+        // Brief gap so the old mode's teardown (utun remove / networksetup
+        // restore) completes before the new mode sets up.
+        await Future.delayed(const Duration(milliseconds: 500));
+        await start();
+      }
+    }
   }
 
   /// Get available network interfaces.
