@@ -1,17 +1,17 @@
 {
-  "version": "1.50.82",
+  "version": "1.50.83",
   "channel": "beta",
-  "notes": "feat(ui): duplicate a proxy from its action menu",
+  "notes": "docs(web): download page to stable 1.50.76 (version, sizes, SHA-256)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "b56bce56048155ea5a9852cac757f819f850064c9b31b5db7e145d27f1b9fb8c",
-    "size": 45010273,
-    "version": "1.50.82"
+    "sha256": "a18b0cfedae31f43887a112444a3ae5062473f18a868058188d43b349ff198bf",
+    "size": 45010782,
+    "version": "1.50.83"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "1d9a9ffcfd2af1f9594efa495d7cabbfa170d3647ccfd9a3bdf34961ccb5473a",
-    "size": 27268904,
-    "version": "1.50.82"
+    "sha256": "7fed9e0dd5a64cd09e6131222a6012b9ff32a35fd2d5aa41cec6b88c735c23c2",
+    "size": 27273336,
+    "version": "1.50.83"
   }
 }
