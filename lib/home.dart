@@ -61,6 +61,12 @@ class _HomeState extends State<Home>
   dynamic coreError;
   bool _quickEditMode = false;
   Timer? _watchdogTimer;
+  // Watchdog restart backoff: count consecutive failed auto-restarts. After
+  // _maxWatchdogRestarts in a row the watchdog gives up instead of looping
+  // forever (the crash-loop seen on 2026-10-20/26), sets userWantsRunning=false
+  // and notifies the user. Reset to 0 whenever the core is confirmed running.
+  int _watchdogRestartFails = 0;
+  static const int _maxWatchdogRestarts = 3;
   // Mirrors AppStateModel.isStarted so the tray tooltip can be refreshed the
   // moment the live connection state changes (auto-connect, watchdog restart,
   // net-switch), not only on explicit user actions. Prevents the tray showing
@@ -446,12 +452,41 @@ class _HomeState extends State<Home>
     if (!appState.userWantsRunning) return;
     try {
       final isStarted = await coreManager!.getIsStarted();
-      if (!isStarted) {
-        appLog('WATCHDOG', 'core stopped unexpectedly — restarting');
-        await coreManager!.start();
+      if (isStarted) {
+        // Healthy — clear the failure streak.
+        _watchdogRestartFails = 0;
+        return;
       }
-    } catch (_) {
-      // Core unreachable — will retry next tick
+
+      // Core is down but the user wants it running. Attempt a restart, but cap
+      // consecutive failures so a core that cannot stay up (bad config, auth
+      // rejected, TUN setup failing) does not loop forever every 30s. The
+      // 2026-10-20/26 crash-loop was exactly this: endless "core stopped —
+      // restarting" with no ceiling.
+      if (_watchdogRestartFails >= _maxWatchdogRestarts) {
+        // Give up: stop trying, surface it, and let the user re-enable.
+        appLog('WATCHDOG',
+            'core failed to stay up after $_maxWatchdogRestarts restarts — giving up');
+        appState.userWantsRunning = false;
+        _watchdogRestartFails = 0;
+        if (mounted) {
+          notifier.show(tl(context,
+              'Lux could not stay connected. Check your proxy and credentials, then reconnect.'));
+        }
+        return;
+      }
+
+      _watchdogRestartFails++;
+      appLog('WATCHDOG',
+          'core stopped unexpectedly — restarting (attempt $_watchdogRestartFails/$_maxWatchdogRestarts)');
+      await coreManager!.start();
+      // Confirm the restart actually took. If it did, the next tick clears the
+      // counter; if start() threw, we fall to catch and the counter stands.
+    } catch (e) {
+      // start()/getIsStarted() failed — count it so we eventually give up
+      // instead of silently retrying forever.
+      _watchdogRestartFails++;
+      appLog('WATCHDOG', 'restart attempt failed: $e');
     }
   }
 

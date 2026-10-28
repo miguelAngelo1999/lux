@@ -11,6 +11,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:lux/util/t_text.dart';
+import 'package:lux/util/app_log.dart';
 
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
@@ -92,25 +93,42 @@ class _State extends State<AppHeaderBar> with WindowListener {
       // knows whether to restart.
       final appState = Provider.of<AppStateModel>(context, listen: false);
       appState.userWantsRunning = value;
+      // Safety timeout: start() can retry ~15s x3 (~45s) and a wedged UAC
+      // dialog or unresponsive core could hang longer. Cap the awaited op so
+      // the spinner can never stick on forever and leave the toggle disabled.
       if (value) {
-        await widget.coreManager.start();
-        setState(() {
-          isStarted = true;
-        });
+        await widget.coreManager.start().timeout(const Duration(seconds: 60));
         // Proxy env vars (HTTP_PROXY / NODE_EXTRA_CA_CERTS for Node/Electron
-        // tools) are now set centrally in CoreManager.start(), so every start
-        // path — toggle, tray, auto-connect, watchdog, wake — gets them.
+        // tools) are set centrally in CoreManager.start() — every start path
+        // (toggle, tray, auto-connect, watchdog, wake) gets them.
       } else {
-        await widget.coreManager.stop();
-        setState(() {
-          isStarted = false;
-        });
+        await widget.coreManager.stop().timeout(const Duration(seconds: 30));
         // Env vars cleared centrally in CoreManager.stop().
       }
+    } catch (e) {
+      appLog('CORE', 'toggle ${value ? "start" : "stop"} failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: TText(value
+              ? 'Could not connect. Check your proxy and try again.'
+              : 'Could not disconnect cleanly.')),
+        );
+      }
     } finally {
-      setState(() {
-        isLoadingSwitch = false;
-      });
+      // Re-sync the switch position from the core's REAL state rather than
+      // assuming the op succeeded — a failed/timed-out start must not leave
+      // the toggle showing "on". Always clear the loading flag so the spinner
+      // and the disabled state can never wedge.
+      bool real = value;
+      try {
+        real = await widget.coreManager.getIsStarted();
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          isStarted = real;
+          isLoadingSwitch = false;
+        });
+      }
     }
   }
 
@@ -301,11 +319,39 @@ class _State extends State<AppHeaderBar> with WindowListener {
             SizedBox(width: 8),
             SizedBox(
               width: 48,
-              child: FittedBox(
-                child: Switch(
-                  value: isStarted,
-                  onChanged: isSwitchDisabled ? null : onSwitchChanged,
-                ),
+              height: 32,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  FittedBox(
+                    child: Switch(
+                      value: isStarted,
+                      // Non-clickable while a connect/disconnect is in flight
+                      // (isLoadingSwitch) or no proxy is selected.
+                      onChanged: isSwitchDisabled ? null : onSwitchChanged,
+                    ),
+                  ),
+                  // Progress spinner while connecting/disconnecting, so the
+                  // user sees it IS working and doesn't spam-click. An opaque
+                  // barrier over the switch also swallows taps during the op.
+                  if (isLoadingSwitch)
+                    Positioned.fill(
+                      child: AbsorbPointer(
+                        child: Container(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surface
+                              .withValues(alpha: 0.55),
+                          alignment: Alignment.center,
+                          child: const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
