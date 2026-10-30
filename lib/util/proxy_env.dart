@@ -65,6 +65,12 @@ Future<void> _applyMacOS() async {
     'NO_PROXY': _noProxy,
     'no_proxy': _noProxy,
     if (ca != null) 'NODE_EXTRA_CA_CERTS': ca,
+    // Go helpers (Antigravity's language_server) may read SSL_CERT_FILE rather
+    // than NODE_EXTRA_CA_CERTS. Same bundle (system roots + user-trusted CAs +
+    // proxy CA). 2026-10-30: setting BOTH by hand and restarting Antigravity
+    // fixed "x509: certificate signed by unknown authority"; which of the two
+    // did it was not isolated.
+    if (ca != null) 'SSL_CERT_FILE': ca,
   };
   for (final e in vars.entries) {
     await Process.run('launchctl', ['setenv', e.key, e.value]);
@@ -72,7 +78,7 @@ Future<void> _applyMacOS() async {
 }
 
 Future<void> _clearMacOS() async {
-  for (final k in [..._envKeys, 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_OPTIONS']) {
+  for (final k in [..._envKeys, 'SSL_CERT_FILE', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_OPTIONS']) {
     await Process.run('launchctl', ['unsetenv', k]);
   }
 }
