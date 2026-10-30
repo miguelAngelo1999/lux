@@ -178,6 +178,19 @@ win_ps_script "patch_iss.ps1" "
 [System.IO.File]::WriteAllText(\$f, \$c)
 Write-Host 'iss patched'
 "
+# Guard: the installer must kill a running Lux/lux_core by itself. An AppMutex /
+# CloseApplications directive makes Inno stop with a "please close Lux" prompt
+# before our [Code] kill logic runs, so strip them, and refuse to build if the
+# kill logic (KillLux + InitializeSetup) is missing from the VM's ISS.
+ISS_CHECK=$(win_ps_script "ensure_iss_kill.ps1" '
+$f = "C:\lux-build\lux\dist-setup.iss"
+$c = Get-Content $f -Raw
+$c2 = [regex]::Replace($c, "(?m)^[ \t]*(AppMutex|CloseApplications|RestartApplications)[ \t]*=[^\r\n]*\r?\n", "")
+if ($c2 -ne $c) { [System.IO.File]::WriteAllText($f, $c2); Write-Host "ISS_PROMPT_DIRECTIVES_REMOVED" }
+if (($c2 -match "procedure KillLux") -and ($c2 -match "function InitializeSetup")) { Write-Host "ISS_KILL_OK" } else { Write-Host "ISS_KILL_MISSING" }
+')
+echo "$ISS_CHECK" | grep -E "ISS_" || true
+echo "$ISS_CHECK" | grep -q "ISS_KILL_OK" || { echo "ERROR: Windows installer script has no auto-kill (KillLux/InitializeSetup) — would prompt and hang. Fix C:\\lux-build\\lux\\dist-setup.iss from windows/packaging/exe/setup.iss"; exit 1; }
 win "cd C:\\lux-build\\lux && \"C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe\" dist-setup.iss && echo ISCC_OK" | grep -q "ISCC_OK" || { echo "ERROR: Inno Setup failed"; exit 1; }
 
 # Copy to Mac
