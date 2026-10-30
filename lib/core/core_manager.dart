@@ -222,10 +222,19 @@ class CoreManager {
       final list = await getProxyList();
       final item = list.proxies.where((p) => p.id == list.id).firstOrNull;
       if (item == null) return;
-      final server = item.server ?? '';
-      final port = item.port ?? 0;
-      // CONNECT-based probe only works for HTTP proxies with a host:port.
-      if (item.type != 'http' || server.isEmpty || port == 0) return;
+      var server = item.server ?? '';
+      var port = item.port ?? 0;
+      // CONNECT-based probe only works for HTTP proxies.
+      if (item.type != 'http') return;
+      // PAC-only proxy: no server of its own, so probe the upstream its PAC
+      // picks for an external HTTPS site (resolved by lux_core).
+      if (server.isEmpty && (item.pacUrl ?? '').isNotEmpty) {
+        final up = await getPacUpstream(item.id);
+        if (up == null) return;
+        server = up.server;
+        port = up.port;
+      }
+      if (server.isEmpty || port == 0) return;
 
       final detail = await getProxyDetail(item.id);
       final username = detail?.raw['username'] as String? ?? '';
@@ -665,6 +674,23 @@ class CoreManager {
       'password': password,
     });
     return CertCheckResult.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// Asks lux_core which HTTP upstream a PAC-only proxy's PAC selects for an
+  /// external HTTPS site. Null when the PAC says DIRECT or is not loaded.
+  Future<({String server, int port})?> getPacUpstream(String proxyId) async {
+    try {
+      final res = await dio.get('$baseHttpUrl/proxies/$proxyId/pac-upstream');
+      final data = res.data;
+      if (data is Map && data['found'] == true) {
+        final server = data['server'] as String? ?? '';
+        final port = data['port'] as int? ?? 0;
+        if (server.isNotEmpty && port > 0) return (server: server, port: port);
+      }
+    } catch (e) {
+      appLog('CERT', 'pac-upstream lookup failed: $e');
+    }
+    return null;
   }
 
   /// Installs a PEM certificate to the System Keychain via lux_core (runs as root).
