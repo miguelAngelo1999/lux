@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:lux/util/notifier.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/pages/connections_page.dart';
 import 'package:lux/pages/log_page.dart';
@@ -65,6 +67,9 @@ class _DashboardState extends State<Dashboard> with WindowListener {
         if (!mounted) return;
         // Persist so settings tile shows badge even if snackbar is missed
         await writePendingUpdateVersion(info.latestVersion);
+        // System notification too, so it is seen when the window is hidden.
+        // No payload: the app updates in place, it must not open a web page.
+        unawaited(notifier.show('Lux ${info.latestVersion} is available. Open Lux to update.'));
         await showUpdateDialog(context, info);
         return;
       } catch (_) {

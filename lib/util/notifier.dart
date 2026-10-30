@@ -13,7 +13,10 @@ class Notifier {
   Future<void> ensureInitialized() async {
     final DarwinInitializationSettings initializationSettingsDarwin =
         DarwinInitializationSettings(
-      requestAlertPermission: false,
+      // Without an alert permission request macOS never shows the "allow
+      // notifications?" prompt and silently drops every notification, so
+      // Lux showed none. Ask once at init (macOS remembers the answer).
+      requestAlertPermission: true,
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
