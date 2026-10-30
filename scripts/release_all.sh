@@ -156,16 +156,51 @@ with open('$REPO/lib/core/checksum.dart', 'w') as f: f.write(c)
 "
 win "copy \"\\\\Mac\\Home\\lux-clean\\lib\\core\\checksum.dart\" \"C:\\lux-build\\lux\\lib\\core\\checksum.dart\" && echo CHECKSUM_SYNCED"
 
-# Build Flutter Windows
-win_ps_script "build_flutter.ps1" '
+# Build Flutter Windows.
+#
+# A robocopy from the SMB share can leave files read-only / hidden, which makes
+# `flutter pub get` fail to write .flutter-plugins-dependencies. When the plugin
+# registrant is stale, the build fails with "method 'Text'/'Row' not defined"
+# (all material symbols undefined) — but historically the script then packaged
+# whatever stale lux.exe was lying around and shipped it. We now (a) clear the
+# attrs + stale generated files, (b) delete the OLD lux.exe before building so a
+# stale binary cannot survive, (c) verify pub get wrote the deps file, and
+# (d) HARD-ABORT unless the build prints FLUTTER_OK and produced a fresh exe.
+FLUTTER_OUT=$(win_ps_script "build_flutter.ps1" '
+$ErrorActionPreference = "Continue"
 $env:PUB_CACHE = "C:\Users\virgoh\AppData\Local\Pub\Cache"
 Set-Location C:\lux-build\lux
+# Clear read-only/hidden/system on the tree so flutter can write the plugin
+# registrant (.flutter-plugins-dependencies) — the real cause of the stale-exe
+# shipment on 2026-10-30.
+& attrib -R -H -S C:\lux-build\lux\*.* /S /D 2>$null
+foreach ($f in @(".flutter-plugins",".flutter-plugins-dependencies")) {
+  if (Test-Path $f) { & attrib -R -H -S $f 2>$null; Remove-Item -Force $f -ErrorAction SilentlyContinue }
+}
+if (Test-Path windows\flutter\ephemeral) { Remove-Item -Recurse -Force windows\flutter\ephemeral -ErrorAction SilentlyContinue }
+if (Test-Path .dart_tool\hooks_runner) { Remove-Item -Recurse -Force .dart_tool\hooks_runner -ErrorAction SilentlyContinue }
+# Delete the previous build output so a stale lux.exe cannot be packaged if the
+# build below fails.
+$exe = "build\windows\x64\runner\Release\lux.exe"
+if (Test-Path $exe) { Remove-Item -Force $exe -ErrorAction SilentlyContinue }
+
 & "C:\lux-build\flutter\bin\flutter.bat" pub get --offline
+if (-not (Test-Path ".flutter-plugins-dependencies")) {
+  Write-Host "FLUTTER_FAILED: pub get did not write .flutter-plugins-dependencies"; exit 1
+}
 $p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
      -ArgumentList "build","windows","--release","--no-pub" `
      -Wait -PassThru -NoNewWindow
-if ($p.ExitCode -eq 0) { Write-Host "FLUTTER_OK" } else { Write-Host "FLUTTER_FAILED"; exit 1 }
-'
+if ($p.ExitCode -ne 0) { Write-Host "FLUTTER_FAILED: build exit $($p.ExitCode)"; exit 1 }
+if (-not (Test-Path $exe)) { Write-Host "FLUTTER_FAILED: no lux.exe produced"; exit 1 }
+Write-Host "FLUTTER_OK"
+')
+echo "$FLUTTER_OUT" | tail -5
+echo "$FLUTTER_OUT" | grep -q "FLUTTER_OK" || {
+  echo "ERROR: Windows Flutter build failed — aborting release so a stale lux.exe is never packaged/published."
+  echo "       Common cause: read-only .flutter-plugins-dependencies from the SMB robocopy, or pub-cache empty stubs."
+  exit 1
+}
 
 # Package installer
 win "if exist C:\\lux-build\\dist2\\*.exe del /F /Q C:\\lux-build\\dist2\\*.exe >nul 2>&1 & exit 0"
@@ -196,8 +231,13 @@ win "cd C:\\lux-build\\lux && \"C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe\
 # Copy to Mac
 mkdir -p "$REPO/dist"
 WIN_INSTALLER="$REPO/dist/Lux-${VERSION}-Windows-x64-Setup.exe"
+rm -f "$WIN_INSTALLER"   # never let a previous version's installer masquerade as this one
 win "copy \"${INSTALLER_WIN}\" \"\\\\Mac\\Home\\lux-clean\\dist\\Lux-${VERSION}-Windows-x64-Setup.exe\" && echo COPY_OK"
-[ -f "$WIN_INSTALLER" ] || { echo "ERROR: Windows installer not found"; exit 1; }
+[ -f "$WIN_INSTALLER" ] || { echo "ERROR: Windows installer not found — ISCC output missing or copy failed"; exit 1; }
+# Sanity: a real installer is tens of MB. A truncated/empty copy (< 5 MB) means
+# something went wrong upstream; refuse to publish it.
+WIN_SIZE=$(stat -f%z "$WIN_INSTALLER" 2>/dev/null || echo 0)
+[ "$WIN_SIZE" -ge 5000000 ] || { echo "ERROR: Windows installer is only ${WIN_SIZE} bytes — too small, aborting"; exit 1; }
 echo "==> Windows installer ready: $(ls -lh "$WIN_INSTALLER" | awk '{print $5, $9}')"
 
 # ── Step 5: Upload BOTH platforms, then update appcast atomically ──────────
