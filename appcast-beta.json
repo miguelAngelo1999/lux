@@ -1,7 +1,7 @@
 {
   "version": "1.50.84",
   "channel": "beta",
-  "notes": "build(windows): release guard \u2014 strip AppMutex/CloseApplications and require KillLux in installer before ISCC",
+  "notes": "release (beta): 1.50.84",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
     "sha256": "e88cc42f1a94932e3f715b2b385357fcc3ad403bbbcee55630c64d03f7e2b44f",
@@ -10,8 +10,8 @@
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "87c8b21c5f5b52fe43cf4a9dc346969d635e61ca8e06dc4132c480b7836d3864",
-    "size": 27270977,
+    "sha256": "1360a6aaa3883c799385dce53f78386e43d0e1e20fb01621a998c27a0d3875b1",
+    "size": 27319530,
     "version": "1.50.84"
   }
 }
