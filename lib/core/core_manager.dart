@@ -175,6 +175,9 @@ class CoreManager {
       }
     }
 
+    // Checksum of the CA bundle before the core rebuilds it on start.
+    final caBefore = await caBundleChecksum();
+
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         await dio.post('$baseHttpUrl/manager/start',
@@ -182,6 +185,10 @@ class CoreManager {
               sendTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 15),
             ));
+        // The core rebuilds the bundle inside /manager/start. Node/Electron
+        // apps read it only at launch, so if it changed, tell the user to
+        // restart the ones already open.
+        unawaited(_notifyIfCaBundleChanged(caBefore));
         // Set HTTP_PROXY/HTTPS_PROXY + NODE_EXTRA_CA_CERTS so Node/Electron
         // tools (Antigravity, VS Code, npm, …) route through lux. Done here —
         // the single funnel every start path goes through (toggle, tray,
@@ -203,6 +210,19 @@ class CoreManager {
         }
         rethrow;
       }
+    }
+  }
+
+  Future<void> _notifyIfCaBundleChanged(String? before) async {
+    try {
+      final after = await caBundleChecksum();
+      if (after == null || after == before) return;
+      appLog('CORE', 'CA bundle changed ($before -> $after), notifying');
+      await notifier.show(
+          'Certificates changed. Restart Node/Electron apps '
+          '(Antigravity, VS Code, Slack…) so they trust them.');
+    } catch (e) {
+      appLog('CORE', 'CA bundle change check failed: $e');
     }
   }
 

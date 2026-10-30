@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:lux/util/utils.dart';
 
 /// Sets/clears the proxy environment variables that Node.js / Electron tools
@@ -43,6 +44,20 @@ Future<void> clearProxyEnv() async {
     await _clearMacOS();
   } else if (Platform.isWindows) {
     await _clearWindows();
+  }
+}
+
+/// SHA-256 of the CA bundle that Node/Electron/Go apps read, or null when the
+/// file does not exist. Compared before and after the core (re)builds it on
+/// connect: apps only read the bundle at launch, so a changed bundle means
+/// already-running apps need a restart to trust the new certificates.
+Future<String?> caBundleChecksum() async {
+  final p = await _caBundlePath();
+  if (p == null) return null;
+  try {
+    return sha256.convert(await File(p).readAsBytes()).toString();
+  } catch (_) {
+    return null;
   }
 }
 
