@@ -997,6 +997,27 @@ class DetectedProxy {
 }
 
 
+/// A pending "trust this proxy's certificate?" question raised on connect.
+class CertPromptRequest {
+  final String proxyId;
+  final String proxyName;
+  final String server;
+  final int port;
+  final String username;
+  final String password;
+  final CertCheckResult cert;
+
+  const CertPromptRequest({
+    required this.proxyId,
+    required this.proxyName,
+    required this.server,
+    required this.port,
+    required this.username,
+    required this.password,
+    required this.cert,
+  });
+}
+
 /// Result from POST /proxies/check-cert — reports whether SSL interception is present.
 class CertCheckResult {
   final bool intercepted;

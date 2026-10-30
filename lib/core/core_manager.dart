@@ -188,6 +188,10 @@ class CoreManager {
         // auto-connect, watchdog, wake) — so it can never be missed. Fire and
         // forget: a slow launchctl/powershell call must not delay start.
         unawaited(applyProxyEnv());
+        // Offer to trust the proxy's bump CA if the system does not trust it
+        // yet. Silent when already trusted, when the proxy needs a login we
+        // do not have, or when the user already skipped it this session.
+        unawaited(checkCertTrustOnConnect());
         return; // success
       } on DioException catch (e) {
         final status = e.response?.statusCode;
@@ -199,6 +203,77 @@ class CoreManager {
         }
         rethrow;
       }
+    }
+  }
+
+  /// Set when the selected proxy presents a certificate the system does not
+  /// trust. The UI (home.dart) listens, shows the dialog, then clears it.
+  final ValueNotifier<CertPromptRequest?> certPrompt = ValueNotifier(null);
+
+  /// "proxyId:sha256" pairs already offered this session. Stops the dialog
+  /// from reappearing on every watchdog restart or after a Skip.
+  final Set<String> _certPromptOffered = {};
+
+  /// After a successful start, checks whether the selected HTTP proxy bumps
+  /// TLS with a CA the system does not trust, and if so raises [certPrompt].
+  /// Never throws: any failure (407, offline, PAC-only proxy) stays silent.
+  Future<void> checkCertTrustOnConnect() async {
+    try {
+      final list = await getProxyList();
+      final item = list.proxies.where((p) => p.id == list.id).firstOrNull;
+      if (item == null) return;
+      final server = item.server ?? '';
+      final port = item.port ?? 0;
+      // CONNECT-based probe only works for HTTP proxies with a host:port.
+      if (item.type != 'http' || server.isEmpty || port == 0) return;
+
+      final detail = await getProxyDetail(item.id);
+      final username = detail?.raw['username'] as String? ?? '';
+      final password = detail?.password ?? item.password ?? '';
+
+      final cert = await checkCert(
+        server: server,
+        port: port,
+        username: username,
+        password: password,
+      );
+      // intercepted == true means the leaf did NOT verify against the system
+      // roots, i.e. not trusted yet. Trusted or no bump => nothing to ask.
+      if (!cert.intercepted || cert.pem.isEmpty) return;
+
+      final key = '${item.id}:${cert.sha256}';
+      if (!_certPromptOffered.add(key)) return;
+
+      appLog('CERT', 'proxy ${item.name} presents untrusted CA ${cert.issuer}; prompting');
+      certPrompt.value = CertPromptRequest(
+        proxyId: item.id,
+        proxyName: item.name,
+        server: server,
+        port: port,
+        username: username,
+        password: password,
+        cert: cert,
+      );
+    } catch (e) {
+      appLog('CERT', 'connect-time cert check skipped: $e');
+    }
+  }
+
+  /// Installs the CA from [req] and re-checks. Returns true when the system
+  /// now trusts the proxy certificate.
+  Future<bool> trustCertFromPrompt(CertPromptRequest req) async {
+    await installCert(req.cert.pem);
+    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      final recheck = await checkCert(
+        server: req.server,
+        port: req.port,
+        username: req.username,
+        password: req.password,
+      );
+      return !recheck.intercepted;
+    } catch (_) {
+      return false;
     }
   }
 

@@ -132,6 +132,65 @@ class _HomeState extends State<Home>
     }
   }
 
+  bool _certDialogOpen = false;
+
+  /// Raised by CoreManager.checkCertTrustOnConnect when the selected proxy
+  /// uses a CA the system does not trust yet.
+  Future<void> _onCertPrompt() async {
+    final req = coreManager?.certPrompt.value;
+    if (req == null || _certDialogOpen || !mounted) return;
+    coreManager!.certPrompt.value = null;
+    _certDialogOpen = true;
+    try {
+      final trust = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(children: [
+            Icon(Icons.security, size: 20, color: Colors.orange),
+            SizedBox(width: 8),
+            Flexible(
+                child: TText('Certificate not trusted',
+                    style: TextStyle(fontSize: 15))),
+          ]),
+          content: Text(
+            '"${req.proxyName}" inspects secure traffic with a certificate '
+            'this computer does not trust yet'
+            '${req.cert.issuer.isNotEmpty ? ' (${req.cert.issuer})' : ''}.\n\n'
+            'Websites will show certificate errors until you trust it. '
+            'Trust this certificate now?',
+            style: const TextStyle(fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const TText('Skip'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const TText('Trust Certificate'),
+            ),
+          ],
+        ),
+      );
+      if (trust != true || !mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        final ok = await coreManager!.trustCertFromPrompt(req);
+        messenger.showSnackBar(SnackBar(
+          duration: Duration(seconds: ok ? 4 : 6),
+          content: TText(ok
+              ? 'Certificate installed and trusted.'
+              : 'Certificate installed but still reported untrusted. Try the proxy test on the Proxies page.'),
+        ));
+      } catch (e) {
+        messenger.showSnackBar(
+            SnackBar(content: Text('Certificate installation failed: $e')));
+      }
+    } finally {
+      _certDialogOpen = false;
+    }
+  }
+
   void _init(AppStateModel appState) async {
     trayManager.addListener(this);
     // Refresh the tray whenever the live connection state changes, so the
@@ -183,6 +242,8 @@ class _HomeState extends State<Home>
     coreManager = CoreManager(curBaseUrl, process, secret, () {
       _onCoreReady(appState);
     });
+
+    coreManager!.certPrompt.addListener(_onCertPrompt);
 
     setState(() {
       homeDir = curHomeDir;
@@ -566,6 +627,7 @@ class _HomeState extends State<Home>
     _watchdogTimer?.cancel();
     _connectivitySub?.cancel();
     _autoSwitchDebounce?.cancel();
+    coreManager?.certPrompt.removeListener(_onCertPrompt);
     _appStateForTray?.removeListener(_onAppStateChanged);
     trayManager.removeListener(this);
     windowManager.removeListener(this);
