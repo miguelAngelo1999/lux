@@ -202,6 +202,62 @@ echo "$FLUTTER_OUT" | grep -q "FLUTTER_OK" || {
   exit 1
 }
 
+# Bundle the Visual C++ runtime next to lux.exe (app-local deployment).
+# Flutter's Windows build does NOT ship it, so a PC without the VC++
+# Redistributable fails at start with "MSVCP140.dll was not found"
+# (seen 2026-10-30). Take the DLLs from the newest VS redist folder on the VM,
+# else from System32, copy them into the Release folder the installer packs,
+# and abort the release if any required one is missing.
+VCRT_OUT=$(win_ps_script "bundle_vcrt.ps1" '
+$ErrorActionPreference = "Continue"
+$rel = "C:\lux-build\lux\build\windows\x64\runner\Release"
+$required = @("msvcp140.dll","vcruntime140.dll","vcruntime140_1.dll")
+$optional = @("msvcp140_1.dll","msvcp140_2.dll","concrt140.dll")
+$src = $null
+foreach ($root in @("C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio")) {
+  if (-not (Test-Path $root)) { continue }
+  $dirs = Get-ChildItem -Path $root -Recurse -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue |
+          Where-Object { $_.FullName -match "\\x64\\" -and $_.FullName -notmatch "\\onecore\\" -and $_.FullName -notmatch "\\debug_nonredist\\" } |
+          Sort-Object FullName -Descending
+  foreach ($d in $dirs) {
+    $ok = $true
+    foreach ($n in $required) { if (-not (Test-Path (Join-Path $d.FullName $n))) { $ok = $false } }
+    if ($ok) { $src = $d.FullName; break }
+  }
+  if ($src) { break }
+}
+if (-not $src) { $src = "C:\Windows\System32" }
+Write-Host "VCRT_SRC $src"
+$missing = @()
+foreach ($n in $required) {
+  $p = Join-Path $src $n
+  if (Test-Path $p) { Copy-Item -Force $p (Join-Path $rel $n) } else { $missing += $n }
+}
+foreach ($n in $optional) {
+  $p = Join-Path $src $n
+  if (Test-Path $p) { Copy-Item -Force $p (Join-Path $rel $n) }
+}
+if ($missing.Count -gt 0) { Write-Host ("VCRT_MISSING " + ($missing -join ",")); exit 1 }
+foreach ($n in $required) {
+  if (-not (Test-Path (Join-Path $rel $n))) { Write-Host "VCRT_MISSING $n (not in Release folder)"; exit 1 }
+}
+Write-Host "VCRT_OK"
+')
+echo "$VCRT_OUT" | grep -E "VCRT_" || true
+echo "$VCRT_OUT" | grep -q "VCRT_OK" || {
+  echo "ERROR: could not bundle the Visual C++ runtime (msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll) into the Windows Release folder."
+  echo "       Without them the installer fails on PCs lacking the VC++ Redistributable. Install the VC++ x64 redist or Visual Studio on the build VM, then rerun."
+  exit 1
+}
+# The DLLs only help if the installer script packs the Release folder they were
+# copied into. Refuse to build if the VM's ISS never references it.
+ISS_SRC=$(win_ps_script "check_iss_source.ps1" '
+$c = Get-Content "C:\lux-build\lux\dist-setup.iss" -Raw
+if ($c -match "(?i)runner\\Release") { Write-Host "ISS_SRC_OK" } else { Write-Host "ISS_SRC_MISSING" }
+')
+echo "$ISS_SRC" | grep -E "ISS_SRC_" || true
+echo "$ISS_SRC" | grep -q "ISS_SRC_OK" || { echo "ERROR: C:\\lux-build\\lux\\dist-setup.iss does not reference build\\windows\\x64\\runner\\Release — the bundled VC++ DLLs would not be packed. Fix the Source line."; exit 1; }
+
 # Package installer
 win "if exist C:\\lux-build\\dist2\\*.exe del /F /Q C:\\lux-build\\dist2\\*.exe >nul 2>&1 & exit 0"
 win_ps_script "patch_iss.ps1" "
