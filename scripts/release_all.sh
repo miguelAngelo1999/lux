@@ -74,7 +74,8 @@ MOUNT_DIR=$(hdiutil attach /tmp/lux_tmp.dmg | grep "/Volumes" | awk -F'\t' '{pri
 cp -R "$DMG_STAGE/Lux.app" "$MOUNT_DIR/"
 cp "$DMG_STAGE/install.sh" "$MOUNT_DIR/"
 hdiutil detach "$MOUNT_DIR" >/dev/null
-hdiutil convert /tmp/lux_tmp.dmg -format UDZO -o "dist/$DMG_NAME" >/dev/null
+rm -f "dist/$DMG_NAME"   # -ov below also overwrites, but clear it so a stale same-name DMG never blocks convert
+hdiutil convert /tmp/lux_tmp.dmg -format UDZO -ov -o "dist/$DMG_NAME" >/dev/null
 rm -f /tmp/lux_tmp.dmg; rm -rf "$DMG_STAGE"
 hdiutil verify "dist/$DMG_NAME" >/dev/null
 bash "$REPO/scripts/sign_and_notarize.sh" dmg "dist/$DMG_NAME" 2>/dev/null || true
