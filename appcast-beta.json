@@ -1,17 +1,17 @@
 {
-  "version": "1.50.84",
+  "version": "1.50.85",
   "channel": "beta",
-  "notes": "release (beta): 1.50.84",
+  "notes": "docs: handoff for 1.50.85 beta release",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "e88cc42f1a94932e3f715b2b385357fcc3ad403bbbcee55630c64d03f7e2b44f",
-    "size": 37991711,
-    "version": "1.50.84"
+    "sha256": "deaf6a2559cf7a2b3ba9f4a2c2000e4d7d29ac1c4c684c6ef8f2e26875222713",
+    "size": 37983272,
+    "version": "1.50.85"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "1360a6aaa3883c799385dce53f78386e43d0e1e20fb01621a998c27a0d3875b1",
-    "size": 27319530,
-    "version": "1.50.84"
+    "sha256": "a4f345ee8c237e9022e29004f3f17b044832d69e758c452c80e0da3db0c0c3a4",
+    "size": 27665401,
+    "version": "1.50.85"
   }
 }
