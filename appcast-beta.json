@@ -1,17 +1,17 @@
 {
-  "version": "1.50.85",
+  "version": "1.50.86",
   "channel": "beta",
-  "notes": "docs: handoff for 1.50.85 beta release",
+  "notes": "feat(ui): add explicit Trust button for cert-error proxies",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "deaf6a2559cf7a2b3ba9f4a2c2000e4d7d29ac1c4c684c6ef8f2e26875222713",
-    "size": 37983272,
-    "version": "1.50.85"
+    "sha256": "3cd1d05f51c8c7497bf56364594d62d49376d250144bd8c813cdf8a0d1a6729e",
+    "size": 37989664,
+    "version": "1.50.86"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "a4f345ee8c237e9022e29004f3f17b044832d69e758c452c80e0da3db0c0c3a4",
-    "size": 27665401,
-    "version": "1.50.85"
+    "sha256": "01e09fdaa29843218714584da53f052d4a5323568ee85184a109a817d500e61f",
+    "size": 27664110,
+    "version": "1.50.86"
   }
 }
