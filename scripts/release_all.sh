@@ -170,6 +170,7 @@ win "copy \"\\\\Mac\\Home\\lux-clean\\lib\\core\\checksum.dart\" \"C:\\lux-build
 FLUTTER_OUT=$(win_ps_script "build_flutter.ps1" '
 $ErrorActionPreference = "Continue"
 $env:PUB_CACHE = "C:\Users\virgoh\AppData\Local\Pub\Cache"
+Remove-Item -Force "C:\lux-build\flutter_build_result.txt" -ErrorAction SilentlyContinue
 Set-Location C:\lux-build\lux
 # Clear read-only/hidden/system on the tree so flutter can write the plugin
 # registrant (.flutter-plugins-dependencies) — the real cause of the stale-exe
@@ -193,15 +194,30 @@ $p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
      -ArgumentList "build","windows","--release","--no-pub" `
      -Wait -PassThru -NoNewWindow
 if ($p.ExitCode -ne 0) { Write-Host "FLUTTER_FAILED: build exit $($p.ExitCode)"; exit 1 }
-if (-not (Test-Path $exe)) { Write-Host "FLUTTER_FAILED: no lux.exe produced"; exit 1 }
+if (-not (Test-Path $exe)) {
+  Set-Content -Path "C:\lux-build\flutter_build_result.txt" -Value "FLUTTER_FAILED: no lux.exe produced" -NoNewline
+  Write-Host "FLUTTER_FAILED: no lux.exe produced"; exit 1
+}
+# Sentinel file: the Mac side reads THIS after the exec returns, rather than
+# depending on captured stdout through the prlctl exec boundary (which wedged
+# after a successful build on 2026-11-01 with PrlJob_GetResult: Invalid argument).
+Set-Content -Path "C:\lux-build\flutter_build_result.txt" -Value "FLUTTER_OK" -NoNewline
 Write-Host "FLUTTER_OK"
 ')
 echo "$FLUTTER_OUT" | tail -5
-echo "$FLUTTER_OUT" | grep -q "FLUTTER_OK" || {
-  echo "ERROR: Windows Flutter build failed — aborting release so a stale lux.exe is never packaged/published."
-  echo "       Common cause: read-only .flutter-plugins-dependencies from the SMB robocopy, or pub-cache empty stubs."
-  exit 1
-}
+# Read the result from the sentinel file the PS script wrote, which survives a
+# prlctl-exec stdout wedge (2026-11-01). Fall back to captured stdout only if
+# the sentinel is unreadable.
+FLUTTER_RESULT=$(prlctl exec "$VM" cmd /c "type C:\\lux-build\\flutter_build_result.txt" 2>/dev/null | tr -d '\r\n')
+if [ "$FLUTTER_RESULT" != "FLUTTER_OK" ]; then
+  if echo "$FLUTTER_OUT" | grep -q "FLUTTER_OK"; then
+    echo "WARN: sentinel unreadable ('$FLUTTER_RESULT') but stdout shows FLUTTER_OK — trusting stdout"
+  else
+    echo "ERROR: Windows Flutter build failed — aborting release so a stale lux.exe is never packaged/published."
+    echo "       sentinel='$FLUTTER_RESULT'. Common cause: read-only .flutter-plugins-dependencies from the SMB robocopy, or pub-cache empty stubs."
+    exit 1
+  fi
+fi
 
 # Bundle the Visual C++ runtime next to lux.exe (app-local deployment).
 # Flutter's Windows build does NOT ship it, so a PC without the VC++
@@ -289,7 +305,11 @@ win "cd C:\\lux-build\\lux && \"C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe\
 mkdir -p "$REPO/dist"
 WIN_INSTALLER="$REPO/dist/Lux-${VERSION}-Windows-x64-Setup.exe"
 rm -f "$WIN_INSTALLER"   # never let a previous version's installer masquerade as this one
-win "copy \"${INSTALLER_WIN}\" \"\\\\Mac\\Home\\lux-clean\\dist\\Lux-${VERSION}-Windows-x64-Setup.exe\" && echo COPY_OK"
+# robocopy (not cmd `copy`) — more reliable over the flaky \\Mac\Home SMB share
+# (cmd copy wedged with PrlJob_GetResult on 2026-11-01; robocopy retried fine).
+win "robocopy C:\\lux-build\\dist2 \\\\Mac\\Home\\lux-clean\\dist lux-${VERSION}-setup.exe /NP /R:3 /W:5 & exit 0"
+# robocopy keeps the VM-side filename; rename to the canonical Mac-side name.
+[ -f "$REPO/dist/lux-${VERSION}-setup.exe" ] && mv -f "$REPO/dist/lux-${VERSION}-setup.exe" "$WIN_INSTALLER"
 [ -f "$WIN_INSTALLER" ] || { echo "ERROR: Windows installer not found — ISCC output missing or copy failed"; exit 1; }
 # Sanity: a real installer is tens of MB. A truncated/empty copy (< 5 MB) means
 # something went wrong upstream; refuse to publish it.
