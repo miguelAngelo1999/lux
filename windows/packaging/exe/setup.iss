@@ -142,7 +142,10 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var ResultCode: Integer;
+var
+  ResultCode: Integer;
+  I: Integer;
+  LuxUp: Boolean;
 begin
   if CurStep = ssInstall then
   begin
@@ -172,8 +175,47 @@ begin
         ' /sc ONLOGON /rl HIGHEST /f',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-    { Launch Lux after install }
-    Exec(ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe',
-      '--enable-software-rendering', '', SW_HIDE, ewNoWait, ResultCode);
+    { Relaunch Lux after install.
+      ssPostInstall runs INSIDE the elevated (RunAs) installer, so a direct
+      Exec(lux.exe) launches Lux with the installer's elevated token instead of
+      the logged-in user's normal session token. Leading hypothesis for the
+      "stays off after update" report (2026-11-01): when UAC elevated to a
+      different admin identity, that launch lands in a session the real user
+      never sees. Fix: run the LuxApp scheduled task — its principal is
+      InteractiveToken, so Task Scheduler (SYSTEM) starts Lux in the ACTIVE
+      interactive user session regardless of who calls /run (the Windows
+      analogue of the macOS per-user LaunchAgent relaunch).
+
+      Gotcha guarded here: the task XML sets MultipleInstancesPolicy=IgnoreNew,
+      so if a lingering task instance is still "running", /run returns exit 0
+      but starts NOTHING. So (a) /end first to clear any stale instance, and
+      (b) do NOT trust the /run exit code — poll tasklist for a live lux.exe and
+      only then consider the job done. }
+    Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(500);
+    Exec('schtasks.exe', '/run /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { Verify Lux actually came up (exit code 0 from /run only means "accepted").
+      Poll up to ~8s for a live lux.exe; cmd `tasklist | find` sets errorlevel 0
+      when found, which Exec returns in ResultCode. }
+    LuxUp := False;
+    for I := 1 to 8 do
+    begin
+      Sleep(1000);
+      Exec(ExpandConstant('{cmd}'),
+        '/c tasklist /FI "IMAGENAME eq lux.exe" | find /I "lux.exe"',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      if ResultCode = 0 then
+      begin
+        LuxUp := True;
+        break;
+      end;
+    end;
+    { Only if the task genuinely did not bring Lux up, fall back to a direct
+      launch. (Last resort — this path inherits the elevated token, the very
+      thing we are avoiding — but an elevated-but-running Lux still beats an app
+      that stays completely off.) }
+    if not LuxUp then
+      Exec(ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe',
+        '--enable-software-rendering', '', SW_HIDE, ewNoWait, ResultCode);
   end;
 end;
