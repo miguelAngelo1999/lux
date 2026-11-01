@@ -51,6 +51,18 @@
     .footer a { color: #666; text-decoration: none; } .footer a:hover { color: #888; }
     .langbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
     .langbar select { background: #1a1a1a; color: #aaa; border: 1px solid #2a2a2a; border-radius: 4px; font-size: 0.72rem; padding: 3px 6px; cursor: pointer; outline: none; }
+    /* Beta channel */
+    .beta-box { border: 1px solid #3a3320; background: #16140c; border-radius: 10px; padding: 16px; margin-bottom: 1.6rem; }
+    .beta-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .beta-badge { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.5px; color: #16140c; background: #e0a31e; padding: 2px 8px; border-radius: 4px; }
+    .beta-ver { font-size: 0.78rem; color: #e0a31e; font-weight: 600; }
+    .beta-warn { font-size: 0.76rem; color: #d8b46a; line-height: 1.55; margin: 0 0 12px; }
+    .beta-downloads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .beta-dl { display: flex; flex-direction: column; gap: 2px; background: #1c1810; border: 1px solid #3a3320; border-radius: 8px; padding: 12px 14px; text-decoration: none; color: #e8d8ad; transition: border-color 0.15s, background 0.15s; }
+    .beta-dl:hover { border-color: #e0a31e; background: #221d11; }
+    .beta-plat { font-size: 0.85rem; font-weight: 600; }
+    .beta-meta { font-size: 0.68rem; color: #a08a52; }
+    .beta-sub { font-size: 0.68rem; color: #8a7a4a; margin: 12px 0 0; }
   </style>
 </head>
 <body>
@@ -69,7 +81,7 @@
       <img src="lux-icon.png" alt="Lux">
       <div class="header-text"><h1>Lux</h1><p data-i18n="subtitle">Transparent proxy for macOS and Windows</p></div>
     </div>
-    <div class="version">v1.50.76</div>
+    <div class="version">v1.50.85</div>
     <div class="notes">
       Per-proxy &amp; bypass-except-proxy modes, mode chooser, create-rule-from-search,
       watchdog auto-restart, NODE env vars for Electron apps, pre-TUN bypass,
@@ -89,11 +101,37 @@
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8.5v8.5H3V3zm9.5 0H21v8.5h-8.5V3zM3 12.5h8.5V21H3v-8.5zm9.5 0H21V21h-8.5v-8.5z"/></svg>
         <div class="dl-info">
           <div class="platform">Windows</div>
-          <div class="meta">x64 Installer &middot; 21 MB</div>
+          <div class="meta">x64 Installer &middot; 36 MB</div>
           <div class="dl-status"></div>
         </div>
         <div class="dl-progress"></div>
       </div>
+    </div>
+
+    <!-- Beta channel ───────────────────────────────────────────────────── -->
+    <div class="beta-box">
+      <div class="beta-head">
+        <span class="beta-badge">BETA</span>
+        <span class="beta-ver">v1.50.86</span>
+      </div>
+      <p class="beta-warn" data-i18n="betaWarn">
+        ⚠️ Beta builds get the newest features first, but may be unstable. Only
+        download if you want the latest and are willing to help test and report bugs.
+      </p>
+      <div class="beta-downloads">
+        <a class="beta-dl" href="https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&amp;export=download&amp;confirm=t">
+          <span class="beta-plat">macOS beta</span>
+          <span class="beta-meta">Universal DMG · 36 MB</span>
+        </a>
+        <a class="beta-dl" href="https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&amp;export=download&amp;confirm=t">
+          <span class="beta-plat">Windows beta</span>
+          <span class="beta-meta">x64 Installer · 26 MB</span>
+        </a>
+      </div>
+      <p class="beta-sub" data-i18n="betaTip">
+        Already have Lux? Turn on “Beta updates” in Settings → Updates instead of
+        downloading here.
+      </p>
     </div>
 
     <div class="install-notes">
@@ -138,6 +176,8 @@
         prevVersions: 'Previous Versions',
         loadingHistory: 'Loading version history...',
         forkedBy: 'Forked by', from: 'from', copy: 'Copy', copied: 'Copied',
+        betaWarn: '⚠️ Beta builds get the newest features first, but may be unstable. Only download if you want the latest and are willing to help test and report bugs.',
+        betaTip: 'Already have Lux? Turn on “Beta updates” in Settings → Updates instead of downloading here.',
       },
       pt: {
         subtitle: 'Proxy transparente para macOS e Windows',
@@ -148,6 +188,8 @@
         prevVersions: 'Versões anteriores',
         loadingHistory: 'Carregando histórico de versões...',
         forkedBy: 'Bifurcado por', from: 'de', copy: 'Copiar', copied: 'Copiado',
+        betaWarn: '⚠️ As versões beta recebem os recursos mais novos primeiro, mas podem ser instáveis. Baixe apenas se quiser as novidades e estiver disposto a testar e relatar erros.',
+        betaTip: 'Já tem o Lux? Ative “Atualizações beta” em Configurações → Atualizações em vez de baixar aqui.',
       },
       es: {
         subtitle: 'Proxy transparente para macOS y Windows',
@@ -158,6 +200,8 @@
         prevVersions: 'Versiones anteriores',
         loadingHistory: 'Cargando historial de versiones...',
         forkedBy: 'Bifurcado por', from: 'de', copy: 'Copiar', copied: 'Copiado',
+        betaWarn: '⚠️ Las versiones beta reciben las funciones más nuevas primero, pero pueden ser inestables. Descarga solo si quieres lo último y estás dispuesto a probar e informar errores.',
+        betaTip: '¿Ya tienes Lux? Activa “Actualizaciones beta” en Configuración → Actualizaciones en lugar de descargar aquí.',
       },
       it: {
         subtitle: 'Proxy trasparente per macOS e Windows',
