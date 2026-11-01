@@ -84,10 +84,6 @@ class _HomeState extends State<Home>
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   // Auto-switch trigger debounce timer
   Timer? _autoSwitchDebounce;
-  // True when the user has explicitly started the core (or autoConnect did).
-  // The watchdog only restarts when this is true, so a deliberate toggle-off
-  // is respected.
-  bool _userWantsRunning = false;
   final _quickEditChannel = const MethodChannel('lux_quick_edit');
 
   Future<void> _handleNativeQuickEdit(MethodCall call) async {
