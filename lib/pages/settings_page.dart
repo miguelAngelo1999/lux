@@ -753,7 +753,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         ThemeMode.light => 'Light',
         ThemeMode.dark => 'Dark',
         ThemeMode.system => 'System',
-        _ => 'System',
       },
       onChanged: (v) async {
         await writeTheme(v);
