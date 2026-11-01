@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lux Proxy Chooser — Prototype</title>
+<style>
+  :root{
+    --bg:#1b1b1f; --card:#26262b; --card2:#2d2d33; --line:#3a3a42;
+    --txt:#e6e6ea; --dim:#9a9aa6; --primary:#4a9eff; --primtint:#1e3a5f;
+    --green:#3ecf8e; --greent:#17352a; --red:#ff5d5d; --redt:#3a1e1e;
+    --amber:#e0a31e; --ambert:#3a2f12;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:12px;margin-bottom:20px}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:22px;max-width:1100px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .phead{padding:12px 14px;border-bottom:1px solid var(--line)}
+  .ptitle{font-weight:600;font-size:14px}
+  .ptag{font-size:11px;padding:2px 7px;border-radius:5px;margin-left:8px;vertical-align:middle}
+  .bad{background:var(--redt);color:var(--red)}
+  .good{background:var(--greent);color:var(--green)}
+  .pnote{color:var(--dim);font-size:11px;margin-top:4px}
+  .list{padding:8px}
+  .selnote{padding:8px 14px;font-size:11px;color:var(--dim);border-top:1px solid var(--line)}
+
+  /* ---- generic row ---- */
+  .row{display:flex;align-items:center;gap:10px;padding:10px 10px;border-radius:9px;position:relative}
+  .row + .row{margin-top:2px}
+  .radio{width:18px;height:18px;border-radius:50%;border:2px solid var(--dim);flex:none;position:relative;transition:.12s}
+  .radio.on{border-color:var(--primary)}
+  .radio.on:after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--primary)}
+  .info{flex:1;min-width:0}
+  .nm{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta{display:flex;align-items:center;gap:6px;margin-top:3px}
+  .badge{font-size:10px;padding:1px 5px;border-radius:3px;background:#3a3a46;color:#c9c9d6}
+  .addr{font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .menu{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);flex:none;cursor:pointer}
+  .menu:hover{background:#3a3a46}
+
+  /* selected row styling (new designs) */
+  .row.sel{background:var(--primtint)}
+  .row.sel .nm{font-weight:600}
+  .row.sel .accent{position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:3px;background:var(--primary)}
+  .activepill{font-size:9px;padding:1px 6px;border-radius:8px;background:var(--greent);color:var(--green);margin-left:6px}
+
+  /* ---- test controls ---- */
+  /* current tiny chip */
+  .chipOld{font-size:10px;padding:2px 6px;border:1px solid var(--line);border-radius:4px;color:var(--dim);cursor:pointer;flex:none;min-width:34px;text-align:center}
+  .chipOld.ok{color:var(--green);border-color:var(--green);background:var(--greent)}
+  .chipOld.fail{color:var(--red);border-color:var(--red);background:var(--redt)}
+
+  /* option A: combined chip-button */
+  .tchip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid var(--line);color:var(--dim);cursor:pointer;flex:none;white-space:nowrap;transition:.12s}
+  .tchip:hover{border-color:var(--primary);color:var(--txt)}
+  .tchip .ic{font-size:12px}
+  .tchip.ok{background:var(--greent);border-color:#2b6b52;color:var(--green)}
+  .tchip.unreach{background:var(--redt);border-color:#6b2b2b;color:var(--red)}
+  .tchip.trust{background:var(--ambert);border-color:#6b5a1e;color:var(--amber)}
+  .tchip.na{background:#2a2a30;border-color:var(--line);color:#6f6f7a;cursor:default}
+
+  /* option B: separate labeled button + result chip */
+  .tbtn{font-size:11px;padding:4px 10px;border-radius:7px;border:1px solid var(--primary);color:var(--primary);background:transparent;cursor:pointer;flex:none;white-space:nowrap}
+  .tbtn:hover{background:var(--primtint)}
+  .result{font-size:11px;padding:3px 7px;border-radius:6px;flex:none;white-space:nowrap}
+  .result.idle{color:#6f6f7a}
+  .result.ok{background:var(--greent);color:var(--green)}
+  .result.unreach{background:var(--redt);color:var(--red)}
+  .result.trust{background:var(--ambert);color:var(--amber);cursor:pointer}
+  .result.na{color:#6f6f7a}
+
+  .spin{width:11px;height:11px;border:1.6px solid currentColor;border-top-color:transparent;border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:middle}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .legend{max-width:1100px;margin-top:22px;color:var(--dim);font-size:12px;line-height:1.7}
+  .legend b{color:var(--txt)}
+  kbd{background:#3a3a46;border-radius:4px;padding:1px 5px;font-size:11px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#000a;border:1px solid var(--line);padding:8px 14px;border-radius:8px;font-size:12px;opacity:0;transition:.2s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+  <h1>Lux proxy chooser — redesign options</h1>
+  <div class="sub">Click the rows and the test controls in each panel. Three proxies: a normal HTTP one, a PAC-only one, and one with a cert problem.</div>
+
+  <div class="cols">
+
+    <!-- ============ CURRENT (BUGGY) ============ -->
+    <div class="panel">
+      <div class="phead">
+        <span class="ptitle">Current</span><span class="ptag bad">buggy</span>
+        <div class="pnote">Try to select by clicking the radio circle or the name — it won't work. Only the empty gaps select. The test chip is the cryptic one.</div>
+      </div>
+      <div class="list" id="cur"></div>
+      <div class="selnote" id="cur-sel">Selected: (none — try clicking the radio dot…)</div>
+    </div>
+
+    <!-- ============ OPTION A ============ -->
+    <div class="panel">
+      <div class="phead">
+        <span class="ptitle">Option A — combined test chip</span><span class="ptag good">fixed</span>
+        <div class="pnote">Whole row selects (radio, name, anywhere). The test control is ONE chip that's also the button: tap to test, shows the result + state.</div>
+      </div>
+      <div class="list" id="a"></div>
+      <div class="selnote" id="a-sel">Selected: —</div>
+    </div>
+
+    <!-- ============ OPTION B ============ -->
+    <div class="panel">
+      <div class="phead">
+        <span class="ptitle">Option B — separate Test button</span><span class="ptag good">fixed</span>
+        <div class="pnote">Whole row selects. A distinct <b>Test</b> button triggers it; the result shows as a separate chip next to it.</div>
+      </div>
+      <div class="list" id="b"></div>
+      <div class="selnote" id="b-sel">Selected: —</div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <b>What you're comparing</b><br>
+    • <b>Selection</b> (both A &amp; B fix it the same way): the entire row is clickable to select — radio dot, name, or empty space. The test control and <kbd>⋯</kbd> menu are small islands that do NOT change selection. The selected row is tinted + bold + has a blue bar, and shows an <span class="activepill">Active</span> pill when connected.<br>
+    • <b>Test control — A vs B is the only real difference:</b><br>
+    &nbsp;&nbsp;— <b>A (combined chip):</b> compact. One thing. Tap it to test; it becomes the result. States: <span class="tchip">⚡ Test</span> <span class="tchip ok">▲ 123 ms</span> <span class="tchip unreach">⚠ Unreachable</span> <span class="tchip trust">🛡 Trust?</span> <span class="tchip na">PAC</span><br>
+    &nbsp;&nbsp;— <b>B (button + chip):</b> more explicit, wider. A <span class="tbtn">Test</span> button plus a result chip. Clearer that it's an action, uses more row width.<br>
+    • <b>“Trust?”</b> (amber) only appears when the proxy is reachable but its TLS cert isn't trusted — clicking it opens the Trust-Certificate flow. A real unreachable shows <b>Unreachable</b>, not a cryptic “fail”.<br>
+    • <b>PAC-only</b> proxies show a muted <b>PAC</b> (no latency to measure) instead of a red fail.
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const PROXIES = [
+  {id:'lp',   name:'PAC-LP',        type:'HTTP',  addr:'192.168.71.254:8082', kind:'ok',      ms:142},
+  {id:'pac',  name:'Corp PAC',      type:'PAC',   addr:'wpad.company/wpad.dat', kind:'pac'},
+  {id:'corp', name:'Corporate HTTP',type:'HTTP',  addr:'proxy.corp:3128',     kind:'cert'},
+];
+// test outcome per kind: ok -> latency, cert -> Trust?, pac -> N/A
+function outcome(kind){ return kind==='ok'?'ok':kind==='cert'?'trust':kind==='pac'?'na':'unreach'; }
+
+let selected = {cur:null, a:null, b:null};
+const test = {}; // "panel:id" -> state: idle|testing|ok|unreach|trust|na
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800);}
+
+/* ---------- CURRENT (buggy) ---------- */
+function renderCur(){
+  const el=document.getElementById('cur'); el.innerHTML='';
+  PROXIES.forEach(p=>{
+    const row=document.createElement('div'); row.className='row';
+    // BUG: clicking radio/name does nothing; only the row gaps "select".
+    // We simulate: radio & name & chip & menu all stopPropagation; only bare row selects.
+    row.onclick=()=>{selected.cur=p.id; drawCurSel(); renderCur(); toast('selected via dead-space (the bug)');};
+    const rd=document.createElement('div'); rd.className='radio'+(selected.cur===p.id?' on':'');
+    rd.onclick=(e)=>{e.stopPropagation(); toast('❌ radio click ignored (bug)');};
+    const info=document.createElement('div'); info.className='info';
+    info.onclick=(e)=>{e.stopPropagation(); toast('❌ name click ignored (bug)');};
+    info.innerHTML=`<div class="nm">${p.name}</div><div class="meta"><span class="badge">${p.type}</span><span class="addr">${p.addr}</span></div>`;
+    const k='cur:'+p.id; const st=test[k]||'idle';
+    const chip=document.createElement('div');
+    chip.className='chipOld'+(st==='ok'?' ok':st==='fail'?' fail':'');
+    chip.textContent= st==='testing'?'…': st==='ok'?p.ms+'ms': st==='fail'?'fail':'...';
+    chip.onclick=(e)=>{e.stopPropagation(); runTest('cur',p,renderCur,true);};
+    const menu=document.createElement('div'); menu.className='menu'; menu.textContent='⋯';
+    menu.onclick=(e)=>{e.stopPropagation(); toast('menu');};
+    row.append(rd,info,chip,menu); el.append(row);
+  });
+}
+function drawCurSel(){const p=PROXIES.find(x=>x.id===selected.cur);document.getElementById('cur-sel').textContent='Selected: '+(p?p.name:'(none)');}
+
+/* ---------- OPTION A ---------- */
+function renderA(){
+  const el=document.getElementById('a'); el.innerHTML='';
+  PROXIES.forEach(p=>{
+    const sel=selected.a===p.id;
+    const row=document.createElement('div'); row.className='row'+(sel?' sel':'');
+    row.onclick=()=>{selected.a=p.id; document.getElementById('a-sel').textContent='Selected: '+p.name; renderA();};
+    if(sel){const ac=document.createElement('div');ac.className='accent';row.append(ac);}
+    const rd=document.createElement('div'); rd.className='radio'+(sel?' on':'');
+    const info=document.createElement('div'); info.className='info';
+    info.innerHTML=`<div class="nm">${p.name}${sel?'<span class="activepill">Active</span>':''}</div><div class="meta"><span class="badge">${p.type}</span><span class="addr">${p.addr}</span></div>`;
+    // combined test chip
+    const k='a:'+p.id; const st=test[k]||'idle';
+    const chip=document.createElement('div');
+    let cls='tchip', txt='⚡ Test';
+    if(st==='testing'){txt='<span class="spin"></span> Testing';}
+    else if(st==='ok'){cls+=' ok';txt='▲ '+p.ms+' ms';}
+    else if(st==='unreach'){cls+=' unreach';txt='⚠ Unreachable';}
+    else if(st==='trust'){cls+=' trust';txt='🛡 Trust?';}
+    else if(st==='na'){cls+=' na';txt='PAC';}
+    chip.className=cls; chip.innerHTML=txt;
+    chip.title = st==='na'?'PAC script — no single server to test'
+      : st==='trust'?'Reachable, but its certificate isn\'t trusted. Click to fix.'
+      : 'Test reachability of this proxy';
+    chip.onclick=(e)=>{e.stopPropagation(); if(st==='na'){toast('PAC proxy — nothing to test');return;} if(st==='trust'){toast('→ opens Trust Certificate dialog');return;} runTest('a',p,renderA);};
+    const menu=document.createElement('div'); menu.className='menu'; menu.textContent='⋯';
+    menu.title='More actions'; menu.onclick=(e)=>{e.stopPropagation(); toast('menu (does not change selection)');};
+    row.append(rd,info,chip,menu); el.append(row);
+  });
+}
+
+/* ---------- OPTION B ---------- */
+function renderB(){
+  const el=document.getElementById('b'); el.innerHTML='';
+  PROXIES.forEach(p=>{
+    const sel=selected.b===p.id;
+    const row=document.createElement('div'); row.className='row'+(sel?' sel':'');
+    row.onclick=()=>{selected.b=p.id; document.getElementById('b-sel').textContent='Selected: '+p.name; renderB();};
+    if(sel){const ac=document.createElement('div');ac.className='accent';row.append(ac);}
+    const rd=document.createElement('div'); rd.className='radio'+(sel?' on':'');
+    const info=document.createElement('div'); info.className='info';
+    info.innerHTML=`<div class="nm">${p.name}${sel?'<span class="activepill">Active</span>':''}</div><div class="meta"><span class="badge">${p.type}</span><span class="addr">${p.addr}</span></div>`;
+    const k='b:'+p.id; const st=test[k]||'idle';
+    // result chip
+    const res=document.createElement('div');
+    if(st==='idle'){res.className='result idle';res.textContent='not tested';}
+    else if(st==='testing'){res.className='result idle';res.innerHTML='<span class="spin"></span>';}
+    else if(st==='ok'){res.className='result ok';res.textContent='▲ '+p.ms+' ms';}
+    else if(st==='unreach'){res.className='result unreach';res.textContent='⚠ Unreachable';}
+    else if(st==='trust'){res.className='result trust';res.textContent='🛡 Trust?';res.onclick=(e)=>{e.stopPropagation();toast('→ opens Trust Certificate dialog');};}
+    else if(st==='na'){res.className='result na';res.textContent='PAC — n/a';}
+    // test button
+    const btn=document.createElement('button'); btn.className='tbtn'; btn.textContent='Test';
+    btn.title='Test reachability of this proxy';
+    if(p.kind==='pac'){btn.disabled=true;btn.style.opacity=.4;btn.style.cursor='default';}
+    btn.onclick=(e)=>{e.stopPropagation(); if(p.kind==='pac'){toast('PAC proxy — nothing to test');return;} runTest('b',p,renderB);};
+    const menu=document.createElement('div'); menu.className='menu'; menu.textContent='⋯';
+    menu.title='More actions'; menu.onclick=(e)=>{e.stopPropagation(); toast('menu (does not change selection)');};
+    row.append(rd,info,res,btn,menu); el.append(row);
+  });
+}
+
+/* shared test runner */
+function runTest(panel,p,rerender,isOld){
+  const k=panel+':'+p.id;
+  test[k]='testing'; rerender();
+  setTimeout(()=>{
+    if(isOld){ test[k]= p.kind==='ok'?'ok':'fail'; }   // current: only ok/fail
+    else { test[k]=outcome(p.kind); }                   // new: ok/unreach/trust/na
+    rerender();
+  }, 900);
+}
+
+renderCur(); drawCurSel(); renderA(); renderB();
+// prime the N/A state so PAC shows its resting state in the new panels
+test['a:pac']='na'; test['b:pac']='na'; renderA(); renderB();
+</script>
+</body>
+</html>

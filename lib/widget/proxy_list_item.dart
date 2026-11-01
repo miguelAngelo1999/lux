@@ -6,16 +6,25 @@ import '../const/const.dart';
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
 
+/// Result state of the per-proxy reachability test.
+enum TestState { untested, testing, reachable, unreachable, certError, notApplicable }
+
 class ProxyListItem extends StatefulWidget {
   final ProxyItem item;
   final void Function(ProxyItemAction action) onChange;
   final CoreManager? coreManager;
+  // Whole-row selection (Option B): tapping anywhere on the row selects this
+  // proxy, not only the radio dot. [selected] drives the selected styling.
+  final bool selected;
+  final void Function(String id)? onSelect;
 
   const ProxyListItem({
     super.key,
     required this.item,
     required this.onChange,
     this.coreManager,
+    this.selected = false,
+    this.onSelect,
   });
 
   @override
@@ -24,25 +33,38 @@ class ProxyListItem extends StatefulWidget {
 
 class _ProxyListItemState extends State<ProxyListItem> {
   final menuController = MenuController();
-  int? _delay; // ms, null = untested, -1 = failed
-  bool _testing = false;
+  TestState _state = TestState.untested;
+  int _latencyMs = 0;
+
+  /// A PAC-only proxy has a PAC URL and no fixed server, so a latency test to a
+  /// single upstream is meaningless — show "PAC — n/a" instead of a red fail.
+  bool get _isPacOnly {
+    final pac = widget.item.pacUrl ?? '';
+    final server = widget.item.server ?? '';
+    return pac.isNotEmpty && server.isEmpty;
+  }
 
   Future<void> _testDelay() async {
-    if (_testing || widget.coreManager == null) return;
-    setState(() {
-      _testing = true;
-      _delay = null;
-    });
-    final result = await widget.coreManager!.testProxyDelayDetailed(widget.item.id);
-    if (mounted) {
-      setState(() {
-        _delay = result.delay;
-        _testing = false;
-      });
-      if (result.certError && result.delay < 0) {
-        _promptCertTrust();
-      }
+    if (_state == TestState.testing || widget.coreManager == null) return;
+    if (_isPacOnly) {
+      setState(() => _state = TestState.notApplicable);
+      return;
     }
+    setState(() => _state = TestState.testing);
+    final result = await widget.coreManager!.testProxyDelayDetailed(widget.item.id);
+    if (!mounted) return;
+    setState(() {
+      if (result.delay >= 0) {
+        _state = TestState.reachable;
+        _latencyMs = result.delay;
+      } else if (result.certError) {
+        _state = TestState.certError;
+      } else {
+        _state = TestState.unreachable;
+      }
+    });
+    // Note: unlike before, we do NOT auto-open the cert dialog. The certError
+    // state shows a "Trust?" chip the user taps deliberately (_promptCertTrust).
   }
 
   Future<void> _promptCertTrust() async {
@@ -178,13 +200,6 @@ class _ProxyListItemState extends State<ProxyListItem> {
     }
   }
 
-  Color _delayColor(int ms) {
-    if (ms < 0) return Colors.red;
-    if (ms < 200) return Colors.green;
-    if (ms < 500) return Colors.orange;
-    return Colors.red;
-  }
-
   String _typeLabel(String type) {
     switch (type) {
       case 'http':
@@ -206,120 +221,198 @@ class _ProxyListItemState extends State<ProxyListItem> {
     }
   }
 
+  // ── test result chip (separate from the Test button — Option B) ──────────
+  Widget _resultChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    Color fg, bg;
+    String text;
+    bool tappable = false;
+    IconData? icon;
+    switch (_state) {
+      case TestState.untested:
+        return const SizedBox.shrink(); // nothing until tested
+      case TestState.testing:
+        return const SizedBox(
+          width: 12, height: 12,
+          child: CircularProgressIndicator(strokeWidth: 1.6),
+        );
+      case TestState.reachable:
+        fg = Colors.green; bg = Colors.green.withAlpha(28);
+        icon = Icons.check_circle_outline; text = '$_latencyMs ms';
+        break;
+      case TestState.unreachable:
+        fg = cs.error; bg = cs.error.withAlpha(28);
+        icon = Icons.error_outline; text = tl(context, 'Unreachable');
+        break;
+      case TestState.certError:
+        fg = const Color(0xFFE0A31E); bg = const Color(0x22E0A31E);
+        icon = Icons.gpp_maybe_outlined; text = tl(context, 'Trust?');
+        tappable = true;
+        break;
+      case TestState.notApplicable:
+        fg = cs.outline; bg = Colors.transparent;
+        icon = Icons.info_outline; text = tl(context, 'PAC — n/a');
+        break;
+    }
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: fg),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(fontSize: 10.5, color: fg)),
+      ]),
+    );
+    if (!tappable) return chip;
+    // certError → tapping opens the Trust-Certificate flow deliberately.
+    return Tooltip(
+      message: tl(context,
+          'Reachable, but its certificate is not trusted. Click to fix.'),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: _promptCertTrust,
+        child: chip,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    return RadioListTile<String>(
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      title: Row(
-        children: [
-          // Name
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name.isNotEmpty
-                      ? item.name
-                      : '${item.server}:${item.port}',
-                  style: const TextStyle(fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Row(
-                  children: [
-                    // Type badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .secondaryContainer,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(
-                        _typeLabel(item.type),
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSecondaryContainer,
-                        ),
-                      ),
-                    ),
-                    // Server address
-                    if (item.server != null && item.server!.isNotEmpty) ...[
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          '${item.server}:${item.port}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .outline,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // Delay indicator + test button
-          if (widget.coreManager != null)
-            GestureDetector(
-              onTap: _testDelay,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _delay == null
-                      ? Theme.of(context).colorScheme.surface
-                      : _delayColor(_delay!).withAlpha(30),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: _delay == null
-                        ? Theme.of(context).colorScheme.outline.withAlpha(80)
-                        : _delayColor(_delay!).withAlpha(100),
+    final cs = Theme.of(context).colorScheme;
+    final selected = widget.selected;
+
+    final titleText = item.name.isNotEmpty
+        ? item.name
+        : '${item.server ?? ''}:${item.port ?? ''}';
+
+    return Semantics(
+      inMutuallyExclusiveGroup: true,
+      selected: selected,
+      label: titleText,
+      child: Material(
+        color: selected ? cs.primaryContainer.withAlpha(90) : Colors.transparent,
+        child: InkWell(
+          // Whole-row select — the core fix. Tapping anywhere that isn't an
+          // explicit action control (Test button / result chip / ⋯ menu)
+          // selects this proxy.
+          onTap: widget.onSelect == null ? null : () => widget.onSelect!(item.id),
+          child: Stack(children: [
+            if (selected)
+              Positioned(
+                left: 0, top: 6, bottom: 6,
+                child: Container(
+                  width: 3,
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    borderRadius: BorderRadius.circular(3),
                   ),
                 ),
-                child: _testing
-                    ? const SizedBox(
-                        width: 10,
-                        height: 10,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 1.5),
-                      )
-                    : Text(
-                        _delay == null
-                            ? '...'
-                            : _delay! < 0
-                                ? tl(context, 'fail')
-                                : '${_delay}ms',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _delay == null
-                              ? Theme.of(context).colorScheme.outline
-                              : _delayColor(_delay!),
-                        ),
-                      ),
               ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(children: [
+                // Leading radio (visual + keyboard; inherits the ancestor
+                // RadioGroup so Space/arrow keys still work).
+                Radio<String>(value: item.id),
+                const SizedBox(width: 4),
+                // Name + subtitle (part of the select surface)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Flexible(
+                          child: Text(
+                            titleText,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight:
+                                  selected ? FontWeight.w600 : FontWeight.w400,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (selected) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withAlpha(36),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(tl(context, 'Active'),
+                                style: const TextStyle(
+                                    fontSize: 9, color: Colors.green)),
+                          ),
+                        ],
+                      ]),
+                      const SizedBox(height: 2),
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: cs.secondaryContainer,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(_typeLabel(item.type),
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: cs.onSecondaryContainer)),
+                        ),
+                        if (item.server != null && item.server!.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text('${item.server}:${item.port}',
+                                style:
+                                    TextStyle(fontSize: 10, color: cs.outline),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        ],
+                      ]),
+                    ],
+                  ),
+                ),
+                // ── Trailing action cluster: bounded, do NOT select the row ──
+                if (widget.coreManager != null) ...[
+                  _resultChip(context),
+                  const SizedBox(width: 6),
+                  // Explicit, labeled Test button (Option B).
+                  SizedBox(
+                    height: 26,
+                    child: OutlinedButton(
+                      onPressed:
+                          _state == TestState.testing ? null : _testDelay,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: const Size(0, 26),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        side: BorderSide(color: cs.primary.withAlpha(140)),
+                        foregroundColor: cs.primary,
+                      ),
+                      child: Text(tl(context, 'Test'),
+                          style: const TextStyle(fontSize: 11)),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                ],
+                ProxyItemActionMenu(
+                  onClick: widget.onChange,
+                  controller: menuController,
+                  id: item.id,
+                  type: item.type,
+                  passwordLocked: item.passwordLocked,
+                ),
+              ]),
             ),
-          // Action menu
-          ProxyItemActionMenu(
-            onClick: widget.onChange,
-            controller: menuController,
-            id: item.id,
-            type: item.type,
-            passwordLocked: item.passwordLocked,
-          ),
-        ],
+          ]),
+        ),
       ),
-      value: item.id,
     );
   }
 }

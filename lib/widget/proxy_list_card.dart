@@ -14,6 +14,10 @@ class ProxyListCard extends StatefulWidget {
   final CoreManager? coreManager;
 
   final void Function(ProxyItemAction action, ProxyItem item) onItemChange;
+  // Whole-row select + which proxy is active, so the row can make the entire
+  // tile select (not just the radio dot) and show selected styling.
+  final void Function(String id)? onSelect;
+  final String? selectedId;
 
   const ProxyListCard({
     super.key,
@@ -23,6 +27,8 @@ class ProxyListCard extends StatefulWidget {
     required this.onItemChange,
     required this.subscriptionList,
     this.coreManager,
+    this.onSelect,
+    this.selectedId,
   });
 
   @override
@@ -107,6 +113,9 @@ class _ProxyListCardState extends State<ProxyListCard> {
                       key: Key(proxyList.proxies[index].id),
                       item: proxyList.proxies[index],
                       coreManager: widget.coreManager,
+                      selected:
+                          widget.selectedId == proxyList.proxies[index].id,
+                      onSelect: widget.onSelect,
                       onChange: (action) =>
                           widget.onItemChange(action, proxyList.proxies[index]),
                     );
