@@ -847,6 +847,9 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
             suggestedName = cnMatch != null ? cnMatch.group(1)!.trim() : certResult.issuer;
           }
         }
+        // Widget may have unmounted during the credential prompt / cert check
+        // above (desktop window close or hot-restart). Guard before using context.
+        if (!mounted) return;
         // Step 5: Let user confirm or override the name (no duplicates)
         final existingNames = proxyListGroup.allProxies.map((p) => p.name.toLowerCase()).toSet();
         final nameCtrl = TextEditingController(text: suggestedName);
