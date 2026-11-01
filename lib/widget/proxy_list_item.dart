@@ -382,6 +382,27 @@ class _ProxyListItemState extends State<ProxyListItem> {
                 if (widget.coreManager != null) ...[
                   _resultChip(context),
                   const SizedBox(width: 6),
+                  // Explicit, labeled Trust button — only when the proxy is
+                  // reachable but its certificate isn't trusted. Opens the
+                  // same cert-trust flow as tapping the "Trust?" chip.
+                  if (_state == TestState.certError) ...[
+                    SizedBox(
+                      height: 26,
+                      child: OutlinedButton(
+                        onPressed: _promptCertTrust,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          minimumSize: const Size(0, 26),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          side: const BorderSide(color: Color(0xFFE0A31E)),
+                          foregroundColor: const Color(0xFFE0A31E),
+                        ),
+                        child: Text(tl(context, 'Trust'),
+                            style: const TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   // Explicit, labeled Test button (Option B).
                   SizedBox(
                     height: 26,
