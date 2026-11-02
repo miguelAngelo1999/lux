@@ -1,0 +1,10 @@
+name = "lux-download"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+account_id = "b38208bb63a7829d7fab147988372d17"
+
+[vars]
+MAC_FILE_ID = "1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-"
+WIN_FILE_ID = "1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG"
+MAC_BETA_FILE_ID = "1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x"
+WIN_BETA_FILE_ID = "1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU"
