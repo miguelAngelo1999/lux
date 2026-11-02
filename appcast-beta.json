@@ -1,17 +1,17 @@
 {
-  "version": "1.50.87",
+  "version": "1.50.88",
   "channel": "beta",
-  "notes": "refactor: drop unreachable wildcard in ThemeMode switch (settings)",
+  "notes": "fix(windows): relaunch Lux via LuxApp task after update (was staying off)",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "ebf5fb01cada20d5ecde6a5e915d94ba51f90f0ff4cceb0000e601bb2ab71cc3",
-    "size": 37994387,
-    "version": "1.50.87"
+    "sha256": "3e494dd163b8b760221cf5d535a28e5475820cdb46fa66e78e002f1385daa328",
+    "size": 37989756,
+    "version": "1.50.88"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "ea884d552b1c1ea3552a08c86acaa16fda3ef923663bb8775cb63b524f670c44",
-    "size": 27665504,
-    "version": "1.50.87"
+    "sha256": "47b1fa4fd121d63ac3a38b1df26cf2eb4ae5b16c49e7956dcc0ea79a569750a1",
+    "size": 27665080,
+    "version": "1.50.88"
   }
 }
