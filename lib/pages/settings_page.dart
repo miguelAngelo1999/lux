@@ -499,6 +499,26 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   // Reload so the version label picks up / drops the -beta suffix
                   await _load();
                   if (mounted) setState(() {});
+                  // Toggling the channel is an explicit action — re-check against
+                  // the NEW channel immediately instead of waiting out the 24h
+                  // auto-check throttle. Without this, turning beta on showed the
+                  // "-beta" label but never surfaced the newer beta build.
+                  final info = await checkForUpdate();
+                  if (!mounted) return;
+                  if (info != null && info.hasUpdate) {
+                    await writePendingUpdateVersion(info.latestVersion);
+                    if (mounted) {
+                      setState(() => _pendingUpdateVersion = info.latestVersion);
+                      await showUpdateDialog(context, info);
+                    }
+                  } else {
+                    // No newer build on this channel — clear any stale badge.
+                    await writePendingUpdateVersion(null);
+                    if (mounted) {
+                      setState(() => _pendingUpdateVersion = '');
+                      _notify(tl(context, 'You are up to date'));
+                    }
+                  }
                 },
               ),
             ),
