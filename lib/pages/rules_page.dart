@@ -367,7 +367,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       try {
         await widget.coreManager.addCustomizedRules([newRaw]);
       } catch (e) {
-        _error('Could not add the rule: $e');
+        _error(_friendlyRuleError(e));
       }
       await _load();
     } else {
@@ -381,7 +381,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           proxyId: _proxyNameToId[policy],
         );
       } catch (e) {
-        _error('Could not save the rule: $e');
+        _error(_friendlyRuleError(e));
       }
       await _load();
     }
