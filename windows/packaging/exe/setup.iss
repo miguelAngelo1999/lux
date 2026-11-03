@@ -75,11 +75,11 @@ Type: filesandordirs; Name: "{localappdata}\..\Roaming\com.github.igoogolx\lux"
 
 [Code]
 
-{ Writes the LuxApp scheduled-task XML to {tmp}\luxapp_task.xml.
-  - LogonTrigger with no <Delay> → runs immediately at logon
-  - <Priority>4</Priority> → higher than the default 7 so Lux starts first
-  - RunLevel=HighestAvailable → lux_core elevates
-  - Battery/idle conditions disabled so it always runs }
+(* Writes the LuxApp scheduled-task XML to {tmp}\luxapp_task.xml.
+  - LogonTrigger with no <Delay> -> runs immediately at logon
+  - <Priority>4</Priority> -> higher than the default 7 so Lux starts first
+  - RunLevel=HighestAvailable -> lux_core elevates
+  - Battery/idle conditions disabled so it always runs *)
 procedure WriteLuxTaskXml();
 var
   Xml: string;
@@ -91,7 +91,7 @@ begin
     '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
     '  <RegistrationInfo><Description>Lux proxy — start first at logon</Description></RegistrationInfo>' + #13#10 +
     '  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>' + #13#10 +
-    '  <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
+    '  <Principals><Principal id="Author"><GroupId>S-1-5-32-545</GroupId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
     '  <Settings>' + #13#10 +
     '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>' + #13#10 +
     '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>' + #13#10 +
@@ -173,12 +173,16 @@ begin
     Exec('schtasks.exe',
       '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    { Fallback: if XML import failed (older Windows), use the plain command. }
+    { Fallback: if XML import failed (older Windows), use the plain command.
+      schtasks /tr wraps the whole "program + arguments" as one value. The exe
+      path (which contains spaces) must be quoted with schtasks' escaped quotes
+      (\") and the launch argument follows the closing \" — all inside the outer
+      /tr "...". The previous form put the argument outside the escaped quotes,
+      which schtasks rejected ('--enable-software-rendering' unexpected). }
     if ResultCode <> 0 then
       Exec('schtasks.exe',
         '/create /tn LuxApp /tr "\"' + ExpandConstant('{localappdata}') +
-        '\Programs\lux\lux.exe\" --enable-software-rendering"' +
-        ' /sc ONLOGON /rl HIGHEST /f',
+        '\Programs\lux\lux.exe\" --enable-software-rendering" /sc ONLOGON /rl HIGHEST /f',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     { Remove the legacy single-purpose tasks + launcher from the old scheme so
