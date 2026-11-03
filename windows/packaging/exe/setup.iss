@@ -116,8 +116,14 @@ end;
 procedure KillLux();
 var ResultCode: Integer;
 begin
-  { Step 1: Stop the LuxApp scheduled task — this terminates lux_core.exe }
+  { Step 1: Stop the scheduled tasks — this terminates lux_core.exe. End BOTH
+    the current LuxApp task AND the legacy LuxCore/LuxInstall tasks: a machine
+    upgrading from the old scheme still has them, and a stale legacy task is
+    what re-launched Lux in the wrong context after an update (the 1.50.87/88
+    "stays off" reports — dual-scheme coexistence). }
   Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('schtasks.exe', '/end /tn LuxCore', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('schtasks.exe', '/end /tn LuxInstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(2000);
 
   { Step 2: Kill any remaining process instances }
@@ -174,6 +180,14 @@ begin
         '\Programs\lux\lux.exe\" --enable-software-rendering"' +
         ' /sc ONLOGON /rl HIGHEST /f',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    { Remove the legacy single-purpose tasks + launcher from the old scheme so
+      only LuxApp remains. Leaving LuxCore/LuxInstall behind means two schemes
+      fire at logon (duplicate instances / wrong-context launch) — the root of
+      the post-update "stays off" reports. Harmless if they were never present. }
+    Exec('schtasks.exe', '/delete /tn LuxCore /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('schtasks.exe', '/delete /tn LuxInstall /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    DeleteFile(ExpandConstant('{localappdata}') + '\Programs\lux\lux_core_launcher.ps1');
 
     { Relaunch Lux after install.
       ssPostInstall runs INSIDE the elevated (RunAs) installer, so a direct
