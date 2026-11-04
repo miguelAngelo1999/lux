@@ -80,6 +80,39 @@ Type: filesandordirs; Name: "{localappdata}\..\Roaming\com.github.igoogolx\lux"
   - <Priority>4</Priority> -> higher than the default 7 so Lux starts first
   - RunLevel=HighestAvailable -> lux_core elevates
   - Battery/idle conditions disabled so it always runs *)
+procedure WriteLuxTaskXmlEx(WithComputerName: Boolean);
+var
+  Xml: string;
+  ExePath: string;
+  UserAccount: string;
+begin
+  ExePath := ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe';
+  UserAccount := GetUserNameString();
+  if WithComputerName and (Pos('\', UserAccount) = 0) then
+    UserAccount := GetComputerNameString() + '\' + UserAccount;
+  Xml :=
+    '<?xml version="1.0" encoding="UTF-16"?>' + #13#10 +
+    '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
+    '  <RegistrationInfo><Description>Lux proxy — start first at logon</Description></RegistrationInfo>' + #13#10 +
+    '  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>' + #13#10 +
+    '  <Principals><Principal id="Author"><UserId>' + UserAccount + '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
+    '  <Settings>' + #13#10 +
+    '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>' + #13#10 +
+    '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>' + #13#10 +
+    '    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>' + #13#10 +
+    '    <AllowHardTerminate>true</AllowHardTerminate>' + #13#10 +
+    '    <StartWhenAvailable>true</StartWhenAvailable>' + #13#10 +
+    '    <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>' + #13#10 +
+    '    <AllowStartOnDemand>true</AllowStartOnDemand>' + #13#10 +
+    '    <Enabled>true</Enabled>' + #13#10 +
+    '    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>' + #13#10 +
+    '    <Priority>4</Priority>' + #13#10 +
+    '  </Settings>' + #13#10 +
+    '  <Actions Context="Author"><Exec><Command>' + ExePath + '</Command><Arguments>--enable-software-rendering</Arguments></Exec></Actions>' + #13#10 +
+    '</Task>';
+  SaveStringToFile(ExpandConstant('{tmp}') + '\luxapp_task.xml', Xml, False);
+end;
+
 procedure WriteLuxTaskXml();
 var
   Xml: string;
@@ -91,7 +124,7 @@ begin
     '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
     '  <RegistrationInfo><Description>Lux proxy — start first at logon</Description></RegistrationInfo>' + #13#10 +
     '  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>' + #13#10 +
-    '  <Principals><Principal id="Author"><GroupId>S-1-5-32-545</GroupId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
+    '  <Principals><Principal id="Author"><UserId>' + GetUserNameString() + '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
     '  <Settings>' + #13#10 +
     '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>' + #13#10 +
     '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>' + #13#10 +
@@ -173,6 +206,15 @@ begin
     Exec('schtasks.exe',
       '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    { If XML import failed because schtasks requires domain/computer prefix for local account,
+      retry XML import with COMPUTERNAME\GetUserNameString(). }
+    if ResultCode <> 0 then
+    begin
+      WriteLuxTaskXmlEx(True);
+      Exec('schtasks.exe',
+        '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
     { Fallback: if XML import failed (older Windows), use the plain command.
       schtasks /tr wraps the whole "program + arguments" as one value. The exe
       path (which contains spaces) must be quoted with schtasks' escaped quotes

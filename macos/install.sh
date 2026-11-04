@@ -63,12 +63,14 @@ echo "Installing to /Applications..."
 sudo rm -rf /Applications/Lux.app
 sudo cp -R "$APP" /Applications/Lux.app
 sudo xattr -cr /Applications/Lux.app
+# Re-sign after xattr clear (xattr -cr strips the signature)
+sudo codesign --force --deep --sign - /Applications/Lux.app 2>/dev/null || true
 
 # --- Set up elevation (wrapper + sudoers) ---
 echo "Setting up elevation..."
 BIN="/Applications/Lux.app/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/bin/lux_core"
 REAL="${BIN}_real"
-USER_NAME="$(whoami)"
+USER_NAME="${SUDO_USER:-$(whoami)}"
 
 if [ ! -f "$REAL" ]; then
   sudo mv "$BIN" "$REAL"
