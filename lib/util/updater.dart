@@ -93,9 +93,9 @@ void _reportBadDownload(BuildContext context, String message) {
 }
 
 /// Fetches the appcast.json from Google Drive and compares versions.
-/// [proxyPort] is the local Lux proxy port (default 1090) — needed because
-/// Dart's HttpClient doesn't pick up the system proxy in TUN/Mixed mode.
-Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
+/// [proxyPort] is the local Lux proxy port (defaults to configured port or 1090) —
+/// needed because Dart's HttpClient doesn't pick up the system proxy in TUN/Mixed mode.
+Future<UpdateInfo?> checkForUpdate({int? proxyPort}) async {
   try {
     final pkg = await PackageInfo.fromPlatform();
     final current = pkg.version;
@@ -109,10 +109,12 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
             ? betaAppcastUrl
             : appcastUrl;
 
+    final resolvedPort = proxyPort ?? await readLocalServerPort();
+
     // Use Dart's HttpClient directly with proxy + SSL bypass
     final client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
-    client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
+    client.findProxy = (_) => 'PROXY 127.0.0.1:$resolvedPort; DIRECT';
 
     // Add cache-busting only for GDrive URLs (query param approach)
     final cacheBust = baseUrl.contains('?') ? '&_t=' : '?_t=';
@@ -151,10 +153,10 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
     if (result != null && !result.hasUpdate && baseUrl.contains('drive.usercontent.google.com')) {
       appLog('UPDATE', 'appcast returned same version as current — possible CDN cache hit, retrying in 3s');
       await Future.delayed(const Duration(seconds: 3));
-      final retryUrl = Uri.parse('$baseUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}');
+      final retryUrl = Uri.parse('$baseUrl$cacheBust${DateTime.now().millisecondsSinceEpoch}');
       final client2 = HttpClient();
       client2.badCertificateCallback = (_, __, ___) => true;
-      client2.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
+      client2.findProxy = (_) => 'PROXY 127.0.0.1:$resolvedPort; DIRECT';
       final req2 = await client2.getUrl(retryUrl);
       req2.followRedirects = true;
       req2.headers.set('Cache-Control', 'no-cache, no-store');
@@ -382,10 +384,11 @@ Future<void> downloadAndInstall(
     // We intentionally do NOT read HTTP_PROXY/HTTPS_PROXY env vars because
     // on some machines they contain placeholder values (e.g. "seu_ip:porta")
     // that cause "Invalid proxy configuration" errors.
+    final resolvedPort = await readLocalServerPort();
     final client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
-    // Try lux proxy first (127.0.0.1:1090), fall back to DIRECT
-    client.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
+    // Try lux proxy first (127.0.0.1:$resolvedPort), fall back to DIRECT
+    client.findProxy = (_) => 'PROXY 127.0.0.1:$resolvedPort; DIRECT';
 
     final request = await client.getUrl(Uri.parse(fetchUrl));
     request.followRedirects = true;
@@ -538,7 +541,7 @@ Future<void> downloadAndInstall(
           onStatusChange?.call('Re-downloading…');
           final retryClient = HttpClient();
           retryClient.badCertificateCallback = (_, __, ___) => true;
-          retryClient.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
+          retryClient.findProxy = (_) => 'PROXY 127.0.0.1:$resolvedPort; DIRECT';
           final retryRequest = await retryClient.getUrl(Uri.parse(retryUrl));
           retryRequest.followRedirects = true;
           retryRequest.headers.set('Cache-Control', 'no-cache, no-store');

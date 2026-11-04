@@ -78,6 +78,14 @@ Future<void> writeLastUpdateCheckAt() async {
   await _writePrefs(prefs);
 }
 
+/// Clears the last update check timestamp so the 24-hour auto-check throttle
+/// is reset immediately (e.g. when switching update channels).
+Future<void> clearLastUpdateCheckAt() async {
+  final prefs = await _readPrefs();
+  prefs.remove('lastUpdateCheckAt');
+  await _writePrefs(prefs);
+}
+
 /// Whether the user has opted in to beta updates.
 Future<bool> readBetaUpdatesEnabled() async {
   final prefs = await _readPrefs();
@@ -87,6 +95,8 @@ Future<bool> readBetaUpdatesEnabled() async {
 Future<void> writeBetaUpdatesEnabled(bool enabled) async {
   final prefs = await _readPrefs();
   prefs['betaUpdatesEnabled'] = enabled;
+  // Reset the 24h auto-check throttle immediately on channel switch
+  prefs.remove('lastUpdateCheckAt');
   await _writePrefs(prefs);
 }
 
@@ -318,6 +328,34 @@ Future<ProxyMode> readProxyMode() async {
   }
   return ProxyMode.system;
 }
+
+/// Reads the local proxy server port configured in setting or prefs, falling back to 1090.
+Future<int> readLocalServerPort() async {
+  try {
+    final prefs = await _readPrefs();
+    final pPort = prefs['localServerPort'] ?? prefs['proxyPort'];
+    if (pPort is int && pPort > 0) return pPort;
+    if (pPort is String) {
+      final parsed = int.tryParse(pPort);
+      if (parsed != null && parsed > 0) return parsed;
+    }
+  } catch (_) {}
+  try {
+    final setting = await readSetting();
+    final localServer = setting['localServer'];
+    if (localServer is Map) {
+      final port = localServer['port'];
+      if (port is int && port > 0) return port;
+      if (port is String) {
+        final parsed = int.tryParse(port);
+        if (parsed != null && parsed > 0) return parsed;
+      }
+    }
+  } catch (_) {}
+  return 1090;
+}
+
+Future<int> readProxyPort() => readLocalServerPort();
 
 List<ProxyList> sortProxyList(
     List<ProxyList> groups, List<SubscriptionItem> subscriptions) {

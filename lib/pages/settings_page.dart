@@ -90,20 +90,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       final level = await readTelemetryLevel();
       final uuid = await readOrCreateTelemetryUuid();
       final rawVersion = await getAppVersionString();
-      var version = rawVersion;
-      // Show a "-beta" suffix in the UI when the beta channel is enabled so
-      // testers can see they're on a beta. The numeric version is unchanged —
-      // this is display-only (semver pre-release tags don't survive Flutter's
-      // macOS build, so the channel is metadata, not part of the version).
-      if (await readBetaUpdatesEnabled()) {
-        version = '$version-beta';
-      }
       var pending = await readPendingUpdateVersion();
       // Clear a STALE pending version: after the app updates, the persisted
       // "pending" still points at the version we just installed (or older),
       // which made the tile show "Update available" with an Update button that
       // did nothing (checkForUpdate finds nothing newer and returns silently).
-      // Compare against the raw numeric version (not the -beta display string).
+      // Compare against the raw numeric version.
       if (pending != null && pending.isNotEmpty) {
         if (!_isNewerThanCurrent(pending, rawVersion)) {
           await writePendingUpdateVersion(null);
@@ -116,7 +108,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         _interfaces = ifaces;
         _telemetryLevel = telem.telemetryLevelFromString(level);
         _telemetryUuid = uuid;
-        _appVersion = version;
+        _appVersion = rawVersion;
         _pendingUpdateVersion = pending ?? '';
         _isLoading = false;
       });
@@ -485,42 +477,58 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             keywords: ['beta', 'early', 'pre-release', 'test'],
             build: (ctx) => FutureBuilder<bool>(
               future: readBetaUpdatesEnabled(),
-              builder: (ctx, snap) => switchTile(
-                title: 'Beta updates',
-                subtitle: 'Get early builds before they reach everyone else. '
-                    'Off by default — turn on only if you want to help test '
-                    'pre-release versions.',
-                value: snap.data ?? false,
-                onChanged: (v) async {
-                  await writeBetaUpdatesEnabled(v);
-                  _notify(v
-                      ? tl(context, 'Beta updates enabled')
-                      : tl(context, 'Beta updates disabled'));
-                  // Reload so the version label picks up / drops the -beta suffix
-                  await _load();
-                  if (mounted) setState(() {});
-                  // Toggling the channel is an explicit action — re-check against
-                  // the NEW channel immediately instead of waiting out the 24h
-                  // auto-check throttle. Without this, turning beta on showed the
-                  // "-beta" label but never surfaced the newer beta build.
-                  final info = await checkForUpdate();
-                  if (!mounted) return;
-                  if (info != null && info.hasUpdate) {
-                    await writePendingUpdateVersion(info.latestVersion);
-                    if (mounted) {
-                      setState(() => _pendingUpdateVersion = info.latestVersion);
-                      await showUpdateDialog(context, info);
+              builder: (ctx, snap) {
+                final isBeta = snap.data ?? false;
+                return switchTile(
+                  title: 'Beta updates',
+                  subtitle: isBeta
+                      ? 'Beta channel active. Early builds before they reach everyone.'
+                      : 'Get early builds before they reach everyone else. '
+                          'Off by default — turn on only if you want to help test '
+                          'pre-release versions.',
+                  value: isBeta,
+                  onChanged: (v) async {
+                    final statusMsg = v
+                        ? tl(context, 'Beta updates enabled')
+                        : tl(context, 'Beta updates disabled');
+                    setState(() => _checkingUpdate = true);
+                    try {
+                      await writeBetaUpdatesEnabled(v);
+                      await clearLastUpdateCheckAt();
+                      _notify(statusMsg);
+                      await _load();
+                      final info = await checkForUpdate();
+                      if (!mounted) return;
+                      if (info != null && info.hasUpdate) {
+                        await writePendingUpdateVersion(info.latestVersion);
+                        if (mounted) {
+                          setState(() {
+                            _pendingUpdateVersion = info.latestVersion;
+                            _checkingUpdate = false;
+                          });
+                          await showUpdateDialog(context, info);
+                        }
+                      } else {
+                        // No newer build on this channel — clear any stale badge.
+                        await writePendingUpdateVersion(null);
+                        if (mounted) {
+                          setState(() {
+                            _pendingUpdateVersion = '';
+                            _checkingUpdate = false;
+                          });
+                          _notify(tl(context, 'You are up to date'));
+                        }
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        _notify('Update check failed: $e', isError: true);
+                      }
+                    } finally {
+                      if (mounted) setState(() => _checkingUpdate = false);
                     }
-                  } else {
-                    // No newer build on this channel — clear any stale badge.
-                    await writePendingUpdateVersion(null);
-                    if (mounted) {
-                      setState(() => _pendingUpdateVersion = '');
-                      _notify(tl(context, 'You are up to date'));
-                    }
-                  }
-                },
-              ),
+                  },
+                );
+              },
             ),
           ),
           SettingRow(
