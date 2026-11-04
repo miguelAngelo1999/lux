@@ -58,8 +58,11 @@
     .beta-ver { font-size: 0.78rem; color: #e0a31e; font-weight: 600; }
     .beta-warn { font-size: 0.76rem; color: #d8b46a; line-height: 1.55; margin: 0 0 12px; }
     .beta-downloads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .beta-dl { display: flex; flex-direction: column; gap: 2px; background: #1c1810; border: 1px solid #3a3320; border-radius: 8px; padding: 12px 14px; text-decoration: none; color: #e8d8ad; transition: border-color 0.15s, background 0.15s; }
+    .beta-dl { display: flex; flex-direction: column; gap: 2px; background: #1c1810; border: 1px solid #3a3320; border-radius: 8px; padding: 12px 14px; text-decoration: none; color: #e8d8ad; transition: border-color 0.15s, background 0.15s; position: relative; cursor: pointer; overflow: hidden; }
     .beta-dl:hover { border-color: #e0a31e; background: #221d11; }
+    .beta-dl.downloading { pointer-events: none; border-color: #e0a31e; }
+    .beta-dl .dl-progress { position: absolute; left: 0; bottom: 0; height: 3px; background: #e0a31e; width: 0; transition: width 0.2s ease; border-radius: 0 0 8px 8px; }
+    .beta-dl .dl-status { font-size: 0.68rem; color: #e0a31e; margin-top: 3px; }
     .beta-plat { font-size: 0.85rem; font-weight: 600; }
     .beta-meta { font-size: 0.68rem; color: #a08a52; }
     .beta-sub { font-size: 0.68rem; color: #8a7a4a; margin: 12px 0 0; }
@@ -119,14 +122,18 @@
         download if you want the latest and are willing to help test and report bugs.
       </p>
       <div class="beta-downloads">
-        <a class="beta-dl" href="https://lux-download.luxproxy.workers.dev/mac/beta" download>
+        <div class="beta-dl" onclick="startDownload('mac', this, 'beta')">
           <span class="beta-plat">macOS beta</span>
           <span class="beta-meta">Universal DMG · 36 MB</span>
-        </a>
-        <a class="beta-dl" href="https://lux-download.luxproxy.workers.dev/win/beta" download>
+          <div class="dl-status"></div>
+          <div class="dl-progress"></div>
+        </div>
+        <div class="beta-dl" onclick="startDownload('win', this, 'beta')">
           <span class="beta-plat">Windows beta</span>
           <span class="beta-meta">x64 Installer · 26 MB</span>
-        </a>
+          <div class="dl-status"></div>
+          <div class="dl-progress"></div>
+        </div>
       </div>
       <p class="beta-sub" data-i18n="betaTip">
         Already have Lux? Turn on “Beta updates” in Settings → Updates instead of
@@ -263,17 +270,23 @@
       document.addEventListener('DOMContentLoaded', () => setLang(lang));
     })();
 
-    async function startDownload(platform, btn) {
+    async function startDownload(platform, btn, channel) {
       if (btn.classList.contains('downloading')) return;
       btn.classList.add('downloading');
+      const isBeta = channel === 'beta';
+      const primaryColor = isBeta ? '#e0a31e' : '#4a9eff';
       const progress = btn.querySelector('.dl-progress');
       const status = btn.querySelector('.dl-status');
       progress.style.width = '0%';
-      progress.style.background = '#4a9eff';
+      progress.style.background = primaryColor;
       status.textContent = '1%';
 
-      const url = WORKER + '/' + platform;
-      const filename = platform === 'mac' ? 'Lux-macOS-universal.dmg' : 'Lux-Windows-x64-Setup.exe';
+      const url = WORKER + '/' + platform + (isBeta ? '/beta' : '');
+      const betaVer = document.querySelector('.beta-ver')?.textContent?.trim() || '';
+      const verTag = (isBeta && betaVer) ? '-' + betaVer : '';
+      const filename = platform === 'mac'
+        ? `Lux${verTag}-macOS-universal.dmg`
+        : `Lux${verTag}-Windows-x64-Setup.exe`;
 
       // Start fake progress immediately (smooth ramp to 30%)
       let fakePct = 1, fakePhase = 0, realStarted = false;
@@ -329,7 +342,7 @@
       setTimeout(() => {
         btn.classList.remove('downloading');
         progress.style.width = '0%';
-        progress.style.background = '#4a9eff';
+        progress.style.background = primaryColor;
         status.textContent = '';
       }, 4000);
     }
