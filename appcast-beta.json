@@ -1,17 +1,17 @@
 {
-  "version": "1.50.90",
+  "version": "1.50.91",
   "channel": "beta",
-  "notes": "fix(windows): relaunch Lux in user session after update and fix task XML group",
+  "notes": "release (beta): 1.50.90",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "33fa404ef19b376a3dbdcaac18ba8f0aa0a6155812bbde5d73f4f71cd82f003c",
-    "size": 37988541,
-    "version": "1.50.90"
+    "sha256": "fc58add9f6bb39df2ef3c8935005bad03796121a266ad5c24476cf4e84b8925f",
+    "size": 37988478,
+    "version": "1.50.91"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "2cfd6219dc2ef8c0a797b5dc273725ccb3ca897e703730ec6a120c18787284ff",
-    "size": 27665530,
-    "version": "1.50.90"
+    "sha256": "cc8f8f573029bedc27713bf48040b7f1c039367ff50c0720fed04b0008373e07",
+    "size": 27664060,
+    "version": "1.50.91"
   }
 }

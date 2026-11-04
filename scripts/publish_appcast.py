@@ -91,10 +91,12 @@ def drive():
     # httplib2 ignores env proxy vars. Monkey-patch the connection class to use the proxy.
     if PROXY:
         import httplib2
+        from urllib.parse import urlparse
+        p = urlparse(PROXY)
         pi = httplib2.ProxyInfo(
             proxy_type=3,  # PROXY_TYPE_HTTP
-            proxy_host="127.0.0.1",
-            proxy_port=8079,
+            proxy_host=p.hostname or "127.0.0.1",
+            proxy_port=p.port or 1090,
         )
         authed_http = svc._http
         if hasattr(authed_http, 'http'):

@@ -353,7 +353,7 @@ PAGE="$REPO/scripts/release-page/index.html"
 # Update version number in the page
 sed -i '' "s/v1\.[0-9]*\.[0-9]*/v${VERSION}/g" "$PAGE"
 
-# Publish to here.now
+# Publish to here.now (bright-mustard-qghz in workspace 'lux' serves at https://download.lux.here.now)
 python3 - << PYEOF
 import json, subprocess, os
 proxy = '$PROXY'
@@ -381,5 +381,6 @@ r = subprocess.run(['curl', '-sS', '-X', 'POST', '-H', f'Authorization: Bearer {
     '--proxy', proxy, upload['finalizeUrl'],
     '-d', json.dumps({'versionId': upload['versionId']})], capture_output=True, text=True)
 result = json.loads(r.stdout)
-print(f"Download page updated: {result.get('publishStatus',{}).get('state')}")
+dest = result.get('primaryUrl') or result.get('accountUrl') or 'https://download.lux.here.now'
+print(f"Download page updated: {result.get('publishStatus',{}).get('state')} -> {dest}")
 PYEOF
