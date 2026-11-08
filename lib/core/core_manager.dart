@@ -726,6 +726,9 @@ class CoreManager {
     await dio.post('$baseHttpUrl/proxies/$id', data: proxy);
   }
 
+  /// Alias for [saveSetting] for consistency with Go API naming.
+  Future<void> setSetting(Setting setting) => saveSetting(setting);
+
   /// Save settings — reads current raw config and merges only the changed fields.
   /// Never overwrites DNS server lists or other fields not managed by the settings page.
   Future<void> saveSetting(Setting setting) async {
@@ -756,6 +759,8 @@ class CoreManager {
     ls['port'] = setting.localServerPort;
     ls['allowLan'] = setting.allowLan;
     raw['localServer'] = ls;
+
+    raw['bypassCidrs'] = setting.bypassCidrs;
 
     if (setting.blockQuic != null) raw['blockQuic'] = setting.blockQuic;
     if (setting.shouldFindProcess != null) raw['shouldFindProcess'] = setting.shouldFindProcess;

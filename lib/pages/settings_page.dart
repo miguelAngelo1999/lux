@@ -364,6 +364,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   : (v) => _save(s.copyWith(shouldFindProcess: v)),
             ),
           ),
+          SettingRow(
+            title: 'Bypass CIDRs',
+            keywords: ['bypass', 'cidr', 'subnets', 'ip', 'lan', 'route', 'exclude', 'tun'],
+            build: (ctx) => _bypassCidrsTile(ctx, s),
+          ),
         ];
 
       case 'privacy':
@@ -731,6 +736,225 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   // ── Individual complex rows ────────────────────────────────────────────────
+
+  Widget _bypassCidrsTile(BuildContext context, Setting s) {
+    final cidrs = s.bypassCidrs;
+    final saving = _isSaving;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TText('Bypass CIDRs',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    SizedBox(height: 2),
+                    TText(
+                      'Subnets routed outside the TUN tunnel (DIRECT). Proxy IPs are auto-bypassed.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.add, size: 14),
+                label: const TText('Add Subnet', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(0, 30),
+                ),
+                onPressed: saving ? null : () => _showAddBypassCidrDialog(s),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (cidrs.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(80),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor.withAlpha(40),
+                ),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, size: 14, color: Colors.grey),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: TText(
+                      'No custom bypass CIDRs configured. Upstream proxies and DIRECT rules are automatically excluded.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: cidrs.map((cidr) {
+                return Chip(
+                  label: Text(cidr, style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+                  padding: EdgeInsets.zero,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  deleteIcon: const Icon(Icons.close, size: 13),
+                  onDeleted: saving
+                      ? null
+                      : () {
+                          final updated = List<String>.from(cidrs)..remove(cidr);
+                          _save(s.copyWith(bypassCidrs: updated));
+                        },
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAddBypassCidrDialog(Setting s) async {
+    final ctrl = TextEditingController();
+    String? errorText;
+
+    const presets = ['192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12', '100.64.0.0/10'];
+
+    final added = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.add_road, size: 20),
+              SizedBox(width: 8),
+              TText('Add Bypass CIDR'),
+            ],
+          ),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const TText(
+                  'Enter an IPv4 CIDR subnet (e.g. 192.168.0.0/16) or single IP address to exclude from the TUN interface:',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. 192.168.1.0/24 or 10.0.0.1',
+                    errorText: errorText,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) {
+                    final val = ctrl.text.trim();
+                    final validated = _validateAndNormalizeCidr(val);
+                    if (validated == null) {
+                      setDialogState(() => errorText = 'Invalid IPv4 CIDR or IP address');
+                    } else if (s.bypassCidrs.contains(validated)) {
+                      setDialogState(() => errorText = 'CIDR already added');
+                    } else {
+                      Navigator.pop(ctx, validated);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                const TText('Presets:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: presets.map((p) {
+                    final already = s.bypassCidrs.contains(p);
+                    return ActionChip(
+                      label: Text(p, style: const TextStyle(fontSize: 10, fontFamily: 'monospace')),
+                      padding: EdgeInsets.zero,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                      onPressed: already
+                          ? null
+                          : () {
+                              ctrl.text = p;
+                              setDialogState(() => errorText = null);
+                            },
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const TText('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final val = ctrl.text.trim();
+                final validated = _validateAndNormalizeCidr(val);
+                if (validated == null) {
+                  setDialogState(() => errorText = 'Invalid IPv4 CIDR or IP address');
+                } else if (s.bypassCidrs.contains(validated)) {
+                  setDialogState(() => errorText = 'CIDR already added');
+                } else {
+                  Navigator.pop(ctx, validated);
+                }
+              },
+              child: const TText('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (added != null && added.isNotEmpty) {
+      final updated = List<String>.from(s.bypassCidrs)..add(added);
+      await _save(s.copyWith(bypassCidrs: updated));
+      _notify('Added bypass CIDR: $added');
+    }
+  }
+
+  String? _validateAndNormalizeCidr(String input) {
+    final text = input.trim();
+    if (text.isEmpty) return null;
+
+    final parts = text.split('/');
+    if (parts.length > 2) return null;
+
+    final ip = parts[0];
+    final ipRegex = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$');
+    final match = ipRegex.firstMatch(ip);
+    if (match == null) return null;
+
+    for (var i = 1; i <= 4; i++) {
+      final octet = int.tryParse(match.group(i)!);
+      if (octet == null || octet < 0 || octet > 255) return null;
+    }
+
+    if (parts.length == 2) {
+      final prefix = int.tryParse(parts[1]);
+      if (prefix == null || prefix < 0 || prefix > 32) return null;
+      return '$ip/$prefix';
+    }
+
+    return '$ip/32';
+  }
 
   Widget _languageTile(BuildContext context) {
     final current =
