@@ -158,8 +158,19 @@ class _LogPageState extends State<LogPage> {
     return _logs.where((e) {
       final eIdx = _levels.indexOf(e.level);
       if (eIdx < levelIdx) return false;
-      if (_searchText.isNotEmpty &&
-          !e.message.toLowerCase().contains(_searchText)) return false;
+      if (_searchText.isNotEmpty) {
+        final msg = e.message.toLowerCase();
+        if (_searchText == '[deny]') {
+          if (!msg.contains('[deny]') &&
+              !msg.contains('[proxy_denied]') &&
+              !msg.contains('denied') &&
+              !msg.contains('rejected')) {
+            return false;
+          }
+        } else if (!msg.contains(_searchText)) {
+          return false;
+        }
+      }
       return true;
     }).toList();
   }
@@ -343,6 +354,10 @@ class _LogPageState extends State<LogPage> {
                               e.message,
                               style: TextStyle(
                                   fontSize: 12,
+                                  fontWeight: (e.message.contains('[DENY]') ||
+                                          e.message.contains('[PROXY_DENIED]'))
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
                                   color: e.levelColor(ctx)),
                             ),
                           ),
