@@ -1,17 +1,17 @@
 {
-  "version": "1.50.95",
+  "version": "1.50.96",
   "channel": "beta",
-  "notes": "feat: add user-configurable Bypass CIDRs in Settings",
+  "notes": "chore(release-page): bump version to 1.50.95",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "b78944fc63c02dd4d29853f7781efe61a42288e20519f81e0c09098a557e96c8",
-    "size": 38026272,
-    "version": "1.50.95"
+    "sha256": "74bfe6c0c8b7e24160a7847cf027eae7e2f390aa6dea90d684303506fc167022",
+    "size": 38030063,
+    "version": "1.50.96"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "34cec551f4bd41c2ccdf0383e6a78355084e65df51fefed74d846ece8e5910b7",
-    "size": 27687636,
-    "version": "1.50.95"
+    "sha256": "5656afd68e21c1138f53eb82cf47dbdc6ea692c841412200c14443a0fb871c46",
+    "size": 27689288,
+    "version": "1.50.96"
   }
 }
