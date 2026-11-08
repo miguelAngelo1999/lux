@@ -24,6 +24,7 @@ if [[ "$CHANNEL" != "stable" && "$CHANNEL" != "beta" ]]; then
 fi
 
 export PATH="/opt/homebrew/bin:/Users/virgoh/flutter/bin:$PATH"
+python3 -c "import os, fcntl; [fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) & ~os.O_NONBLOCK) for fd in (0, 1, 2)]" 2>/dev/null || true
 
 if curl -s -o /dev/null --max-time 4 -x http://127.0.0.1:1090 https://example.com 2>/dev/null; then
   PROXY=http://127.0.0.1:1090
@@ -73,7 +74,10 @@ hdiutil create -size ${SIZE_KB}k -fs HFS+ -volname "Lux $VERSION" -ov /tmp/lux_t
 MOUNT_DIR=$(hdiutil attach /tmp/lux_tmp.dmg | grep "/Volumes" | awk -F'\t' '{print $NF}')
 cp -R "$DMG_STAGE/Lux.app" "$MOUNT_DIR/"
 cp "$DMG_STAGE/install.sh" "$MOUNT_DIR/"
-hdiutil detach "$MOUNT_DIR" >/dev/null
+sync
+for i in 1 2 3 4 5; do
+  hdiutil detach "$MOUNT_DIR" -force >/dev/null 2>&1 && break || sleep 2
+done
 rm -f "dist/$DMG_NAME"   # -ov below also overwrites, but clear it so a stale same-name DMG never blocks convert
 hdiutil convert /tmp/lux_tmp.dmg -format UDZO -ov -o "dist/$DMG_NAME" >/dev/null
 rm -f /tmp/lux_tmp.dmg; rm -rf "$DMG_STAGE"
@@ -87,13 +91,41 @@ VM="Windows 11 (1)"
 WIN_LUX="C:\\lux-build\\lux"
 INSTALLER_WIN="C:\\lux-build\\dist2\\lux-${VERSION}-setup.exe"
 
-win() { prlctl exec "$VM" cmd /c "$*" 2>&1 || true; }
+win() {
+  local out="" attempt=1
+  for attempt in 1 2 3 4 5; do
+    out=$(prlctl exec "$VM" cmd /c "$*" 2>&1 || true)
+    if echo "$out" | grep -q -E "(PrlJob_GetResult|Unable to open new session|PrlVmGuest_RunProgram)"; then
+      echo "==> [retry $attempt] prlctl cmd transient error, waiting 2s..." >&2
+      sleep 2
+      continue
+    fi
+    echo "$out"
+    return 0
+  done
+  echo "$out"
+  return 0
+}
 win_ps_script() {
   local name="$1" content="$2"
   printf '%s' "$content" > "$REPO/$name"
-  prlctl exec "$VM" powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass \
-    -File "\\\\Mac\\Home\\lux-clean\\${name}" 2>&1 || true
+  win "copy /y \"\\\\Mac\\Home\\lux-clean\\${name}\" \"C:\\lux-build\\${name}\" >nul"
+  local out="" attempt=1
+  for attempt in 1 2 3 4 5; do
+    out=$(prlctl exec "$VM" powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass \
+      -File "C:\\lux-build\\${name}" 2>&1 || true)
+    if echo "$out" | grep -q -E "(PrlJob_GetResult|Unable to open new session|PrlVmGuest_RunProgram)"; then
+      echo "==> [retry $attempt] prlctl ps transient error, waiting 2s..." >&2
+      sleep 2
+      continue
+    fi
+    break
+  done
+  win "del /f /q \"C:\\lux-build\\${name}\" >nul 2>&1 & exit 0"
   rm -f "$REPO/$name"
+  out=$(echo "$out" | grep -v -E "(^#< CLIXML|^<)")
+  echo "$out"
+  return 0
 }
 
 VM_STATUS=$(prlctl status "$VM" 2>/dev/null | awk '{print $NF}' || echo "stopped")
@@ -146,8 +178,7 @@ endlocal'
 win "C:\\lux-build\\build_core.bat" | grep -q "BUILD_OK" || { echo "ERROR: Windows core build failed"; exit 1; }
 
 # Update checksum
-WIN_HASH=$(prlctl exec "$VM" powershell -NonInteractive -NoProfile -Command \
-  "(Get-FileHash 'C:\lux-build\lux\assets\bin\lux_core.exe' -Algorithm SHA256).Hash.ToLower()" 2>&1 | tr -d '[:space:]\r\n')
+WIN_HASH=$(win_ps_script "hash.ps1" "(Get-FileHash 'C:\lux-build\lux\assets\bin\lux_core.exe' -Algorithm SHA256).Hash.ToLower()" | tr -d '[:space:]\r\n')
 echo "==> Windows core hash: $WIN_HASH"
 python3 -c "
 import re
@@ -193,6 +224,12 @@ if (-not (Test-Path ".flutter-plugins-dependencies")) {
 $p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
      -ArgumentList "build","windows","--release","--no-pub" `
      -Wait -PassThru -NoNewWindow
+if ($p.ExitCode -ne 0) {
+  # Retry once: CMake regeneration after ephemeral cleanup can need a second pass
+  $p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
+       -ArgumentList "build","windows","--release","--no-pub" `
+       -Wait -PassThru -NoNewWindow
+}
 if ($p.ExitCode -ne 0) { Write-Host "FLUTTER_FAILED: build exit $($p.ExitCode)"; exit 1 }
 if (-not (Test-Path $exe)) {
   Set-Content -Path "C:\lux-build\flutter_build_result.txt" -Value "FLUTTER_FAILED: no lux.exe produced" -NoNewline
@@ -208,7 +245,7 @@ echo "$FLUTTER_OUT" | tail -5
 # Read the result from the sentinel file the PS script wrote, which survives a
 # prlctl-exec stdout wedge (2026-11-01). Fall back to captured stdout only if
 # the sentinel is unreadable.
-FLUTTER_RESULT=$(prlctl exec "$VM" cmd /c "type C:\\lux-build\\flutter_build_result.txt" 2>/dev/null | tr -d '\r\n')
+FLUTTER_RESULT=$(win "type C:\\lux-build\\flutter_build_result.txt" | tr -d '\r\n')
 if [ "$FLUTTER_RESULT" != "FLUTTER_OK" ]; then
   if echo "$FLUTTER_OUT" | grep -q "FLUTTER_OK"; then
     echo "WARN: sentinel unreadable ('$FLUTTER_RESULT') but stdout shows FLUTTER_OK — trusting stdout"
@@ -277,15 +314,31 @@ echo "$ISS_SRC" | grep -q "ISS_SRC_OK" || { echo "ERROR: C:\\lux-build\\lux\\dis
 
 # Package installer
 win "if exist C:\\lux-build\\dist2\\*.exe del /F /Q C:\\lux-build\\dist2\\*.exe >nul 2>&1 & exit 0"
-win_ps_script "patch_iss.ps1" "
+for patch_attempt in 1 2 3 4 5; do
+  win_ps_script "patch_iss.ps1" "
 \$f = 'C:\\lux-build\\lux\\dist-setup.iss'
 \$c = Get-Content \$f -Raw
+\$c = \$c -replace 'AppVersion=[^\r\n]*', 'AppVersion=${VERSION}'
 \$c = \$c -replace '#define MyAppVersion \"[^\"]*\"', '#define MyAppVersion \"${VERSION}\"'
 \$c = \$c -replace 'OutputBaseFilename=[^\r\n]*', 'OutputBaseFilename=lux-${VERSION}-setup'
 \$c = \$c -replace 'OutputDir=[^\r\n]*', 'OutputDir=C:\\lux-build\\dist2'
 [System.IO.File]::WriteAllText(\$f, \$c)
 Write-Host 'iss patched'
 "
+  sleep 1
+  iss_ver=$(win "type C:\\lux-build\\lux\\dist-setup.iss")
+  if [[ "$iss_ver" == *"OutputBaseFilename=lux-${VERSION}-setup"* ]]; then
+    echo "==> dist-setup.iss verified for $VERSION"
+    break
+  fi
+  echo "==> [retry $patch_attempt] Waiting 2s before retrying patch_iss..."
+  sleep 2
+done
+iss_ver=$(win "type C:\\lux-build\\lux\\dist-setup.iss")
+if [[ "$iss_ver" != *"OutputBaseFilename=lux-${VERSION}-setup"* ]]; then
+  echo "ERROR: dist-setup.iss not patched with $VERSION"
+  exit 1
+fi
 # Guard: the installer must kill a running Lux/lux_core by itself. An AppMutex /
 # CloseApplications directive makes Inno stop with a "please close Lux" prompt
 # before our [Code] kill logic runs, so strip them, and refuse to build if the
@@ -334,7 +387,7 @@ $UPLOAD_PY "$REPO/scripts/publish_appcast_windows.py" "$VERSION" "$WIN_INSTALLER
 rm -f "$REPO/scripts/.oauth_token.json"
 
 # ── Step 6: Commit and push ────────────────────────────────────────────────
-git add pubspec.yaml lib/core/checksum.dart
+git add pubspec.yaml lib/core/checksum.dart scripts/release_all.sh
 if [ "$CHANNEL" == "beta" ]; then
   git add appcast-beta.json 2>/dev/null || true
   git commit -m "release (beta): $VERSION"

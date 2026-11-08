@@ -1,17 +1,17 @@
 {
-  "version": "1.50.92",
+  "version": "1.50.93",
   "channel": "beta",
-  "notes": "fix(updater): resolve proxy port dynamically and reset check throttle on beta toggle",
+  "notes": "feat(release-page): add download progress bar support for beta channel",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "ad97e00ca4daa4ed0db5b6a5e0377e1a35471447d870de58c4acde9784efebb7",
-    "size": 37992502,
-    "version": "1.50.92"
+    "sha256": "ac798a79d6466bc539ac2c73461601e38d356ec123092f3c0775ef747b3a941c",
+    "size": 37997962,
+    "version": "1.50.93"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "cfd5ec540f3c3305fa81f2a94fb5fd50a94ac791ae620be1c4e2c270628a86d8",
-    "size": 27667176,
-    "version": "1.50.92"
+    "sha256": "4a7d9f271cc30649d3609e25667a6be21afef698c8e3b2996ee58d6520dbe22e",
+    "size": 27669475,
+    "version": "1.50.93"
   }
 }
