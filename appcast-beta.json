@@ -1,17 +1,17 @@
 {
-  "version": "1.50.94",
+  "version": "1.50.95",
   "channel": "beta",
-  "notes": "fix: support [PROXY_DENIED] in log filter and highlight",
+  "notes": "feat: add user-configurable Bypass CIDRs in Settings",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "9c70d6636e1c1d18255e2e0d7282bda9525aab734b49d5e652ef50616e32f8fb",
-    "size": 38008234,
-    "version": "1.50.94"
+    "sha256": "b78944fc63c02dd4d29853f7781efe61a42288e20519f81e0c09098a557e96c8",
+    "size": 38026272,
+    "version": "1.50.95"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "7b673efceebf10875ad5cbb7177f81383e6c0ca2a11c242d92645d0f19e784a3",
-    "size": 27675380,
-    "version": "1.50.94"
+    "sha256": "34cec551f4bd41c2ccdf0383e6a78355084e65df51fefed74d846ece8e5910b7",
+    "size": 27687636,
+    "version": "1.50.95"
   }
 }
