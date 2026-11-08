@@ -95,7 +95,7 @@ win() {
   local out="" attempt=1
   for attempt in 1 2 3 4 5; do
     out=$(prlctl exec "$VM" cmd /c "$*" 2>&1 || true)
-    if echo "$out" | grep -q -E "(PrlJob_GetResult|Unable to open new session|PrlVmGuest_RunProgram)"; then
+    if echo "$out" | grep -q -E "(PrlJob_|Unable to open new session|PrlVmGuest_RunProgram)"; then
       echo "==> [retry $attempt] prlctl cmd transient error, waiting 2s..." >&2
       sleep 2
       continue
@@ -109,12 +109,18 @@ win() {
 win_ps_script() {
   local name="$1" content="$2"
   printf '%s' "$content" > "$REPO/$name"
-  win "copy /y \"\\\\Mac\\Home\\lux-clean\\${name}\" \"C:\\lux-build\\${name}\" >nul"
+  for copy_att in 1 2 3 4 5; do
+    win "copy /y \"\\\\Mac\\Home\\lux-clean\\${name}\" \"C:\\lux-build\\${name}\" >nul"
+    local chk=""
+    chk=$(win "if exist \"C:\\lux-build\\${name}\" (echo FILE_EXISTS)")
+    if echo "$chk" | grep -q "FILE_EXISTS"; then break; fi
+    sleep 2
+  done
   local out="" attempt=1
   for attempt in 1 2 3 4 5; do
     out=$(prlctl exec "$VM" powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass \
       -File "C:\\lux-build\\${name}" 2>&1 || true)
-    if echo "$out" | grep -q -E "(PrlJob_GetResult|Unable to open new session|PrlVmGuest_RunProgram)"; then
+    if echo "$out" | grep -q -E "(PrlJob_|Unable to open new session|PrlVmGuest_RunProgram)"; then
       echo "==> [retry $attempt] prlctl ps transient error, waiting 2s..." >&2
       sleep 2
       continue
@@ -123,7 +129,7 @@ win_ps_script() {
   done
   win "del /f /q \"C:\\lux-build\\${name}\" >nul 2>&1 & exit 0"
   rm -f "$REPO/$name"
-  out=$(echo "$out" | grep -v -E "(^#< CLIXML|^<)")
+  out=$(echo "$out" | grep -v -E "(^#< CLIXML|^<)" || true)
   echo "$out"
   return 0
 }

@@ -1,17 +1,17 @@
 {
-  "version": "1.50.93",
+  "version": "1.50.94",
   "channel": "beta",
-  "notes": "feat(release-page): add download progress bar support for beta channel",
+  "notes": "fix: support [PROXY_DENIED] in log filter and highlight",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "ac798a79d6466bc539ac2c73461601e38d356ec123092f3c0775ef747b3a941c",
-    "size": 37997962,
-    "version": "1.50.93"
+    "sha256": "9c70d6636e1c1d18255e2e0d7282bda9525aab734b49d5e652ef50616e32f8fb",
+    "size": 38008234,
+    "version": "1.50.94"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "4a7d9f271cc30649d3609e25667a6be21afef698c8e3b2996ee58d6520dbe22e",
-    "size": 27669475,
-    "version": "1.50.93"
+    "sha256": "7b673efceebf10875ad5cbb7177f81383e6c0ca2a11c242d92645d0f19e784a3",
+    "size": 27675380,
+    "version": "1.50.94"
   }
 }
