@@ -1,17 +1,17 @@
 {
-  "version": "1.50.97",
+  "version": "1.50.98",
   "channel": "beta",
-  "notes": "release (beta): 1.50.96",
+  "notes": "fix(windows): auto-kill stale lux_core on startup and exit, enable Windows single-instance guard",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "b2e6695035895fd40831c1e5bdad0c317d167891cadf2e034781e79a09d34838",
-    "size": 38030367,
-    "version": "1.50.97"
+    "sha256": "a88203c552addf30da28fcfaa33e88713918317352afa95980cc22eeeb14bb27",
+    "size": 38030287,
+    "version": "1.50.98"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "e004c1bc77dc915447497534a1186016e171d74527a695683d3e4540b71f4a02",
-    "size": 27697939,
-    "version": "1.50.97"
+    "sha256": "4cc53f6ab91d9cae3e785f75e03c9e5e828d377aab957906979e0df8510ebb82",
+    "size": 27707417,
+    "version": "1.50.98"
   }
 }
