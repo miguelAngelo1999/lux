@@ -18,10 +18,45 @@ void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ── Single-instance guard ────────────────────────────────────────────────
-  // Prevents the double-instance that occurs right after an in-app update:
-  // the relaunch script opens a new Lux while the old app shell is still
-  // dying. The new instance checks the lock file and exits if the existing
-  // process is alive.
+  // Prevents multiple instances of Lux from running simultaneously.
+  // The new instance checks the lock file and exits if the existing process is alive.
+  if (Platform.isWindows) {
+    try {
+      final appDir = Platform.environment['APPDATA'] ??
+          Platform.environment['LOCALAPPDATA'] ??
+          Platform.environment['TEMP'] ??
+          '';
+      final lockDir = Directory('$appDir/lux');
+      if (!await lockDir.exists()) {
+        await lockDir.create(recursive: true);
+      }
+      final lockFile = File('${lockDir.path}/lux_app.lock');
+      final myPid = pid;
+      if (await lockFile.exists()) {
+        final content = await lockFile.readAsString();
+        final existingPid = int.tryParse(content.trim());
+        if (existingPid != null && existingPid != myPid) {
+          // Check if existing lux process is alive
+          final check = await Process.run('tasklist', [
+            '/FI',
+            'PID eq $existingPid',
+            '/FI',
+            'IMAGENAME eq lux.exe',
+            '/NH',
+          ]);
+          final stdoutStr = check.stdout.toString();
+          if (stdoutStr.contains('lux.exe')) {
+            // Another instance is already running — exit immediately
+            exit(0);
+          }
+        }
+      }
+      // Write our PID
+      await lockFile.writeAsString(myPid.toString());
+    } catch (_) {
+      // Non-fatal — continue even if lock file can't be written
+    }
+  }
   if (Platform.isMacOS) {
     try {
       final appDir = Platform.environment['HOME'] ?? '';
