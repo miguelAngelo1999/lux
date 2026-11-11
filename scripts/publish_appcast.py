@@ -59,7 +59,9 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload  # noqa: E40
 
 urllib3.disable_warnings()
 
-TOKEN = "/Users/virgoh/lux/scripts/.oauth_token.json"
+TOKEN = os.environ.get(
+    "LUX_OAUTH_TOKEN", "/Users/virgoh/lux/scripts/.oauth_token.json"
+)
 REPO = "/Users/virgoh/lux-clean"
 
 # Set by release.sh after probing which local proxy is reachable. Passed through
