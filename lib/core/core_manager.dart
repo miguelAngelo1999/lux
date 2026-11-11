@@ -467,16 +467,17 @@ class CoreManager {
   }
 
   /// Test proxy latency with cert error detection.
-  /// Returns (delay, certError). delay=-1 on failure.
-  Future<({int delay, bool certError})> testProxyDelayDetailed(String id) async {
+  /// Returns (delay, certError, pacOnly). delay=-1 on failure.
+  Future<({int delay, bool certError, bool pacOnly})> testProxyDelayDetailed(String id) async {
     try {
       final res = await dio.get('$baseHttpUrl/proxies/delay/$id',
           options: Options(receiveTimeout: const Duration(seconds: 10)));
       final delay = res.data['delay'] as int? ?? -1;
       final certError = res.data['certError'] as bool? ?? false;
-      return (delay: delay, certError: certError);
+      final pacOnly = res.data['pacOnly'] as bool? ?? false;
+      return (delay: delay, certError: certError, pacOnly: pacOnly);
     } catch (_) {
-      return (delay: -1, certError: false);
+      return (delay: -1, certError: false, pacOnly: false);
     }
   }
 
@@ -600,6 +601,10 @@ class CoreManager {
         Uri.parse('$baseWsUrl/heartbeat/runtime-status?token=$token'));
 
     return _runtimeStatusChannel;
+  }
+
+  void clearRuntimeStatusChannel() {
+    _runtimeStatusChannel = null;
   }
 
   Future<WebSocketChannel?> getEventChannel() async {

@@ -263,6 +263,15 @@ class _HomeState extends State<Home>
             Provider.of<AppStateModel>(context, listen: false).userWantsRunning = true;
           }
         });
+        // Sync app state with core's actual status on launch
+        coreManager?.getIsStarted().then((started) {
+          if (mounted && started) {
+            final state = Provider.of<AppStateModel>(context, listen: false);
+            state.updateIsStarted(true);
+            state.userWantsRunning = true;
+            _refreshTray();
+          }
+        }).catchError((_) {});
         _refreshTray();
         // Sync auto-switch config to lux_core on startup
         _syncAutoSwitchOnReady();

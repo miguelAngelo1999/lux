@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -42,6 +43,8 @@ class _State extends State<AppHeaderBar> with WindowListener {
   bool isLoadingRuleList = false;
   bool isLoadingRuleDropdown = false;
   WebSocketChannel? runtimeStatusChannel;
+  StreamSubscription? _runtimeStatusSubscription;
+  Timer? _statusPollTimer;
 
   /// Windows draws its own caption buttons because hiding the native title
   /// bar removes them, so the maximised state has to be tracked here.
@@ -64,10 +67,17 @@ class _State extends State<AppHeaderBar> with WindowListener {
   }
 
   Future<void> refreshIsStarted() async {
-    final value = await widget.coreManager.getIsStarted();
-    setState(() {
-      isStarted = value;
-    });
+    try {
+      final value = await widget.coreManager.getIsStarted();
+      if (!mounted) return;
+      if (!isLoadingSwitch) {
+        setState(() {
+          isStarted = value;
+        });
+        Provider.of<AppStateModel>(context, listen: false)
+            .updateIsStarted(value);
+      }
+    } catch (_) {}
   }
 
   Future<void> refreshCurProxyInfo() async {
@@ -128,6 +138,8 @@ class _State extends State<AppHeaderBar> with WindowListener {
           isStarted = real;
           isLoadingSwitch = false;
         });
+        Provider.of<AppStateModel>(context, listen: false)
+            .updateIsStarted(real);
       }
     }
   }
@@ -207,8 +219,60 @@ class _State extends State<AppHeaderBar> with WindowListener {
   @override
   void dispose() {
     windowManager.removeListener(this);
+    _statusPollTimer?.cancel();
+    _statusPollTimer = null;
+    _runtimeStatusSubscription?.cancel();
+    _runtimeStatusSubscription = null;
     runtimeStatusChannel?.sink.close();
     super.dispose();
+  }
+
+  void _initRuntimeStatusChannel() {
+    widget.coreManager.getRuntimeStatusChannel().then((channel) async {
+      if (channel == null || !mounted) return;
+      try {
+        await channel.ready;
+      } catch (e) {
+        appLog('WS', 'runtime-status ready error: $e');
+        widget.coreManager.clearRuntimeStatusChannel();
+        return;
+      }
+      if (!mounted) return;
+      runtimeStatusChannel = channel;
+      _runtimeStatusSubscription?.cancel();
+      _runtimeStatusSubscription = channel.stream.listen(
+        (message) {
+          try {
+            RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));
+            if (mounted && !isLoadingSwitch) {
+              setState(() {
+                isStarted = value.isStarted;
+              });
+              Provider.of<AppStateModel>(context, listen: false)
+                  .updateIsStarted(value.isStarted);
+            }
+          } catch (e) {
+            appLog('WS', 'runtime-status decode error: $e');
+          }
+        },
+        onError: (e) {
+          appLog('WS', 'runtime-status stream error: $e');
+          _runtimeStatusSubscription?.cancel();
+          _runtimeStatusSubscription = null;
+          runtimeStatusChannel = null;
+          widget.coreManager.clearRuntimeStatusChannel();
+        },
+        onDone: () {
+          _runtimeStatusSubscription?.cancel();
+          _runtimeStatusSubscription = null;
+          runtimeStatusChannel = null;
+          widget.coreManager.clearRuntimeStatusChannel();
+        },
+      );
+    }).catchError((e) {
+      appLog('WS', 'runtime-status connection failed: $e');
+      widget.coreManager.clearRuntimeStatusChannel();
+    });
   }
 
   @override
@@ -221,28 +285,17 @@ class _State extends State<AppHeaderBar> with WindowListener {
       });
     }
     refreshData();
+    _initRuntimeStatusChannel();
 
-    if (runtimeStatusChannel == null) {
-      widget.coreManager.getRuntimeStatusChannel().then((channel) async {
-        if (channel == null) return;
-        // Required by web_socket_channel 3.x. Missing it means the connect
-        // toggle can stop reflecting the core's real state, because the status
-        // frames never arrive and no error is raised.
-        await channel.ready;
-        if (!mounted) return;
-        runtimeStatusChannel = channel;
-        runtimeStatusChannel?.stream.listen((message) {
-          RuntimeStatus value = RuntimeStatus.fromJson(json.decode(message));
-          setState(() {
-            if (!isLoadingSwitch) {
-              isStarted = value.isStarted;
-              Provider.of<AppStateModel>(context, listen: false)
-                  .updateIsStarted(value.isStarted);
-            }
-          });
-        });
-      });
-    }
+    // Periodic polling ensures toggle state stays in sync even if WebSocket
+    // drops or on startup before auto-connect kicks in.
+    _statusPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!mounted) return;
+      if (!isLoadingSwitch) {
+        refreshIsStarted();
+        refreshCurProxyInfo();
+      }
+    });
   }
 
   @override

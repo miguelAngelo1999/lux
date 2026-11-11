@@ -35,6 +35,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
   final menuController = MenuController();
   TestState _state = TestState.untested;
   int _latencyMs = 0;
+  bool _pacReachable = false;
 
   /// A PAC-only proxy has a PAC URL and no fixed server, so a latency test to a
   /// single upstream is meaningless — show "PAC — n/a" instead of a red fail.
@@ -46,17 +47,21 @@ class _ProxyListItemState extends State<ProxyListItem> {
 
   Future<void> _testDelay() async {
     if (_state == TestState.testing || widget.coreManager == null) return;
-    if (_isPacOnly) {
-      setState(() => _state = TestState.notApplicable);
-      return;
-    }
-    setState(() => _state = TestState.testing);
+    setState(() {
+      _state = TestState.testing;
+      _pacReachable = false;
+    });
     final result = await widget.coreManager!.testProxyDelayDetailed(widget.item.id);
     if (!mounted) return;
     setState(() {
-      if (result.delay >= 0) {
+      if (result.delay == 0 && result.pacOnly) {
+        _state = TestState.reachable;
+        _latencyMs = 0;
+        _pacReachable = true;
+      } else if (result.delay >= 0) {
         _state = TestState.reachable;
         _latencyMs = result.delay;
+        _pacReachable = false;
       } else if (result.certError) {
         _state = TestState.certError;
       } else {
@@ -70,9 +75,16 @@ class _ProxyListItemState extends State<ProxyListItem> {
   Future<void> _promptCertTrust() async {
     if (!mounted || widget.coreManager == null) return;
     final item = widget.item;
-    final server = item.server ?? '';
-    final port = item.port ?? 0;
-    if (server.isEmpty || port == 0) return;
+    var server = item.server ?? '';
+    var port = item.port ?? 0;
+    if ((server.isEmpty || port == 0) && _isPacOnly) {
+      final up = await widget.coreManager!.getPacUpstream(item.id);
+      if (up != null) {
+        server = up.server;
+        port = up.port;
+      }
+    }
+    if (!mounted || server.isEmpty || port == 0) return;
 
     final shouldCheck = await showDialog<bool>(
       context: context,
@@ -154,19 +166,30 @@ class _ProxyListItemState extends State<ProxyListItem> {
       if (!mounted) return;
 
       final item = widget.item;
+      var server = item.server ?? '';
+      var port = item.port ?? 0;
+      if ((server.isEmpty || port == 0) && _isPacOnly) {
+        final up = await widget.coreManager!.getPacUpstream(item.id);
+        if (up != null) {
+          server = up.server;
+          port = up.port;
+        }
+      }
       final detail = await widget.coreManager!.getProxyDetail(item.id);
       final username = detail?.raw['username'] as String? ?? '';
       final password = detail?.password ?? item.password ?? '';
 
       CertCheckResult? recheck;
-      try {
-        recheck = await widget.coreManager!.checkCert(
-          server: item.server ?? '',
-          port: item.port ?? 0,
-          username: username,
-          password: password,
-        );
-      } catch (_) {}
+      if (server.isNotEmpty && port != 0) {
+        try {
+          recheck = await widget.coreManager!.checkCert(
+            server: server,
+            port: port,
+            username: username,
+            password: password,
+          );
+        } catch (_) {}
+      }
 
       if (!mounted) return;
 
@@ -238,7 +261,8 @@ class _ProxyListItemState extends State<ProxyListItem> {
         );
       case TestState.reachable:
         fg = Colors.green; bg = Colors.green.withAlpha(28);
-        icon = Icons.check_circle_outline; text = '$_latencyMs ms';
+        icon = Icons.check_circle_outline;
+        text = _pacReachable ? 'PAC OK' : '$_latencyMs ms';
         break;
       case TestState.unreachable:
         fg = cs.error; bg = cs.error.withAlpha(28);
