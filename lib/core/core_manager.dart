@@ -720,9 +720,17 @@ class CoreManager {
 
   /// Installs a PEM certificate to the System Keychain via lux_core (runs as root).
   Future<void> installCert(String pem) async {
-    final res = await dio.post('$baseHttpUrl/proxies/install-cert', data: {'pem': pem});
-    if (res.data['success'] != true) {
-      throw Exception(res.data['error'] ?? 'cert install failed');
+    try {
+      final res = await dio.post('$baseHttpUrl/proxies/install-cert', data: {'pem': pem});
+      if (res.data is Map && res.data['success'] != true) {
+        throw Exception(res.data['error'] ?? 'cert install failed');
+      }
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error'].toString().trim());
+      }
+      rethrow;
     }
   }
 

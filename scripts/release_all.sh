@@ -186,6 +186,7 @@ cur = '$CURRENT'; bump = '$BUMP'
 v = cur.split('.')
 if bump == 'major': v = [str(int(v[0])+1),'0','0']
 elif bump == 'minor': v = [v[0], str(int(v[1])+1), '0']
+elif '.' in bump: v = bump.split('.')
 else: v = [v[0], v[1], str(int(v[2])+1)]
 print('.'.join(v))
 ")
@@ -556,7 +557,7 @@ if [ -n "$OAUTH_TEMP_LINK" ] && [ -e "$OAUTH_TEMP_LINK" ]; then
   OAUTH_TEMP_LINK=""
 fi
 
-git add pubspec.yaml lib/core/checksum.dart scripts/release_all.sh
+git add pubspec.yaml lib/core/checksum.dart lib/core/core_manager.dart scripts/release_all.sh
 if [ "$CHANNEL" == "beta" ]; then
   git add appcast-beta.json 2>/dev/null || true
   git commit -m "release (beta): $VERSION"

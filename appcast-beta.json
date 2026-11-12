@@ -1,17 +1,17 @@
 {
-  "version": "1.50.100",
+  "version": "1.50.101",
   "channel": "beta",
-  "notes": "chore: update macOS lux_core binary and checksums",
+  "notes": "release (beta): 1.50.100",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "bd2877d87391b3d57406f64f66655a9669b06bdbab5a8ee41e95cdc2a54d6dd0",
-    "size": 45588062,
-    "version": "1.50.100"
+    "sha256": "b3f82fb6c88d627661bd86cc4d6b717d78f7e50b02491d69bcf569a5df21b514",
+    "size": 42648102,
+    "version": "1.50.101"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "eeafe4e6b3b322cc13a7f2fb000ddd9c477b29d67cb3430e0ccc3a5d5a92ac05",
-    "size": 34509468,
-    "version": "1.50.100"
+    "sha256": "4f39ab3fc9d87609d12707911a2f60d317ce43df158e3c166acc9d57ab28aa18",
+    "size": 32729481,
+    "version": "1.50.101"
   }
 }
