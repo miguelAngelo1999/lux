@@ -522,8 +522,13 @@ fi
 ISS_CHECK=$(win_ps_script "ensure_iss_kill.ps1" '
 $f = "C:\lux-build\lux\dist-setup.iss"
 $c = Get-Content $f -Raw
-$c2 = [regex]::Replace($c, "(?m)^[ \t]*(AppMutex|CloseApplications|RestartApplications)[ \t]*=[^\r\n]*\r?\n", "")
-if ($c2 -ne $c) { [System.IO.File]::WriteAllText($f, $c2); Write-Host "ISS_PROMPT_DIRECTIVES_REMOVED" }
+# Strip AppMutex so Inno never blocks before InitializeSetup runs
+$c2 = [regex]::Replace($c, "(?m)^[ \t]*AppMutex[ \t]*=[^\r\n]*\r?\n", "")
+# Ensure CloseApplications=no and RestartApplications=no are active to bypass Windows Restart Manager
+if ($c2 -notmatch "(?m)^[ \t]*CloseApplications=no") {
+  $c2 = [regex]::Replace($c2, "(?m)^\[Setup\]\r?\n", "[Setup]`r`nCloseApplications=no`r`nRestartApplications=no`r`n")
+}
+if ($c2 -ne $c) { [System.IO.File]::WriteAllText($f, $c2); Write-Host "ISS_DIRECTIVES_UPDATED" }
 if (($c2 -match "procedure KillLux") -and ($c2 -match "function InitializeSetup")) { Write-Host "ISS_KILL_OK" } else { Write-Host "ISS_KILL_MISSING" }
 ')
 echo "$ISS_CHECK" | grep -E "ISS_" || true
@@ -557,7 +562,7 @@ if [ -n "$OAUTH_TEMP_LINK" ] && [ -e "$OAUTH_TEMP_LINK" ]; then
   OAUTH_TEMP_LINK=""
 fi
 
-git add pubspec.yaml lib/core/checksum.dart lib/core/core_manager.dart scripts/release_all.sh dist-setup.iss
+git add pubspec.yaml lib/core/checksum.dart lib/core/core_manager.dart scripts/release_all.sh dist-setup.iss windows/packaging/exe/setup.iss lib/util/updater.dart render_iss.py
 if [ "$CHANNEL" == "beta" ]; then
   git add appcast-beta.json 2>/dev/null || true
   git commit -m "release (beta): $VERSION"

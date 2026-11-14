@@ -2,12 +2,25 @@
 """Render windows/packaging/exe/setup.iss (a flutter_distributor Jinja template)
 into a concrete dist-setup.iss for ISCC. We only need the token substitutions
 and the two locales (en, zh) the make_config declares."""
+import os
 import re
 import sys
 
-TEMPLATE = r"windows\packaging\exe\setup.iss"
+TEMPLATE = os.path.join("windows", "packaging", "exe", "setup.iss")
 OUT = r"dist-setup.iss"
-VERSION = "1.50.83"
+def get_version():
+    if len(sys.argv) > 1 and sys.argv[1]:
+        return sys.argv[1]
+    try:
+        with open("pubspec.yaml", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("version:"):
+                    return line.split(":")[1].strip().split("+")[0]
+    except Exception:
+        pass
+    return "1.50.103"
+
+VERSION = get_version()
 
 # Values from windows/packaging/exe/make_config.yaml + Flutter build layout.
 TOKENS = {

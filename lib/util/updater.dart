@@ -93,9 +93,9 @@ void _reportBadDownload(BuildContext context, String message) {
 }
 
 /// Fetches the appcast.json from Google Drive and compares versions.
-/// [proxyPort] is the local Lux proxy port (defaults to configured port or 1090) —
-/// needed because Dart's HttpClient doesn't pick up the system proxy in TUN/Mixed mode.
-Future<UpdateInfo?> checkForUpdate({int? proxyPort}) async {
+/// [proxyPort] is the local Lux proxy port (default 1090) — needed because
+/// Dart's HttpClient doesn't pick up the system proxy in TUN/Mixed mode.
+Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
   try {
     final pkg = await PackageInfo.fromPlatform();
     final current = pkg.version;
@@ -109,12 +109,10 @@ Future<UpdateInfo?> checkForUpdate({int? proxyPort}) async {
             ? betaAppcastUrl
             : appcastUrl;
 
-    final resolvedPort = proxyPort ?? await readLocalServerPort();
-
     // Use Dart's HttpClient directly with proxy + SSL bypass
     final client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
-    client.findProxy = (_) => 'PROXY 127.0.0.1:$resolvedPort; DIRECT';
+    client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
 
     // Add cache-busting only for GDrive URLs (query param approach)
     final cacheBust = baseUrl.contains('?') ? '&_t=' : '?_t=';
@@ -153,10 +151,10 @@ Future<UpdateInfo?> checkForUpdate({int? proxyPort}) async {
     if (result != null && !result.hasUpdate && baseUrl.contains('drive.usercontent.google.com')) {
       appLog('UPDATE', 'appcast returned same version as current — possible CDN cache hit, retrying in 3s');
       await Future.delayed(const Duration(seconds: 3));
-      final retryUrl = Uri.parse('$baseUrl$cacheBust${DateTime.now().millisecondsSinceEpoch}');
+      final retryUrl = Uri.parse('$baseUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}');
       final client2 = HttpClient();
       client2.badCertificateCallback = (_, __, ___) => true;
-      client2.findProxy = (_) => 'PROXY 127.0.0.1:$resolvedPort; DIRECT';
+      client2.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
       final req2 = await client2.getUrl(retryUrl);
       req2.followRedirects = true;
       req2.headers.set('Cache-Control', 'no-cache, no-store');
@@ -384,11 +382,10 @@ Future<void> downloadAndInstall(
     // We intentionally do NOT read HTTP_PROXY/HTTPS_PROXY env vars because
     // on some machines they contain placeholder values (e.g. "seu_ip:porta")
     // that cause "Invalid proxy configuration" errors.
-    final resolvedPort = await readLocalServerPort();
     final client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
-    // Try lux proxy first (127.0.0.1:$resolvedPort), fall back to DIRECT
-    client.findProxy = (_) => 'PROXY 127.0.0.1:$resolvedPort; DIRECT';
+    // Try lux proxy first (127.0.0.1:1090), fall back to DIRECT
+    client.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
 
     final request = await client.getUrl(Uri.parse(fetchUrl));
     request.followRedirects = true;
@@ -541,7 +538,7 @@ Future<void> downloadAndInstall(
           onStatusChange?.call('Re-downloading…');
           final retryClient = HttpClient();
           retryClient.badCertificateCallback = (_, __, ___) => true;
-          retryClient.findProxy = (_) => 'PROXY 127.0.0.1:$resolvedPort; DIRECT';
+          retryClient.findProxy = (_) => 'PROXY 127.0.0.1:1090; DIRECT';
           final retryRequest = await retryClient.getUrl(Uri.parse(retryUrl));
           retryRequest.followRedirects = true;
           retryRequest.headers.set('Cache-Control', 'no-cache, no-store');
@@ -823,36 +820,53 @@ String _buildWindowsUpdaterScript(String installerPath) {
       '    exit /b 1\r\n'
       ')\r\n'
       '\r\n'
-      ':: Wait for lux.exe to fully exit (bounded 3-check loop)\r\n'
-      'set /a _wait_count=0\r\n'
-      ':wait_lux\r\n'
-      'ping 127.0.0.1 -n 3 >nul\r\n'
-      'tasklist /FI "IMAGENAME eq lux.exe" 2>nul | find /i "lux.exe" >nul\r\n'
-      'if errorlevel 1 goto wait_lux_done\r\n'
-      'set /a _wait_count+=1\r\n'
-      'if %_wait_count% LSS 3 goto wait_lux\r\n'
-      'echo lux.exe did not exit after 3 checks, forcing taskkill >> "%TEMP%\\lux_updater.log"\r\n'
-      'taskkill /F /IM lux.exe /T >nul 2>&1\r\n'
-      'taskkill /F /IM lux_core.exe /T >nul 2>&1\r\n'
-      ':wait_lux_done\r\n'
-      'echo lux.exe exited >> "%TEMP%\\lux_updater.log"\r\n'
-      '\r\n'
-      ':: Clean up single-instance lock files so relaunch is never blocked\r\n'
-      'del /F /Q "%APPDATA%\\lux\\lux_app.lock" >nul 2>&1\r\n'
-      'del /F /Q "%LOCALAPPDATA%\\lux\\lux_app.lock" >nul 2>&1\r\n'
-      'del /F /Q "%TEMP%\\lux\\lux_app.lock" >nul 2>&1\r\n'
-      '\r\n'
-      ':: Kill lux_core HERE (in user context) before elevating.\r\n'
-      ':: Once we elevate for the installer, Stop-Process can\'t reach user processes.\r\n'
+      ':: Step 1: End scheduled tasks so nothing auto-respawns\r\n'
       'schtasks /end /tn LuxApp >nul 2>&1\r\n'
-      'ping 127.0.0.1 -n 2 >nul\r\n'
-      'taskkill /F /IM lux_core.exe /T >nul 2>&1\r\n'
+      'schtasks /end /tn LuxCore >nul 2>&1\r\n'
+      'schtasks /end /tn LuxInstall >nul 2>&1\r\n'
+      'schtasks /end /tn TestLuxApp >nul 2>&1\r\n'
+      '\r\n'
+      ':: Step 2: Kill lux.exe and launchers FIRST — watchdog inside lux.exe restarts lux_core if killed first!\r\n'
       'taskkill /F /IM lux.exe /T >nul 2>&1\r\n'
+      'taskkill /F /IM lux_launcher.exe /T >nul 2>&1\r\n'
+      'taskkill /F /IM admin_lux.exe /T >nul 2>&1\r\n'
+      'taskkill /F /IM admin_lux_tray.exe /T >nul 2>&1\r\n'
+      'taskkill /F /IM admin_lux_tray_handler.exe /T >nul 2>&1\r\n'
+      '\r\n'
+      ':: Step 3: Kill lux_core and dialog helpers\r\n'
+      'taskkill /F /IM lux_core.exe /T >nul 2>&1\r\n'
+      'taskkill /F /IM lux_core_arm64.exe /T >nul 2>&1\r\n'
+      'taskkill /F /IM lux-dialog.exe /T >nul 2>&1\r\n'
+      'taskkill /F /IM lux-dialog-slim.exe /T >nul 2>&1\r\n'
+      '\r\n'
+      ':: Step 4: Aggressive PowerShell process termination (Stop-Process + CIM/WMI)\r\n'
+      'powershell -NoProfile -NonInteractive -Command "Stop-Process -Name lux,lux_core,lux_launcher,admin_lux,admin_lux_tray,admin_lux_tray_handler,lux-dialog,lux-dialog-slim -Force -ErrorAction SilentlyContinue; Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { \$_.Name -match \'^(lux|lux_core|lux_core_arm64|lux_launcher|admin_lux|admin_lux_tray|admin_lux_tray_handler|lux-dialog|lux-dialog-slim)\\.exe\$\' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1\r\n'
+      '\r\n'
+      ':: Step 5: Bounded verification loop (wait up to 3 seconds)\r\n'
+      'set /a _wait_count=0\r\n'
+      ':wait_procs\r\n'
+      'ping 127.0.0.1 -n 2 >nul\r\n'
+      'tasklist /FI "IMAGENAME eq lux_core.exe" 2>nul | find /i "lux_core.exe" >nul\r\n'
+      'if not errorlevel 1 (\r\n'
+      '    taskkill /F /IM lux_core.exe /T >nul 2>&1\r\n'
+      '    set /a _wait_count+=1\r\n'
+      '    if %_wait_count% LSS 6 goto wait_procs\r\n'
+      ')\r\n'
       'echo processes killed >> "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
-      ':: Run installer elevated via PowerShell Start-Process -Verb RunAs.\r\n'
-      ':: All lux processes are already dead so the installer can overwrite lux.exe.\r\n'
-      ':: -Wait ensures this bat does not exit until installer finishes.\r\n'
+      ':: Step 6: Rename locked binaries out of the way if still held by OS handle\r\n'
+      'set "_bin_dir=%LOCALAPPDATA%\\Programs\\lux"\r\n'
+      'set "_core_bin=%_bin_dir%\\data\\flutter_assets\\assets\\bin\\lux_core.exe"\r\n'
+      'if exist "%_core_bin%" (\r\n'
+      '    del /f /q "%_core_bin%.old" >nul 2>&1\r\n'
+      '    ren "%_core_bin%" "lux_core.exe.old" >nul 2>&1\r\n'
+      ')\r\n'
+      'if exist "%_bin_dir%\\lux.exe" (\r\n'
+      '    del /f /q "%_bin_dir%\\lux.exe.old" >nul 2>&1\r\n'
+      '    ren "%_bin_dir%\\lux.exe" "lux.exe.old" >nul 2>&1\r\n'
+      ')\r\n'
+      '\r\n'
+      ':: Step 7: Run installer elevated via PowerShell Start-Process -Verb RunAs\r\n'
       'echo Running installer: $escaped >> "%TEMP%\\lux_updater.log"\r\n'
       'powershell -NonInteractive -WindowStyle Hidden -Command '
       '"\$p = Start-Process -FilePath \'$psEscaped\' '
@@ -860,24 +874,13 @@ String _buildWindowsUpdaterScript(String installerPath) {
       '-Verb RunAs -Wait -PassThru; exit \$p.ExitCode"\r\n'
       'echo Installer exited with code %errorlevel% >> "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
-      ':: Clean up lock files again and kill any orphaned lux processes (especially in systemprofile)\r\n'
-      'del /F /Q "%APPDATA%\\lux\\lux_app.lock" >nul 2>&1\r\n'
-      'del /F /Q "%LOCALAPPDATA%\\lux\\lux_app.lock" >nul 2>&1\r\n'
-      'del /F /Q "%TEMP%\\lux\\lux_app.lock" >nul 2>&1\r\n'
-      'powershell -NonInteractive -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name = \'lux.exe\'\\" | Where-Object { \$_.ExecutablePath -match \'systemprofile\' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1\r\n'
-      'powershell -NonInteractive -NoProfile -Command "\$t = Get-ScheduledTask -TaskName \'LuxApp\' -ErrorAction SilentlyContinue; if (\$t -and \$t.Principal.UserId -eq \'SYSTEM\') { Unregister-ScheduledTask -TaskName \'LuxApp\' -Confirm:\$false }" >nul 2>&1\r\n'
+      ':: Step 8: Clean up old renamed binaries\r\n'
+      'if exist "%_core_bin%.old" del /f /q "%_core_bin%.old" >nul 2>&1\r\n'
+      'if exist "%_bin_dir%\\lux.exe.old" del /f /q "%_bin_dir%\\lux.exe.old" >nul 2>&1\r\n'
       '\r\n'
-      ':: Determine installed executable location\r\n'
-      'set "LUX_TARGET=%LOCALAPPDATA%\\Programs\\lux\\lux.exe"\r\n'
-      'if not exist "%LUX_TARGET%" set "LUX_TARGET=%ProgramFiles%\\lux\\lux.exe"\r\n'
-      'if not exist "%LUX_TARGET%" set "LUX_TARGET=%ProgramFiles(x86)%\\lux\\lux.exe"\r\n'
-      '\r\n'
-      ':: Launch Lux in the user interactive desktop session\r\n'
-      'echo Launching Lux in user session: %LUX_TARGET% >> "%TEMP%\\lux_updater.log"\r\n'
-      'explorer.exe "%LUX_TARGET%"\r\n'
-      'ping 127.0.0.1 -n 3 >nul\r\n'
-      'tasklist /FI "IMAGENAME eq lux.exe" 2>nul | find /i "lux.exe" >nul\r\n'
-      'if errorlevel 1 start "" "%LUX_TARGET%" --enable-software-rendering\r\n'
+      ':: Step 9: Launch Lux explicitly in the user session\r\n'
+      'echo Launching Lux in user session >> "%TEMP%\\lux_updater.log"\r\n'
+      'start "" "%LOCALAPPDATA%\\Programs\\lux\\lux.exe" --enable-software-rendering\r\n'
       '\r\n'
       ':: Clean up the VBS shim and this script\r\n'
       'del "%~dp0lux_updater.vbs" >nul 2>&1\r\n'

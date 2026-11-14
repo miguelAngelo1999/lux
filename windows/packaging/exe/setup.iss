@@ -18,12 +18,14 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableFinishedPage=yes
-; Do NOT set AppMutex - it makes Inno show a blocking "please close Lux" prompt
+CloseApplications=no
+RestartApplications=no
+; Do NOT set AppMutex — it makes Inno show a blocking "please close Lux" prompt
 ; and refuses to continue while Lux is running, BEFORE our [Code] kill logic can
 ; run. Instead we kill Lux in InitializeSetup() (runs first, before any prompt).
-; Do NOT use CloseApplications=force - it shows a "please close" dialog for
-; lux_core.exe because Inno cannot kill a SYSTEM-owned process. The [Code]
-; section handles killing via schtasks /end (the only way to stop SYSTEM procs).
+; CloseApplications=no and RestartApplications=no prevent Windows Restart Manager
+; from blocking on headless/elevated daemon processes like lux_core.exe.
+; The [Code] section handles bulletproof process termination and file unlocking.
 
 [Languages]
 {% for locale in LOCALES %}
@@ -56,13 +58,13 @@ DisableFinishedPage=yes
 
 [Files]
 
-Source: "C:\temp\dll\*"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "C:\temp\dll\*"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist restartreplace uninsrestartdelete
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: {% if CREATE_DESKTOP_ICON != true %}unchecked{% else %}checkedonce{% endif %}
 
 [Files]
-Source: "{{SOURCE_DIR}}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{{SOURCE_DIR}}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace uninsrestartdelete
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
@@ -85,6 +87,73 @@ begin
   Result := (User = 'SYSTEM') or (Pos('SYSTEMPROFILE', AppData) > 0);
 end;
 
+// Safely unlocks a file. If locked by OS handle or lingering process,
+// renames it to a .old backup so the original path is immediately free
+// for Inno Setup to create the new binary without error or retry prompt.
+procedure ForceUnlockFile(const FilePath: string);
+var
+  OldPath: string;
+  I: Integer;
+begin
+  if not FileExists(FilePath) then
+    Exit;
+
+  // 1. Direct delete if process already let go
+  if DeleteFile(FilePath) then
+    Exit;
+
+  // 2. File is in use: Windows allows RENAMING an active/locked executable.
+  // Renaming moves the file out of the destination path so Inno Setup can
+  // write the new file directly without error or retry prompt.
+  for I := 1 to 10 do
+  begin
+    OldPath := FilePath + '.old_' + IntToStr(I);
+    DeleteFile(OldPath);
+    if RenameFile(FilePath, OldPath) then
+    begin
+      // Path is now freed! Try to delete old path if handle is closing
+      DeleteFile(OldPath);
+      Exit;
+    end;
+    Sleep(100);
+  end;
+end;
+
+procedure UnlockAllLuxBinaries(const BaseDir: string);
+begin
+  if (BaseDir = '') or (not DirExists(BaseDir)) then
+    Exit;
+  ForceUnlockFile(BaseDir + '\lux.exe');
+  ForceUnlockFile(BaseDir + '\lux_launcher.exe');
+  ForceUnlockFile(BaseDir + '\admin_lux.exe');
+  ForceUnlockFile(BaseDir + '\admin_lux_tray.exe');
+  ForceUnlockFile(BaseDir + '\admin_lux_tray_handler.exe');
+  ForceUnlockFile(BaseDir + '\data\flutter_assets\assets\bin\lux_core.exe');
+  ForceUnlockFile(BaseDir + '\data\flutter_assets\assets\bin\lux_core_arm64.exe');
+  ForceUnlockFile(BaseDir + '\data\flutter_assets\assets\bin\lux_core');
+  ForceUnlockFile(BaseDir + '\data\flutter_assets\assets\bin\lux-dialog.exe');
+  ForceUnlockFile(BaseDir + '\data\flutter_assets\assets\bin\lux-dialog-slim.exe');
+end;
+
+procedure CleanupOldBinaries(const BaseDir: string);
+var
+  I: Integer;
+begin
+  if (BaseDir = '') or (not DirExists(BaseDir)) then
+    Exit;
+  for I := 1 to 10 do
+  begin
+    DeleteFile(BaseDir + '\lux.exe.old_' + IntToStr(I));
+    DeleteFile(BaseDir + '\lux_launcher.exe.old_' + IntToStr(I));
+    DeleteFile(BaseDir + '\data\flutter_assets\assets\bin\lux_core.exe.old_' + IntToStr(I));
+    DeleteFile(BaseDir + '\data\flutter_assets\assets\bin\lux_core_arm64.exe.old_' + IntToStr(I));
+  end;
+  DeleteFile(BaseDir + '\lux.exe.old');
+  DeleteFile(BaseDir + '\lux_launcher.exe.old');
+  DeleteFile(BaseDir + '\data\flutter_assets\assets\bin\lux_core.exe.old');
+  DeleteFile(BaseDir + '\data\flutter_assets\assets\bin\lux_core.exe.bak');
+end;
+
 (* Writes the LuxApp scheduled-task XML to {tmp}\luxapp_task.xml.
   - LogonTrigger with no <Delay> -> runs immediately at logon
   - <Priority>4</Priority> -> higher than the default 7 so Lux starts first
@@ -97,13 +166,15 @@ var
   UserAccount: string;
 begin
   ExePath := ExpandConstant('{app}') + '\lux.exe';
+  if (Pos('{app}', ExePath) > 0) or (not FileExists(ExePath)) then
+    ExePath := ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe';
   UserAccount := GetUserNameString();
   if WithComputerName and (Pos('\', UserAccount) = 0) then
     UserAccount := GetComputerNameString() + '\' + UserAccount;
   Xml :=
-    '<?xml version="1.0" encoding="UTF-8"?>' + #13#10 +
+    '<?xml version="1.0" encoding="UTF-16"?>' + #13#10 +
     '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
-    '  <RegistrationInfo><Description>Lux proxy - start first at logon</Description></RegistrationInfo>' + #13#10 +
+    '  <RegistrationInfo><Description>Lux proxy — start first at logon</Description></RegistrationInfo>' + #13#10 +
     '  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>' + #13#10 +
     '  <Principals><Principal id="Author"><UserId>' + UserAccount + '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
     '  <Settings>' + #13#10 +
@@ -129,10 +200,12 @@ var
   ExePath: string;
 begin
   ExePath := ExpandConstant('{app}') + '\lux.exe';
+  if (Pos('{app}', ExePath) > 0) or (not FileExists(ExePath)) then
+    ExePath := ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe';
   Xml :=
-    '<?xml version="1.0" encoding="UTF-8"?>' + #13#10 +
+    '<?xml version="1.0" encoding="UTF-16"?>' + #13#10 +
     '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
-    '  <RegistrationInfo><Description>Lux proxy - start first at logon</Description></RegistrationInfo>' + #13#10 +
+    '  <RegistrationInfo><Description>Lux proxy — start first at logon</Description></RegistrationInfo>' + #13#10 +
     '  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>' + #13#10 +
     '  <Principals><Principal id="Author"><UserId>' + GetUserNameString() + '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
     '  <Settings>' + #13#10 +
@@ -152,108 +225,150 @@ begin
   SaveStringToFile(ExpandConstant('{tmp}') + '\luxapp_task.xml', Xml, False);
 end;
 
-{ Kills all running Lux processes. lux_core.exe runs as SYSTEM via the LuxApp
-  scheduled task, and a user-level taskkill CANNOT kill a SYSTEM process, so we
-  MUST stop the task first (schtasks /end), then kill the remaining processes.
-  This order is permanent and must not be changed. }
-procedure KillLux();
-var ResultCode: Integer;
+// Bulletproof termination and unlock. Kills scheduled tasks, kills lux.exe first
+// (preventing watchdog respawn), kills lux_core, executes PowerShell CIM kill,
+// verifies via polling loop, and unlocks/renames any locked files to .old.
+procedure KillLux(IsAtInstallStep: Boolean);
+var
+  ResultCode: Integer;
+  I: Integer;
+  StillRunning: Boolean;
 begin
-  { Step 1: Stop the scheduled tasks - this terminates lux_core.exe. End BOTH
-    the current LuxApp task AND the legacy LuxCore/LuxInstall tasks: a machine
-    upgrading from the old scheme still has them, and a stale legacy task is
-    what re-launched Lux in the wrong context after an update (the 1.50.87/88
-    "stays off" reports - dual-scheme coexistence). }
-  Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('schtasks.exe', '/end /tn LuxCore', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('schtasks.exe', '/end /tn LuxInstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(2000);
+  // Step 1: Stop scheduled tasks to prevent auto-restart
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn LuxCore', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn LuxInstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn TestLuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  { Step 2: Kill any remaining process instances }
-  Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('taskkill.exe', '/F /IM lux_launcher.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(1000);
+  // Step 2: Kill lux.exe and launchers FIRST — watchdog inside lux.exe restarts lux_core if killed first!
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_launcher.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM admin_lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM admin_lux_tray.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM admin_lux_tray_handler.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  { Step 3: Second pass in case anything restarted }
-  Exec('taskkill.exe', '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('taskkill.exe', '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(500);
+  // Step 3: Kill lux_core.exe and helpers
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_core_arm64.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux-dialog.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux-dialog-slim.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // Step 4: Aggressive PowerShell process termination (Stop-Process + CIM/WMI)
+  // Use exact regex match to avoid accidentally matching the installer itself (e.g. Lux-Setup.exe)
+  Exec('powershell.exe',
+    '-NoProfile -NonInteractive -Command "' +
+    'Stop-Process -Name lux,lux_core,lux_launcher,admin_lux,admin_lux_tray,admin_lux_tray_handler,lux-dialog,lux-dialog-slim -Force -ErrorAction SilentlyContinue; ' +
+    'Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -match ''^(lux|lux_core|lux_core_arm64|lux_launcher|admin_lux|admin_lux_tray|admin_lux_tray_handler|lux-dialog|lux-dialog-slim)\.exe$'' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // Step 5: Bounded verification loop — wait up to 3s for OS handles to fully release
+  for I := 1 to 10 do
+  begin
+    StillRunning := False;
+    Exec(ExpandConstant('{cmd}'),
+      '/c tasklist /FI "IMAGENAME eq lux_core.exe" 2>nul | findstr /i "lux_core.exe"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode = 0 then StillRunning := True;
+
+    Exec(ExpandConstant('{cmd}'),
+      '/c tasklist /FI "IMAGENAME eq lux.exe" 2>nul | findstr /i "lux.exe"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode = 0 then StillRunning := True;
+
+    if not StillRunning then
+      break;
+
+    // If still alive, fire taskkill again and wait 300ms
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(300);
+  end;
+
+  // Step 6: Force unlock all binaries by direct delete or renaming locked files to .old
+  // Note: {app} cannot be expanded during InitializeSetup, so only expand {app}
+  // when IsAtInstallStep is True.
+  UnlockAllLuxBinaries(ExpandConstant('{localappdata}') + '\Programs\lux');
+  UnlockAllLuxBinaries(ExpandConstant('{autopf}') + '\lux');
+  if IsAtInstallStep then
+  begin
+    UnlockAllLuxBinaries(ExpandConstant('{app}'));
+  end;
 end;
 
-{ Runs BEFORE the wizard shows anything. Killing Lux here (rather than at
-  ssInstall) means there is no running instance to block the install - this is
-  why we removed AppMutex, which would otherwise prompt "please close Lux". }
 function InitializeSetup(): Boolean;
 begin
-  KillLux();
+  KillLux(False);
   Result := True;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
-  I: Integer;
-  LuxUp: Boolean;
 begin
   if CurStep = ssInstall then
   begin
-    { Safety net: kill again right before files are written, in case the app
-      auto-restarted between InitializeSetup and now. }
-    KillLux();
+    // Safety net: kill and unlock again right before files are written, in case
+    // the user delayed on wizard pages and something auto-started.
+    KillLux(True);
   end;
 
   if CurStep = ssPostInstall then
   begin
-    { Delete and recreate the LuxApp task ONLY if running in real user context (not SYSTEM).
-      If running as SYSTEM, creating a task pointing to systemprofile launches into Session 0
-      which breaks Flutter ANGLE/DirectX and crashes ucrtbase.dll. }
+    // Clean up any .old files created during file unlocking
+    CleanupOldBinaries(ExpandConstant('{app}'));
+    CleanupOldBinaries(ExpandConstant('{localappdata}') + '\Programs\lux');
+
+    // Delete and recreate the LuxApp task ONLY if running in real user context (not SYSTEM).
+    // If running as SYSTEM, creating a task pointing to systemprofile launches into Session 0
+    // which breaks Flutter ANGLE/DirectX and crashes ucrtbase.dll.
     if not IsSystemContext() then
     begin
-      Exec('schtasks.exe', '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Exec(ExpandConstant('{sys}\schtasks.exe'), '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       WriteLuxTaskXml();
-      Exec('schtasks.exe',
+      Exec(ExpandConstant('{sys}\schtasks.exe'),
         '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      { If XML import failed because schtasks requires domain/computer prefix for local account,
-        retry XML import with COMPUTERNAME\GetUserNameString(). }
       if ResultCode <> 0 then
       begin
         WriteLuxTaskXmlEx(True);
-        Exec('schtasks.exe',
+        Exec(ExpandConstant('{sys}\schtasks.exe'),
           '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       end;
-      { Fallback: if XML import failed (older Windows), use the plain command. }
       if ResultCode <> 0 then
-        Exec('schtasks.exe',
+        Exec(ExpandConstant('{sys}\schtasks.exe'),
           '/create /tn LuxApp /tr "\"' + ExpandConstant('{app}') +
           '\lux.exe\" --enable-software-rendering" /sc ONLOGON /rl HIGHEST /f',
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     end
     else
     begin
-      { In SYSTEM context, delete any stale LuxApp task registered as SYSTEM so it cannot
-        launch into Session 0 and crash. }
-      Exec('schtasks.exe', '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Exec(ExpandConstant('{sys}\schtasks.exe'), '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     end;
 
-    { Remove the legacy single-purpose tasks + launcher from the old scheme so
-      only LuxApp remains. Harmless if they were never present. }
-    Exec('schtasks.exe', '/delete /tn LuxCore /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec('schtasks.exe', '/delete /tn LuxInstall /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // Remove legacy single-purpose tasks
+    Exec(ExpandConstant('{sys}\schtasks.exe'), '/delete /tn LuxCore /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ExpandConstant('{sys}\schtasks.exe'), '/delete /tn LuxInstall /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     DeleteFile(ExpandConstant('{app}') + '\lux_core_launcher.ps1');
 
-    { Never relaunch GUI directly from elevated/Session 0 context or when running silently.
-      During silent in-app update, the detached updater script (lux_updater.bat)
-      relaunches Lux in the user's interactive desktop session.
-      Only if running as an interactive wizard (WizardSilent = False) and not SYSTEM,
-      trigger the scheduled task. }
+    // Never relaunch GUI directly from elevated/Session 0 context or when running silently.
+    // During silent in-app update, the detached updater script (lux_updater.bat)
+    // relaunches Lux in the user''s interactive desktop session.
+    // Only if running as an interactive wizard (WizardSilent = False) and not SYSTEM,
+    // trigger the scheduled task.
     if not WizardSilent() and not IsSystemContext() then
     begin
-      Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       Sleep(500);
-      Exec('schtasks.exe', '/run /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Exec(ExpandConstant('{sys}\schtasks.exe'), '/run /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    KillLux(False);
   end;
 end;
