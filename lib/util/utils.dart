@@ -31,12 +31,55 @@ Future<String> getHomeDir() async {
   final Version currentVersion = Version.parse(packageInfo.version);
   final suffix = kReleaseMode ? '' : '-dev';
   final dir = path.join(appDocumentsDir.path, '${currentVersion.major}.0$suffix');
-  if (suffix.isNotEmpty) {
-    try {
-      Directory(dir).createSync(recursive: true);
-    } catch (_) {}
+  try {
+    Directory(dir).createSync(recursive: true);
+  } catch (_) {}
+  if (Platform.isWindows) {
+    _migrateWindowsConfigDir(dir, suffix);
   }
   return dir;
+}
+
+void _migrateWindowsConfigDir(String canonicalDir, String suffix) {
+  try {
+    Directory(canonicalDir).createSync(recursive: true);
+    final appData = Platform.environment['APPDATA'] ?? '';
+    if (appData.isEmpty) return;
+    final legacyDir = path.join(appData, 'com.github.igoogolx.lux', '1.0$suffix');
+    final legacyDirObj = Directory(legacyDir);
+    if (!legacyDirObj.existsSync()) return;
+
+    final legacyCfg = File(path.join(legacyDir, 'config.json'));
+    final canonicalCfg = File(path.join(canonicalDir, 'config.json'));
+
+    if (legacyCfg.existsSync()) {
+      bool shouldMigrate = false;
+      if (!canonicalCfg.existsSync()) {
+        shouldMigrate = true;
+      } else {
+        final legacyMod = legacyCfg.lastModifiedSync();
+        final canonicalMod = canonicalCfg.lastModifiedSync();
+        if (legacyMod.isAfter(canonicalMod)) {
+          shouldMigrate = true;
+        }
+      }
+
+      if (shouldMigrate) {
+        if (canonicalCfg.existsSync()) {
+          try {
+            canonicalCfg.copySync('${canonicalCfg.path}.bak_pre_migration');
+          } catch (_) {}
+        }
+        legacyCfg.copySync(canonicalCfg.path);
+      }
+    }
+
+    final legacyPrefs = File(path.join(legacyDir, 'lux_prefs.json'));
+    final canonicalPrefs = File(path.join(canonicalDir, 'lux_prefs.json'));
+    if (legacyPrefs.existsSync() && !canonicalPrefs.existsSync()) {
+      legacyPrefs.copySync(canonicalPrefs.path);
+    }
+  } catch (_) {}
 }
 
 Future<Map<String, dynamic>> readJsonFile(String filePath) async {

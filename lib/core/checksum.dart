@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 // checksum-start
- const darwinAmd64Checksum = "eb77a95c5b981815ab87b254004c1f0d187bd0d0477135facf8e2e07b63cdd8c";
- const darwinArm64Checksum = "3439c7e0ee58ebabdf4df932ac239528b78982fdd46717ce3f6f5c4377e6df09";
+ const darwinAmd64Checksum = "a572137da0182315e11eef90da4d8772434d980b4461f7a6443a37906f7d2afc";
+ const darwinArm64Checksum = "abbea8ec9dbb6ab312d8c69ab07bd7b7dc31c69d8ac8d0ad7c791e97010fd681";
 // Windows: NO checksum validation. The Inno Setup installer verifies
 // integrity before installing. A Dart-level check causes "checksum mismatch"
 // crashes on every update because the installer cannot kill lux_core.exe

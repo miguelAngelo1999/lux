@@ -148,13 +148,13 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
 
     try {
       final proxyData = <String, dynamic>{
-        'name': _name,
-        'server': _server,
+        'name': _name.trim(),
+        'server': _server.trim(),
         'port': _port,
-        'username': _username,
+        'username': _username.trim(),
         'type': _type,
         'passwordMode': _passwordMode,
-        if (_pacUrl.isNotEmpty) 'pacUrl': _pacUrl,
+        if (_pacUrl.trim().isNotEmpty) 'pacUrl': _pacUrl.trim(),
       };
 
       // Only send the password when the user actually typed a new one. If they
@@ -351,7 +351,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         TextFormField(
                           initialValue: _name,
                           decoration: InputDecoration(labelText: tl(context, 'Name')),
-                          onSaved: (v) => _name = v ?? '',
+                          onSaved: (v) => _name = (v ?? '').trim(),
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
@@ -369,10 +369,11 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           // then the PAC supplies the upstream per connection.
                           validator: (v) {
                             if (_pacCtrl.text.trim().isNotEmpty) return null;
-                            return (v == null || v.isEmpty) ? 'Required' : null;
+                            final val = (v ?? '').trim();
+                            return val.isEmpty ? 'Required' : null;
                           },
                           onChanged: (_) => setState(() {}),
-                          onSaved: (v) => _server = v ?? '',
+                          onSaved: (v) => _server = (_serverCtrl.text.isNotEmpty ? _serverCtrl.text : (v ?? '')).trim(),
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
@@ -417,7 +418,7 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                         TextFormField(
                           initialValue: _username,
                           decoration: InputDecoration(labelText: tl(context, 'Username (optional)')),
-                          onSaved: (v) => _username = v ?? '',
+                          onSaved: (v) => _username = (v ?? '').trim(),
                         ),
                         const SizedBox(height: 12),
                         _buildPasswordField(),

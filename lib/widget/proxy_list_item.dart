@@ -7,7 +7,7 @@ import '../core/core_config.dart';
 import '../core/core_manager.dart';
 
 /// Result state of the per-proxy reachability test.
-enum TestState { untested, testing, reachable, unreachable, certError, notApplicable }
+enum TestState { untested, testing, reachable, unreachable, certError, authError, notApplicable }
 
 class ProxyListItem extends StatefulWidget {
   final ProxyItem item;
@@ -36,6 +36,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
   TestState _state = TestState.untested;
   int _latencyMs = 0;
   bool _pacReachable = false;
+  String _errorMessage = '';
 
   /// A PAC-only proxy has a PAC URL and no fixed server, so a latency test to a
   /// single upstream is meaningless — show "PAC — n/a" instead of a red fail.
@@ -50,20 +51,30 @@ class _ProxyListItemState extends State<ProxyListItem> {
     setState(() {
       _state = TestState.testing;
       _pacReachable = false;
+      _errorMessage = '';
     });
     final result = await widget.coreManager!.testProxyDelayDetailed(widget.item.id);
     if (!mounted) return;
     setState(() {
+      _errorMessage = result.error;
       if (result.delay == 0 && result.pacOnly) {
         _state = TestState.reachable;
         _latencyMs = 0;
         _pacReachable = true;
+        _errorMessage = '';
       } else if (result.delay >= 0) {
         _state = TestState.reachable;
         _latencyMs = result.delay;
         _pacReachable = false;
+        _errorMessage = '';
       } else if (result.certError) {
         _state = TestState.certError;
+        if (_errorMessage.isEmpty) _errorMessage = 'Certificate Untrusted';
+      } else if (result.error.contains('407') ||
+                 result.error.toLowerCase().contains('auth') ||
+                 result.error.toLowerCase().contains('denied') ||
+                 result.error.toLowerCase().contains('rejected')) {
+        _state = TestState.authError;
       } else {
         _state = TestState.unreachable;
       }
@@ -268,9 +279,13 @@ class _ProxyListItemState extends State<ProxyListItem> {
         fg = cs.error; bg = cs.error.withAlpha(28);
         icon = Icons.error_outline; text = tl(context, 'Unreachable');
         break;
+      case TestState.authError:
+        fg = const Color(0xFFE05638); bg = const Color(0x22E05638);
+        icon = Icons.lock_outline; text = tl(context, 'Invalid username or password');
+        break;
       case TestState.certError:
         fg = const Color(0xFFE0A31E); bg = const Color(0x22E0A31E);
-        icon = Icons.gpp_maybe_outlined; text = tl(context, 'Trust?');
+        icon = Icons.gpp_maybe_outlined; text = tl(context, 'Certificate Untrusted');
         tappable = true;
         break;
       case TestState.notApplicable:
@@ -278,28 +293,39 @@ class _ProxyListItemState extends State<ProxyListItem> {
         icon = Icons.info_outline; text = tl(context, 'PAC — n/a');
         break;
     }
-    final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
+
+    final String tooltipMessage;
+    if (_state == TestState.certError) {
+      tooltipMessage = _errorMessage.isNotEmpty
+          ? 'Certificate Untrusted: $_errorMessage. Click to install.'
+          : tl(context, 'Reachable, but its certificate is not trusted. Click to fix.');
+    } else if (_errorMessage.isNotEmpty) {
+      tooltipMessage = _errorMessage;
+    } else {
+      tooltipMessage = text;
+    }
+
+    final chip = Tooltip(
+      message: tooltipMessage,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: fg),
+          const SizedBox(width: 4),
+          Text(text, style: TextStyle(fontSize: 10.5, color: fg)),
+        ]),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 12, color: fg),
-        const SizedBox(width: 4),
-        Text(text, style: TextStyle(fontSize: 10.5, color: fg)),
-      ]),
     );
     if (!tappable) return chip;
     // certError → tapping opens the Trust-Certificate flow deliberately.
-    return Tooltip(
-      message: tl(context,
-          'Reachable, but its certificate is not trusted. Click to fix.'),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: _promptCertTrust,
-        child: chip,
-      ),
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: _promptCertTrust,
+      child: chip,
     );
   }
 
@@ -399,6 +425,26 @@ class _ProxyListItemState extends State<ProxyListItem> {
                           ),
                         ],
                       ]),
+                      if (_errorMessage.isNotEmpty &&
+                          (_state == TestState.unreachable ||
+                           _state == TestState.authError ||
+                           _state == TestState.certError)) ...[
+                        const SizedBox(height: 2),
+                        Tooltip(
+                          message: _errorMessage,
+                          child: Text(
+                            _errorMessage,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              color: _state == TestState.certError
+                                  ? const Color(0xFFE0A31E)
+                                  : cs.error,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

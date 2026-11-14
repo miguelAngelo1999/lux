@@ -244,6 +244,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       data['name'] = (baseName == null || baseName.isEmpty)
           ? 'copy'
           : '$baseName (copy)';
+      if (data['server'] is String) data['server'] = (data['server'] as String).trim();
+      if (data['username'] is String) data['username'] = (data['username'] as String).trim();
       await widget.coreManager.addProxy(data);
       await refreshData();
       if (!mounted) return;
@@ -910,11 +912,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         // Step 6: Add the proxy
         for (final p in result.proxies) {
           await widget.coreManager.addProxy({
-            'name': confirmedName,
+            'name': confirmedName.trim(),
             'type': 'http',
-            'server': p.host,
+            'server': p.host.trim(),
             'port': int.tryParse(p.port) ?? 8080,
-            if (creds.username.isNotEmpty) 'username': creds.username,
+            if (creds.username.trim().isNotEmpty) 'username': creds.username.trim(),
             if (creds.password.isNotEmpty) 'password': creds.password,
             if (creds.passwordMode.isNotEmpty) 'passwordMode': creds.passwordMode,
             if (creds.passwordMode == 'timed' && creds.ttlMinutes > 0)

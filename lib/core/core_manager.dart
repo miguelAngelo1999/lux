@@ -466,18 +466,29 @@ class CoreManager {
     }
   }
 
-  /// Test proxy latency with cert error detection.
-  /// Returns (delay, certError, pacOnly). delay=-1 on failure.
-  Future<({int delay, bool certError, bool pacOnly})> testProxyDelayDetailed(String id) async {
+  /// Test proxy latency with cert error and detailed error message detection.
+  /// Returns (delay, certError, pacOnly, error). delay=-1 on failure.
+  Future<({int delay, bool certError, bool pacOnly, String error})> testProxyDelayDetailed(String id) async {
     try {
       final res = await dio.get('$baseHttpUrl/proxies/delay/$id',
           options: Options(receiveTimeout: const Duration(seconds: 10)));
       final delay = res.data['delay'] as int? ?? -1;
       final certError = res.data['certError'] as bool? ?? false;
       final pacOnly = res.data['pacOnly'] as bool? ?? false;
-      return (delay: delay, certError: certError, pacOnly: pacOnly);
-    } catch (_) {
-      return (delay: -1, certError: false, pacOnly: false);
+      final error = res.data['error'] as String? ?? '';
+      return (delay: delay, certError: certError, pacOnly: pacOnly, error: error);
+    } on DioException catch (e) {
+      if (e.response?.data is Map) {
+        final data = e.response!.data as Map;
+        final delay = data['delay'] as int? ?? -1;
+        final certError = data['certError'] as bool? ?? false;
+        final pacOnly = data['pacOnly'] as bool? ?? false;
+        final error = (data['error'] ?? data['message'] ?? e.message ?? '') as String;
+        return (delay: delay, certError: certError, pacOnly: pacOnly, error: error);
+      }
+      return (delay: -1, certError: false, pacOnly: false, error: e.message ?? e.toString());
+    } catch (e) {
+      return (delay: -1, certError: false, pacOnly: false, error: e.toString());
     }
   }
 
@@ -658,7 +669,11 @@ class CoreManager {
 
   /// Creates a new proxy and returns its ID.
   Future<String> addProxy(Map<String, dynamic> proxy) async {
-    final res = await dio.put('$baseHttpUrl/proxies', data: proxy);
+    final sanitized = Map<String, dynamic>.from(proxy);
+    if (sanitized['server'] is String) sanitized['server'] = (sanitized['server'] as String).trim();
+    if (sanitized['username'] is String) sanitized['username'] = (sanitized['username'] as String).trim();
+    if (sanitized['name'] is String) sanitized['name'] = (sanitized['name'] as String).trim();
+    final res = await dio.put('$baseHttpUrl/proxies', data: sanitized);
     return res.data['id'] as String;
   }
 
@@ -736,7 +751,11 @@ class CoreManager {
 
   /// Updates an existing proxy.
   Future<void> updateProxy(String id, Map<String, dynamic> proxy) async {
-    await dio.post('$baseHttpUrl/proxies/$id', data: proxy);
+    final sanitized = Map<String, dynamic>.from(proxy);
+    if (sanitized['server'] is String) sanitized['server'] = (sanitized['server'] as String).trim();
+    if (sanitized['username'] is String) sanitized['username'] = (sanitized['username'] as String).trim();
+    if (sanitized['name'] is String) sanitized['name'] = (sanitized['name'] as String).trim();
+    await dio.post('$baseHttpUrl/proxies/$id', data: sanitized);
   }
 
   /// Alias for [saveSetting] for consistency with Go API naming.

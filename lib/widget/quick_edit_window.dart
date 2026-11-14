@@ -82,7 +82,7 @@ class _QuickEditWindowState extends State<QuickEditWindow> {
       final detail = await widget.coreManager.getProxyDetail(_selectedId);
       if (detail == null) throw Exception('Proxy not found');
       final updated = Map<String, dynamic>.from(detail.raw);
-      updated['username'] = _username;
+      updated['username'] = _username.trim();
       updated['password'] = _password;
       await widget.coreManager.updateProxy(_selectedId, updated);
       // Select the edited proxy as active and turn Lux on so saving the
