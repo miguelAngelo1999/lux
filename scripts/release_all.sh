@@ -195,6 +195,7 @@ echo "==> Version: $CURRENT → $VERSION"
 # ── Step 2: Bump pubspec ───────────────────────────────────────────────────
 sed -i '' "s/^version: .*/version: ${VERSION}+1/" pubspec.yaml
 echo "==> pubspec bumped to $VERSION+1"
+python3 "$REPO/render_iss.py" "$VERSION"
 
 # ── Step 3: Build macOS ────────────────────────────────────────────────────
 echo "==> Building macOS..."
