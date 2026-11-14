@@ -1,17 +1,17 @@
 {
-  "version": "1.50.103",
+  "version": "1.50.104",
   "channel": "beta",
-  "notes": "build: auto-render dist-setup.iss during release",
+  "notes": "fix(proxy): trim proxy fields, surface delay error details, and reconcile Windows home directory",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "0ab882b201b9ca7b1361d0482270c0ebb7e0442b05150756e0dbf572a40d7670",
-    "size": 42648373,
-    "version": "1.50.103"
+    "sha256": "5b892ef4a411ec3724d7cff1ae763a1fb936494742dc3059f454039b3e55ddf6",
+    "size": 45599100,
+    "version": "1.50.104"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "ed8e1bff46f0c64ca1ade500440c5d09d3aa66c3dccc89062739e4a0919cbbce",
-    "size": 32619800,
-    "version": "1.50.103"
+    "sha256": "a65758013e14def510ee5f3838349034dfc62f5420265cd822d6013ec1e095f8",
+    "size": 34469402,
+    "version": "1.50.104"
   }
 }
