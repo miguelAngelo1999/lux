@@ -557,7 +557,7 @@ if [ -n "$OAUTH_TEMP_LINK" ] && [ -e "$OAUTH_TEMP_LINK" ]; then
   OAUTH_TEMP_LINK=""
 fi
 
-git add pubspec.yaml lib/core/checksum.dart lib/core/core_manager.dart scripts/release_all.sh
+git add pubspec.yaml lib/core/checksum.dart lib/core/core_manager.dart scripts/release_all.sh dist-setup.iss
 if [ "$CHANNEL" == "beta" ]; then
   git add appcast-beta.json 2>/dev/null || true
   git commit -m "release (beta): $VERSION"
