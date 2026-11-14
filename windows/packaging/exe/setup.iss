@@ -18,10 +18,10 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableFinishedPage=yes
-; Do NOT set AppMutex — it makes Inno show a blocking "please close Lux" prompt
+; Do NOT set AppMutex - it makes Inno show a blocking "please close Lux" prompt
 ; and refuses to continue while Lux is running, BEFORE our [Code] kill logic can
 ; run. Instead we kill Lux in InitializeSetup() (runs first, before any prompt).
-; Do NOT use CloseApplications=force — it shows a "please close" dialog for
+; Do NOT use CloseApplications=force - it shows a "please close" dialog for
 ; lux_core.exe because Inno cannot kill a SYSTEM-owned process. The [Code]
 ; section handles killing via schtasks /end (the only way to stop SYSTEM procs).
 
@@ -75,6 +75,16 @@ Type: filesandordirs; Name: "{localappdata}\..\Roaming\com.github.igoogolx\lux"
 
 [Code]
 
+function IsSystemContext(): Boolean;
+var
+  User: string;
+  AppData: string;
+begin
+  User := Uppercase(GetUserNameString());
+  AppData := Lowercase(ExpandConstant('{localappdata}'));
+  Result := (User = 'SYSTEM') or (Pos('SYSTEMPROFILE', AppData) > 0);
+end;
+
 (* Writes the LuxApp scheduled-task XML to {tmp}\luxapp_task.xml.
   - LogonTrigger with no <Delay> -> runs immediately at logon
   - <Priority>4</Priority> -> higher than the default 7 so Lux starts first
@@ -86,14 +96,14 @@ var
   ExePath: string;
   UserAccount: string;
 begin
-  ExePath := ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe';
+  ExePath := ExpandConstant('{app}') + '\lux.exe';
   UserAccount := GetUserNameString();
   if WithComputerName and (Pos('\', UserAccount) = 0) then
     UserAccount := GetComputerNameString() + '\' + UserAccount;
   Xml :=
-    '<?xml version="1.0" encoding="UTF-16"?>' + #13#10 +
+    '<?xml version="1.0" encoding="UTF-8"?>' + #13#10 +
     '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
-    '  <RegistrationInfo><Description>Lux proxy — start first at logon</Description></RegistrationInfo>' + #13#10 +
+    '  <RegistrationInfo><Description>Lux proxy - start first at logon</Description></RegistrationInfo>' + #13#10 +
     '  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>' + #13#10 +
     '  <Principals><Principal id="Author"><UserId>' + UserAccount + '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
     '  <Settings>' + #13#10 +
@@ -118,11 +128,11 @@ var
   Xml: string;
   ExePath: string;
 begin
-  ExePath := ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe';
+  ExePath := ExpandConstant('{app}') + '\lux.exe';
   Xml :=
-    '<?xml version="1.0" encoding="UTF-16"?>' + #13#10 +
+    '<?xml version="1.0" encoding="UTF-8"?>' + #13#10 +
     '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
-    '  <RegistrationInfo><Description>Lux proxy — start first at logon</Description></RegistrationInfo>' + #13#10 +
+    '  <RegistrationInfo><Description>Lux proxy - start first at logon</Description></RegistrationInfo>' + #13#10 +
     '  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>' + #13#10 +
     '  <Principals><Principal id="Author"><UserId>' + GetUserNameString() + '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>' + #13#10 +
     '  <Settings>' + #13#10 +
@@ -149,11 +159,11 @@ end;
 procedure KillLux();
 var ResultCode: Integer;
 begin
-  { Step 1: Stop the scheduled tasks — this terminates lux_core.exe. End BOTH
+  { Step 1: Stop the scheduled tasks - this terminates lux_core.exe. End BOTH
     the current LuxApp task AND the legacy LuxCore/LuxInstall tasks: a machine
     upgrading from the old scheme still has them, and a stale legacy task is
     what re-launched Lux in the wrong context after an update (the 1.50.87/88
-    "stays off" reports — dual-scheme coexistence). }
+    "stays off" reports - dual-scheme coexistence). }
   Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('schtasks.exe', '/end /tn LuxCore', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('schtasks.exe', '/end /tn LuxInstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -172,7 +182,7 @@ begin
 end;
 
 { Runs BEFORE the wizard shows anything. Killing Lux here (rather than at
-  ssInstall) means there is no running instance to block the install — this is
+  ssInstall) means there is no running instance to block the install - this is
   why we removed AppMutex, which would otherwise prompt "please close Lux". }
 function InitializeSetup(): Boolean;
 begin
@@ -195,87 +205,55 @@ begin
 
   if CurStep = ssPostInstall then
   begin
-    { Delete and recreate the LuxApp task pointing at the newly installed exe.
-      Created from XML so we can set a high priority and NO start delay — Lux
-      must come up first at logon because other services depend on the proxy.
-
-      Priority 4 = interactive/high (default is 7; 0=highest, 10=lowest). The
-      /create command line cannot set priority, so we import task XML. }
-    Exec('schtasks.exe', '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    WriteLuxTaskXml();
-    Exec('schtasks.exe',
-      '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    { If XML import failed because schtasks requires domain/computer prefix for local account,
-      retry XML import with COMPUTERNAME\GetUserNameString(). }
-    if ResultCode <> 0 then
+    { Delete and recreate the LuxApp task ONLY if running in real user context (not SYSTEM).
+      If running as SYSTEM, creating a task pointing to systemprofile launches into Session 0
+      which breaks Flutter ANGLE/DirectX and crashes ucrtbase.dll. }
+    if not IsSystemContext() then
     begin
-      WriteLuxTaskXmlEx(True);
+      Exec('schtasks.exe', '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      WriteLuxTaskXml();
       Exec('schtasks.exe',
         '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      { If XML import failed because schtasks requires domain/computer prefix for local account,
+        retry XML import with COMPUTERNAME\GetUserNameString(). }
+      if ResultCode <> 0 then
+      begin
+        WriteLuxTaskXmlEx(True);
+        Exec('schtasks.exe',
+          '/create /tn LuxApp /xml "' + ExpandConstant('{tmp}') + '\luxapp_task.xml" /f',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      end;
+      { Fallback: if XML import failed (older Windows), use the plain command. }
+      if ResultCode <> 0 then
+        Exec('schtasks.exe',
+          '/create /tn LuxApp /tr "\"' + ExpandConstant('{app}') +
+          '\lux.exe\" --enable-software-rendering" /sc ONLOGON /rl HIGHEST /f',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end
+    else
+    begin
+      { In SYSTEM context, delete any stale LuxApp task registered as SYSTEM so it cannot
+        launch into Session 0 and crash. }
+      Exec('schtasks.exe', '/delete /tn LuxApp /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     end;
-    { Fallback: if XML import failed (older Windows), use the plain command.
-      schtasks /tr wraps the whole "program + arguments" as one value. The exe
-      path (which contains spaces) must be quoted with schtasks' escaped quotes
-      (\") and the launch argument follows the closing \" — all inside the outer
-      /tr "...". The previous form put the argument outside the escaped quotes,
-      which schtasks rejected ('--enable-software-rendering' unexpected). }
-    if ResultCode <> 0 then
-      Exec('schtasks.exe',
-        '/create /tn LuxApp /tr "\"' + ExpandConstant('{localappdata}') +
-        '\Programs\lux\lux.exe\" --enable-software-rendering" /sc ONLOGON /rl HIGHEST /f',
-        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     { Remove the legacy single-purpose tasks + launcher from the old scheme so
-      only LuxApp remains. Leaving LuxCore/LuxInstall behind means two schemes
-      fire at logon (duplicate instances / wrong-context launch) — the root of
-      the post-update "stays off" reports. Harmless if they were never present. }
+      only LuxApp remains. Harmless if they were never present. }
     Exec('schtasks.exe', '/delete /tn LuxCore /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('schtasks.exe', '/delete /tn LuxInstall /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    DeleteFile(ExpandConstant('{localappdata}') + '\Programs\lux\lux_core_launcher.ps1');
+    DeleteFile(ExpandConstant('{app}') + '\lux_core_launcher.ps1');
 
-    { Relaunch Lux after install.
-      ssPostInstall runs INSIDE the elevated (RunAs) installer, so a direct
-      Exec(lux.exe) launches Lux with the installer's elevated token instead of
-      the logged-in user's normal session token. Leading hypothesis for the
-      "stays off after update" report (2026-11-01): when UAC elevated to a
-      different admin identity, that launch lands in a session the real user
-      never sees. Fix: run the LuxApp scheduled task — its principal is
-      InteractiveToken, so Task Scheduler (SYSTEM) starts Lux in the ACTIVE
-      interactive user session regardless of who calls /run (the Windows
-      analogue of the macOS per-user LaunchAgent relaunch).
-
-      Gotcha guarded here: the task XML sets MultipleInstancesPolicy=IgnoreNew,
-      so if a lingering task instance is still "running", /run returns exit 0
-      but starts NOTHING. So (a) /end first to clear any stale instance, and
-      (b) do NOT trust the /run exit code — poll tasklist for a live lux.exe and
-      only then consider the job done. }
-    Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(500);
-    Exec('schtasks.exe', '/run /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    { Verify Lux actually came up (exit code 0 from /run only means "accepted").
-      Poll up to ~8s for a live lux.exe; cmd `tasklist | find` sets errorlevel 0
-      when found, which Exec returns in ResultCode. }
-    LuxUp := False;
-    for I := 1 to 8 do
+    { Never relaunch GUI directly from elevated/Session 0 context or when running silently.
+      During silent in-app update, the detached updater script (lux_updater.bat)
+      relaunches Lux in the user's interactive desktop session.
+      Only if running as an interactive wizard (WizardSilent = False) and not SYSTEM,
+      trigger the scheduled task. }
+    if not WizardSilent() and not IsSystemContext() then
     begin
-      Sleep(1000);
-      Exec(ExpandConstant('{cmd}'),
-        '/c tasklist /FI "IMAGENAME eq lux.exe" | find /I "lux.exe"',
-        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      if ResultCode = 0 then
-      begin
-        LuxUp := True;
-        break;
-      end;
+      Exec('schtasks.exe', '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(500);
+      Exec('schtasks.exe', '/run /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     end;
-    { Only if the task genuinely did not bring Lux up, fall back to a direct
-      launch. (Last resort — this path inherits the elevated token, the very
-      thing we are avoiding — but an elevated-but-running Lux still beats an app
-      that stays completely off.) }
-    if not LuxUp then
-      Exec(ExpandConstant('{localappdata}') + '\Programs\lux\lux.exe',
-        '--enable-software-rendering', '', SW_HIDE, ewNoWait, ResultCode);
   end;
 end;
