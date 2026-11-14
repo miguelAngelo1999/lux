@@ -1,17 +1,17 @@
 {
-  "version": "1.50.102",
+  "version": "1.50.103",
   "channel": "beta",
-  "notes": "fix(windows): prevent Session 0 launch, clean lock files, and fix installer encoding",
+  "notes": "build: auto-render dist-setup.iss during release",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "25a4b315d63a0370fc907c4ab0b3ddc4a69936452a7f178e67cc06164cf3f223",
-    "size": 42648793,
-    "version": "1.50.102"
+    "sha256": "0ab882b201b9ca7b1361d0482270c0ebb7e0442b05150756e0dbf572a40d7670",
+    "size": 42648373,
+    "version": "1.50.103"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "a4877a00d72cde977532d9f1ee4aff814c18df75afa2ee4c170fdc83d30340ca",
-    "size": 32614862,
-    "version": "1.50.102"
+    "sha256": "ed8e1bff46f0c64ca1ade500440c5d09d3aa66c3dccc89062739e4a0919cbbce",
+    "size": 32619800,
+    "version": "1.50.103"
   }
 }
