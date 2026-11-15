@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lux/widget/pac_rules_dialog.dart';
 import 'package:lux/widget/proxy_item_action_menu.dart';
 import 'package:lux/util/t_text.dart';
 
@@ -82,6 +83,19 @@ class _ProxyListItemState extends State<ProxyListItem> {
     });
     // Note: unlike before, we do NOT auto-open the cert dialog. The certError
     // state shows a "Trust?" chip the user taps deliberately (_promptCertTrust).
+  }
+
+  void _openPacRules() {
+    if (widget.coreManager == null) return;
+    PacRulesDialog.show(
+      context: context,
+      coreManager: widget.coreManager!,
+      proxyId: widget.item.id,
+      proxyName: widget.item.name.isNotEmpty
+          ? widget.item.name
+          : '${widget.item.server ?? ''}:${widget.item.port ?? ''}',
+      initialPacUrl: widget.item.pacUrl,
+    );
   }
 
   Future<void> _promptCertTrust() async {
@@ -253,6 +267,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
         fg = Colors.green; bg = Colors.green.withAlpha(28);
         icon = Icons.check_circle_outline;
         text = _pacReachable ? 'PAC OK' : '$_latencyMs ms';
+        if (_pacReachable) tappable = true;
         break;
       case TestState.unreachable:
         fg = cs.error; bg = cs.error.withAlpha(28);
@@ -270,6 +285,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
       case TestState.notApplicable:
         fg = cs.outline; bg = Colors.transparent;
         icon = Icons.info_outline; text = tl(context, 'PAC — n/a');
+        tappable = true;
         break;
     }
 
@@ -278,6 +294,8 @@ class _ProxyListItemState extends State<ProxyListItem> {
       tooltipMessage = _errorMessage.isNotEmpty
           ? 'Certificate Untrusted: $_errorMessage. Click to install.'
           : tl(context, 'Reachable, but its certificate is not trusted. Click to fix.');
+    } else if (_pacReachable || _state == TestState.notApplicable) {
+      tooltipMessage = tl(context, 'Active PAC proxy. Click to view rules.');
     } else if (_errorMessage.isNotEmpty) {
       tooltipMessage = _errorMessage;
     } else {
@@ -300,10 +318,15 @@ class _ProxyListItemState extends State<ProxyListItem> {
       ),
     );
     if (!tappable) return chip;
-    // certError → tapping opens the Trust-Certificate flow deliberately.
     return InkWell(
       borderRadius: BorderRadius.circular(6),
-      onTap: _promptCertTrust,
+      onTap: () {
+        if (_state == TestState.certError) {
+          _promptCertTrust();
+        } else if (_pacReachable || _state == TestState.notApplicable) {
+          _openPacRules();
+        }
+      },
       child: chip,
     );
   }
@@ -452,6 +475,32 @@ class _ProxyListItemState extends State<ProxyListItem> {
                     ),
                     const SizedBox(width: 6),
                   ],
+                  // Explicit, labeled PAC Rules button
+                  if ((item.pacUrl ?? '').isNotEmpty) ...[
+                    SizedBox(
+                      height: 26,
+                      child: OutlinedButton(
+                        onPressed: _openPacRules,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: const Size(0, 26),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          side: BorderSide(color: cs.outline.withAlpha(100)),
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.alt_route, size: 12),
+                            const SizedBox(width: 4),
+                            Text(tl(context, 'PAC'),
+                                style: const TextStyle(fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   // Explicit, labeled Test button (Option B).
                   SizedBox(
                     height: 26,
@@ -477,6 +526,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
                   id: item.id,
                   type: item.type,
                   passwordLocked: item.passwordLocked,
+                  hasPac: (item.pacUrl ?? '').isNotEmpty,
                 ),
               ]),
             ),

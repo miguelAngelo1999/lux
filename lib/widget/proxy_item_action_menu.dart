@@ -11,6 +11,7 @@ class ProxyItemActionMenu extends StatefulWidget {
   final String id;
   final String type;
   final bool passwordLocked;
+  final bool hasPac;
 
   const ProxyItemActionMenu(
       {super.key,
@@ -18,7 +19,8 @@ class ProxyItemActionMenu extends StatefulWidget {
       required this.onClick,
       required this.id,
       required this.type,
-      this.passwordLocked = false});
+      this.passwordLocked = false,
+      this.hasPac = false});
 
   @override
   State<ProxyItemActionMenu> createState() => _ProxyItemActionMenuState();
@@ -70,6 +72,23 @@ class _ProxyItemActionMenuState extends State<ProxyItemActionMenu> {
                 Text(tl(context, 'Duplicate'))
               ],
             )),
+        if (widget.hasPac)
+          MenuItemButton(
+              onPressed: () {
+                widget.onClick(ProxyItemAction.viewPacRules);
+              },
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.alt_route,
+                    size: 16,
+                  ),
+                  const SizedBox(
+                    width: 4,
+                  ),
+                  Text(tl(context, 'Active PAC Rules')),
+                ],
+              )),
         MenuItemButton(
             onPressed: isDeleteDisabled
                 ? null

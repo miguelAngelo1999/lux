@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:lux/widget/pac_rules_dialog.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/core/core_config.dart';
@@ -414,6 +415,30 @@ class _ProxyEditDialogState extends State<ProxyEditDialog> {
                           onChanged: (_) => setState(() {}),
                           onSaved: (v) => _pacUrl = v?.trim() ?? '',
                         ),
+                        if (isEditing && (_pacCtrl.text.trim().isNotEmpty || _pacUrl.trim().isNotEmpty)) ...[
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              icon: const Icon(Icons.alt_route, size: 14),
+                              label: Text(tl(context, 'View PAC Rules & Test'),
+                                  style: const TextStyle(fontSize: 11.5)),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () {
+                                PacRulesDialog.show(
+                                  context: context,
+                                  coreManager: widget.coreManager,
+                                  proxyId: widget.initialValue!.id,
+                                  proxyName: _name.isNotEmpty ? _name : _server,
+                                  initialPacUrl: _pacCtrl.text.trim().isNotEmpty ? _pacCtrl.text.trim() : _pacUrl.trim(),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         TextFormField(
                           initialValue: _username,

@@ -633,37 +633,68 @@ class PACRuleItem {
   final String ruleType; // DOMAIN, DOMAIN-SUFFIX, IP-CIDR
   final String payload;  // e.g. "example.com", "10.0.0.0/8"
   final String policy;   // DIRECT or PROXY
+  final String? function; // dnsDomainIs, shExpMatch, isInNet
 
   const PACRuleItem({
     required this.ruleType,
     required this.payload,
     required this.policy,
+    this.function,
   });
 
   factory PACRuleItem.fromJson(Map<String, dynamic> json) => PACRuleItem(
         ruleType: json['ruleType'] as String? ?? '',
         payload:  json['payload']  as String? ?? '',
         policy:   json['policy']   as String? ?? '',
+        function: json['function'] as String?,
       );
 }
 
 /// Result of fetching and parsing a proxy's PAC URL.
 class PACRulesResult {
   final String pacUrl;
+  final String rawScript;
+  final String upstream;
   final List<PACRuleItem> rules;
   final String? error;
 
   const PACRulesResult({
     required this.pacUrl,
+    this.rawScript = '',
+    this.upstream = '',
     required this.rules,
     this.error,
   });
 
   factory PACRulesResult.fromJson(Map<String, dynamic> json) => PACRulesResult(
         pacUrl: json['pacUrl'] as String? ?? '',
+        rawScript: json['rawScript'] as String? ?? json['script'] as String? ?? '',
+        upstream: json['upstream'] as String? ?? '',
         rules: ((json['rules'] as List?) ?? [])
             .map((e) => PACRuleItem.fromJson(e as Map<String, dynamic>))
             .toList(),
+        error: json['error'] as String?,
+      );
+}
+
+/// Result of evaluating a URL against a PAC script.
+class PACTestResult {
+  final String directive;
+  final String action; // DIRECT or PROXY
+  final String upstream;
+  final String? error;
+
+  const PACTestResult({
+    required this.directive,
+    required this.action,
+    required this.upstream,
+    this.error,
+  });
+
+  factory PACTestResult.fromJson(Map<String, dynamic> json) => PACTestResult(
+        directive: json['directive'] as String? ?? '',
+        action: json['action'] as String? ?? 'DIRECT',
+        upstream: json['upstream'] as String? ?? '',
         error: json['error'] as String?,
       );
 }

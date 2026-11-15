@@ -81,4 +81,5 @@ enum ProxyItemAction {
   qrCode,
   peekPassword,
   lockPassword,
+  viewPacRules,
 }

@@ -723,6 +723,14 @@ class CoreManager {
     return PACRulesResult.fromJson(res.data as Map<String, dynamic>);
   }
 
+  /// Evaluates a test URL or domain against the proxy's PAC script.
+  Future<PACTestResult> testPACUrl(String proxyId, String url) async {
+    final res = await dio.post('$baseHttpUrl/proxies/$proxyId/pac-test',
+        data: {'url': url},
+        options: Options(receiveTimeout: const Duration(seconds: 15)));
+    return PACTestResult.fromJson(res.data as Map<String, dynamic>);
+  }
+
   /// Checks for SSL interception through a proxy by doing a TLS handshake.
   Future<CertCheckResult> checkCert({
     required String server,

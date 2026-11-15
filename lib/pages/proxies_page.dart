@@ -7,6 +7,7 @@ import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/widget/password_peek_dialog.dart';
+import 'package:lux/widget/pac_rules_dialog.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/widget/proxy_list_card.dart';
 import 'package:provider/provider.dart';
@@ -279,7 +280,21 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         _handlePeekPassword(item);
       case ProxyItemAction.lockPassword:
         _handleLockPassword(item);
+      case ProxyItemAction.viewPacRules:
+        _handleViewPacRules(item);
     }
+  }
+
+  void _handleViewPacRules(ProxyItem item) async {
+    await PacRulesDialog.show(
+      context: context,
+      coreManager: widget.coreManager,
+      proxyId: item.id,
+      proxyName: item.name.isNotEmpty
+          ? item.name
+          : '${item.server ?? ''}:${item.port ?? ''}',
+      initialPacUrl: item.pacUrl,
+    );
   }
 
   void _handlePeekPassword(ProxyItem item) async {

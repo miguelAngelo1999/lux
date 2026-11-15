@@ -563,7 +563,7 @@ if [ -n "$OAUTH_TEMP_LINK" ] && [ -e "$OAUTH_TEMP_LINK" ]; then
   OAUTH_TEMP_LINK=""
 fi
 
-git add pubspec.yaml lib/core/checksum.dart lib/core/core_manager.dart lib/home.dart lib/pages/proxies_page.dart lib/widget/proxy_list_item.dart lib/util/cert_trust.dart test/cert_trust_test.dart scripts/release-page/index.html scripts/release_all.sh dist-setup.iss windows/packaging/exe/setup.iss lib/util/updater.dart lib/util/utils.dart render_iss.py
+git add pubspec.yaml lib/core/checksum.dart lib/core/core_config.dart lib/core/core_manager.dart lib/home.dart lib/const/const.dart lib/pages/proxies_page.dart lib/widget/proxy_list_item.dart lib/widget/proxy_item_action_menu.dart lib/widget/proxy_edit_dialog.dart lib/widget/pac_rules_dialog.dart lib/util/cert_trust.dart test/cert_trust_test.dart test/pac_rules_gui_test.dart assets/translations.json scripts/release-page/index.html scripts/release_all.sh dist-setup.iss windows/packaging/exe/setup.iss lib/util/updater.dart lib/util/utils.dart render_iss.py
 if [ "$CHANNEL" == "beta" ]; then
   git add appcast-beta.json 2>/dev/null || true
   git commit -m "release (beta): $VERSION"
