@@ -116,6 +116,26 @@ void exitApp() async {
   exit(0);
 }
 
+String extractErrorMessage(dynamic e) {
+  if (e is DioException) {
+    final data = e.response?.data;
+    if (data is Map) {
+      if (data['message'] != null && data['message'].toString().trim().isNotEmpty) {
+        return data['message'].toString().trim();
+      }
+      if (data['error'] != null && data['error'].toString().trim().isNotEmpty) {
+        return data['error'].toString().trim();
+      }
+    } else if (data is String && data.trim().isNotEmpty) {
+      return data.trim();
+    }
+    if (e.message != null && e.message!.trim().isNotEmpty) {
+      return e.message!.trim();
+    }
+  }
+  return e.toString();
+}
+
 Future<void> setAutoConnect(CoreManager? coreManager) async {
   var isAutoConnect = await readAutoConnect();
   if (isAutoConnect) {
@@ -124,11 +144,8 @@ Future<void> setAutoConnect(CoreManager? coreManager) async {
       await coreManager?.start();
       notifier.show(tr().connectOnOpenMsg);
     } catch (e) {
-      String? msg = e.toString();
-      if (e is DioException) {
-        msg = e.message;
-      }
-      notifier.show(tr().connectOnOpenErrMsg(msg.toString()));
+      final msg = extractErrorMessage(e);
+      notifier.show(tr().connectOnOpenErrMsg(msg));
     }
   }
 }

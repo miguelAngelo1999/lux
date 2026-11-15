@@ -351,12 +351,11 @@ begin
     Exec(ExpandConstant('{sys}\schtasks.exe'), '/delete /tn LuxInstall /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     DeleteFile(ExpandConstant('{app}') + '\lux_core_launcher.ps1');
 
-    // Never relaunch GUI directly from elevated/Session 0 context or when running silently.
-    // During silent in-app update, the detached updater script (lux_updater.bat)
-    // relaunches Lux in the user''s interactive desktop session.
-    // Only if running as an interactive wizard (WizardSilent = False) and not SYSTEM,
-    // trigger the scheduled task.
-    if not WizardSilent() and not IsSystemContext() then
+    // Relaunch Lux in the interactive user session via the LuxApp scheduled task.
+    // Trigger the task as long as not running in SYSTEM context (which would launch into Session 0),
+    // ensuring both interactive and silent updates (including updates from legacy versions
+    // that lack relaunch in their .bat) auto-start Lux cleanly.
+    if not IsSystemContext() then
     begin
       Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       Sleep(500);

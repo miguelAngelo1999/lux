@@ -802,11 +802,17 @@ Future<void> downloadAndInstall(
 /// Flow: Lux writes script → launches detached → Lux exits →
 ///       script waits → stops lux_core → runs installer elevated (UAC) →
 ///       installer's ssPostInstall does schtasks /run to relaunch Lux.
-String _buildWindowsUpdaterScript(String installerPath) {
+String _buildWindowsUpdaterScript(String installerPath, {String? installDir}) {
   // Escape backslashes for the batch file
   final escaped = installerPath.replaceAll('/', '\\');
   // Single-quoted for PowerShell inside batch (avoids double-quote nesting issues)
   final psEscaped = escaped.replaceAll("'", "''");
+
+  // Determine current installation directory from running process if not provided
+  final targetDir = installDir ??
+      File(Platform.resolvedExecutable).parent.path.replaceAll('/', '\\');
+  final psTargetDir = targetDir.replaceAll("'", "''");
+
   return '@echo off\r\n'
       'echo Lux updater started at %date% %time% > "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
@@ -855,7 +861,7 @@ String _buildWindowsUpdaterScript(String installerPath) {
       'echo processes killed >> "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
       ':: Step 6: Rename locked binaries out of the way if still held by OS handle\r\n'
-      'set "_bin_dir=%LOCALAPPDATA%\\Programs\\lux"\r\n'
+      'set "_bin_dir=$targetDir"\r\n'
       'set "_core_bin=%_bin_dir%\\data\\flutter_assets\\assets\\bin\\lux_core.exe"\r\n'
       'if exist "%_core_bin%" (\r\n'
       '    del /f /q "%_core_bin%.old" >nul 2>&1\r\n'
@@ -870,7 +876,7 @@ String _buildWindowsUpdaterScript(String installerPath) {
       'echo Running installer: $escaped >> "%TEMP%\\lux_updater.log"\r\n'
       'powershell -NonInteractive -WindowStyle Hidden -Command '
       '"\$p = Start-Process -FilePath \'$psEscaped\' '
-      '-ArgumentList \'/VERYSILENT\',\'/SUPPRESSMSGBOXES\',\'/NORESTART\',\\"/LOG=\$env:TEMP\\lux_setup.log\\" '
+      '-ArgumentList \'/VERYSILENT\',\'/SUPPRESSMSGBOXES\',\'/NORESTART\',\\"/DIR=$psTargetDir\\",\\"/LOG=\$env:TEMP\\lux_setup.log\\" '
       '-Verb RunAs -Wait -PassThru; exit \$p.ExitCode"\r\n'
       'echo Installer exited with code %errorlevel% >> "%TEMP%\\lux_updater.log"\r\n'
       '\r\n'
@@ -880,7 +886,7 @@ String _buildWindowsUpdaterScript(String installerPath) {
       '\r\n'
       ':: Step 9: Launch Lux explicitly in the user session\r\n'
       'echo Launching Lux in user session >> "%TEMP%\\lux_updater.log"\r\n'
-      'start "" "%LOCALAPPDATA%\\Programs\\lux\\lux.exe" --enable-software-rendering\r\n'
+      'start "" "$targetDir\\lux.exe" --enable-software-rendering\r\n'
       '\r\n'
       ':: Clean up the VBS shim and this script\r\n'
       'del "%~dp0lux_updater.vbs" >nul 2>&1\r\n'
