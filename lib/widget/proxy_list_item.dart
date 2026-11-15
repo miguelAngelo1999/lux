@@ -5,6 +5,7 @@ import 'package:lux/util/t_text.dart';
 import '../const/const.dart';
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
+import '../util/cert_trust.dart';
 
 /// Result state of the per-proxy reachability test.
 enum TestState { untested, testing, reachable, unreachable, certError, authError, notApplicable }
@@ -142,6 +143,15 @@ class _ProxyListItemState extends State<ProxyListItem> {
       if (!mounted) return;
 
       if (cert.intercepted && cert.pem.isNotEmpty) {
+        final thumbprint = extractCertThumbprintSha1(cert.pem);
+        if (thumbprint != null && await isCertInSystemStore(thumbprint: thumbprint)) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: TText('Certificate is already trusted. Proxy is ready.')),
+          );
+          _testDelay();
+          return;
+        }
         await _installCert(cert);
       } else if (cert.error.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -163,19 +173,6 @@ class _ProxyListItemState extends State<ProxyListItem> {
 
   Future<void> _installCert(CertCheckResult cert) async {
     try {
-      // lux_core runs as root — use its install-cert endpoint directly
-      await widget.coreManager!.installCert(cert.pem);
-
-      if (!mounted) return;
-
-      // Brief pause then re-check to confirm the cert is now trusted.
-      // This stops the infinite re-prompt loop: if install worked the check
-      // will return intercepted=false and we show success; if still untrusted
-      // (e.g. macOS cached trust state needs restart) we tell the user that
-      // instead of showing the install button again.
-      await Future.delayed(const Duration(milliseconds: 800));
-      if (!mounted) return;
-
       final item = widget.item;
       var server = item.server ?? '';
       var port = item.port ?? 0;
@@ -186,51 +183,33 @@ class _ProxyListItemState extends State<ProxyListItem> {
           port = up.port;
         }
       }
-      final detail = await widget.coreManager!.getProxyDetail(item.id);
-      final username = detail?.raw['username'] as String? ?? '';
-      final password = detail?.password ?? item.password ?? '';
 
-      CertCheckResult? recheck;
-      if (server.isNotEmpty && port != 0) {
-        try {
-          recheck = await widget.coreManager!.checkCert(
-            server: server,
-            port: port,
-            username: username,
-            password: password,
-          );
-        } catch (_) {}
-      }
+      // Execute proven CLI installer script method
+      await trustProxyCertificate(proxyHost: server, pem: cert.pem);
+
+      // Notify lux_core in-memory extra roots
+      try {
+        await widget.coreManager!.installCert(cert.pem);
+      } catch (_) {}
 
       if (!mounted) return;
 
-      if (recheck == null || !recheck.intercepted) {
-        // All good — cert is now trusted by the system
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: TText('Certificate installed and trusted. Proxy is ready.')),
-        );
-        // Re-test delay to update the chip
-        _testDelay();
-      } else {
-        // Still showing as untrusted right after install — the install likely
-        // failed silently (e.g. wrong cert extracted, permission issue).
-        // System trust is immediate; no restart is needed or helpful.
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            duration: Duration(seconds: 6),
-            content: TText(
-              'Certificate installed but proxy still reports untrusted. '
-              'Try running the proxy test again — if it persists, the cert may not have installed correctly.',
-            ),
-          ),
-        );
-      }
+      // On success: Show confirmation toast and immediately re-test proxy connection
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: TText('Certificate installed and trusted. Proxy is ready.')),
+      );
+
+      _testDelay();
+    } on CertTrustException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Certificate installation failed: $e')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Certificate installation failed: $e')),
+      );
     }
   }
 

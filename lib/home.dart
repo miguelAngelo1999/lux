@@ -32,6 +32,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/core_config.dart';
+import 'util/cert_trust.dart';
 
 class Home extends StatefulWidget {
   final ClientMode clientMode;
@@ -175,9 +176,11 @@ class _HomeState extends State<Home>
         messenger.showSnackBar(SnackBar(
           duration: Duration(seconds: ok ? 4 : 6),
           content: TText(ok
-              ? 'Certificate installed and trusted.'
+              ? 'Certificate installed and trusted. Proxy is ready.'
               : 'Certificate installed but still reported untrusted. Try the proxy test on the Proxies page.'),
         ));
+      } on CertTrustException catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(e.message)));
       } catch (e) {
         messenger.showSnackBar(
             SnackBar(content: Text('Certificate installation failed: $e')));

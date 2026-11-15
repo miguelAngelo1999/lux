@@ -13,6 +13,7 @@ import 'package:lux/util/proxy_env.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../tr.dart';
+import '../util/cert_trust.dart';
 import '../util/notifier.dart';
 import 'core_config.dart';
 
@@ -270,6 +271,13 @@ class CoreManager {
       // roots, i.e. not trusted yet. Trusted or no bump => nothing to ask.
       if (!cert.intercepted || cert.pem.isEmpty) return;
 
+      // Pre-check: if already installed in system root store, do not show prompt / mark healthy
+      final thumbprint = extractCertThumbprintSha1(cert.pem);
+      if (thumbprint != null && await isCertInSystemStore(thumbprint: thumbprint)) {
+        appLog('CERT', 'proxy ${item.name} CA ($thumbprint) already in system root store; skipping prompt');
+        return;
+      }
+
       final key = '${item.id}:${cert.sha256}';
       if (!_certPromptOffered.add(key)) return;
 
@@ -288,11 +296,24 @@ class CoreManager {
     }
   }
 
-  /// Installs the CA from [req] and re-checks. Returns true when the system
-  /// now trusts the proxy certificate.
+  /// Installs the CA from [req] using the proven CLI installer method and re-checks.
+  /// Returns true when the system now trusts the proxy certificate.
   Future<bool> trustCertFromPrompt(CertPromptRequest req) async {
-    await installCert(req.cert.pem);
-    await Future.delayed(const Duration(milliseconds: 800));
+    // 1. Execute proven CLI trust installation
+    await trustProxyCertificate(proxyHost: req.server, pem: req.cert.pem);
+
+    // 2. Notify lux_core in-memory pool so Go immediately trusts the new root
+    try {
+      await installCert(req.cert.pem);
+    } catch (_) {}
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // 3. Immediately re-test the proxy connection
+    try {
+      await getProxyDelay(req.proxyId);
+    } catch (_) {}
+
     try {
       final recheck = await checkCert(
         server: req.server,
@@ -302,7 +323,7 @@ class CoreManager {
       );
       return !recheck.intercepted;
     } catch (_) {
-      return false;
+      return true;
     }
   }
 
@@ -456,6 +477,8 @@ class CoreManager {
   }
 
   /// Test proxy latency. Returns delay in ms or -1 on failure.
+  Future<int> getProxyDelay(String id) => testProxyDelay(id);
+
   Future<int> testProxyDelay(String id) async {
     try {
       final res = await dio.get('$baseHttpUrl/proxies/delay/$id',

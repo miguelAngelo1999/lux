@@ -1,17 +1,17 @@
 {
-  "version": "1.50.105",
+  "version": "1.50.106",
   "channel": "beta",
-  "notes": "chore: update universal macOS checksums and release script",
+  "notes": "release (beta): 1.50.105",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "a58039aecec5b4ffdc17d46610311cc7aa5996317399e0b545fb0fbe001a5937",
-    "size": 42664680,
-    "version": "1.50.105"
+    "sha256": "098aeba99541cdbb863321ce85a3cc354ddb6e9efeb5918639decf453fc80f63",
+    "size": 42685013,
+    "version": "1.50.106"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "91356d95406fab746b50a2d402d1ec8bdc40dd4feb4c16a5ae154a64a21dfd87",
-    "size": 32624503,
-    "version": "1.50.105"
+    "sha256": "d473a7f20bbf17bdabe58c09a08befe5d4aba97b53ba1cfb89271653f3f28e6e",
+    "size": 32645824,
+    "version": "1.50.106"
   }
 }

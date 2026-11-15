@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -16,6 +15,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
+import '../util/cert_trust.dart';
 
 class ProxiesPage extends StatefulWidget {
   final CoreManager coreManager;
@@ -490,6 +490,16 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         return;
       }
 
+      // Pre-check: if already installed in system root store, do not show prompt / mark healthy
+      if (result.pem.isNotEmpty) {
+        final thumbprint = extractCertThumbprintSha1(result.pem);
+        if (thumbprint != null && await isCertInSystemStore(thumbprint: thumbprint)) {
+          return;
+        }
+      }
+
+      if (!mounted) return;
+
       // Show the intercepting CA and offer to trust it
       await showDialog<void>(
         context: context,
@@ -520,7 +530,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 const SizedBox(height: 12),
                 const TText(
                   'To trust this certificate, it needs to be added to your '
-                  'system keychain. This requires your Mac password.',
+                  'system root certificate store.',
                   style: TextStyle(fontSize: 11),
                 ),
               ],
@@ -534,7 +544,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
             FilledButton.icon(
               onPressed: () async {
                 Navigator.pop(ctx);
-                await _installCert(result);
+                await _installCert(result, proxyHost: proxy.host);
               },
               icon: const Icon(Icons.verified_user, size: 16),
               label: const TText('Trust Certificate'),
@@ -564,64 +574,32 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     );
   }
 
-  Future<void> _installCert(CertCheckResult cert) async {
-    // Use lux_core's install-cert endpoint — it runs elevated and avoids the
-    // osascript admin-password prompt.  If lux_core isn't running yet, fall
-    // back to the osascript path.
-    bool installed = false;
+  Future<void> _installCert(CertCheckResult cert, {String? proxyHost}) async {
     try {
-      await widget.coreManager.installCert(cert.pem);
-      installed = true;
-    } catch (_) {
-      // lux_core unavailable — try osascript fallback
-    }
-
-    if (!installed) {
+      final host = proxyHost ?? cert.subject;
+      await trustProxyCertificate(proxyHost: host, pem: cert.pem);
       try {
-        final tmpDir = await Directory.systemTemp.createTemp('lux_cert');
-        final certFile = File('${tmpDir.path}/corporate_ca.pem');
-        await certFile.writeAsString(cert.pem);
-        final script = 'do shell script '
-            '"security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '
-            '${certFile.path}" '
-            'with prompt "Lux needs to install the corporate CA certificate" '
-            'with administrator privileges';
-        final r = await Process.run('/usr/bin/osascript', ['-e', script]);
-        installed = r.exitCode == 0;
-        try { await certFile.delete(); await tmpDir.delete(); } catch (_) {}
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Certificate install failed: $e')),
-          );
-        }
-        return;
-      }
-    }
+        await widget.coreManager.installCert(cert.pem);
+      } catch (_) {}
 
-    if (!installed) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: TText('Certificate install cancelled')),
-        );
-      }
-      return;
-    }
+      if (!mounted) return;
 
-    if (!mounted) return;
-
-    // Re-check after a short delay to confirm trust — stops the infinite loop.
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        duration: Duration(seconds: 5),
-        content: TText(
-          'Certificate installed. Test the proxy — if still failing, the cert may not have installed correctly.',
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: TText('Certificate installed and trusted. Proxy is ready.'),
         ),
-      ),
-    );
+      );
+    } on CertTrustException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Certificate install failed: $e')),
+      );
+    }
   }
 
   Future<_ProxyCredentials?> _promptCredentials(DetectedProxy proxy) async {

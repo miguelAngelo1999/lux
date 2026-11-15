@@ -361,7 +361,7 @@ echo "==> Windows core hash: $WIN_HASH"
 python3 -c "
 import re
 with open('$REPO/lib/core/checksum.dart') as f: c = f.read()
-c = re.sub(r'windowsAmd64Checksum = \"[a-f0-9]+\"', 'windowsAmd64Checksum = \"$WIN_HASH\"', c)
+c = re.sub(r'windowsAmd64Checksum = \"[a-f0-9]*\"', 'windowsAmd64Checksum = \"$WIN_HASH\"', c)
 with open('$REPO/lib/core/checksum.dart', 'w') as f: f.write(c)
 "
 win "copy \"${REPO_WIN_SHARE}\\lib\\core\\checksum.dart\" \"C:\\lux-build\\lux\\lib\\core\\checksum.dart\" && echo CHECKSUM_SYNCED"
@@ -563,7 +563,7 @@ if [ -n "$OAUTH_TEMP_LINK" ] && [ -e "$OAUTH_TEMP_LINK" ]; then
   OAUTH_TEMP_LINK=""
 fi
 
-git add pubspec.yaml lib/core/checksum.dart lib/core/core_manager.dart scripts/release_all.sh dist-setup.iss windows/packaging/exe/setup.iss lib/util/updater.dart lib/util/utils.dart render_iss.py
+git add pubspec.yaml lib/core/checksum.dart lib/core/core_manager.dart lib/home.dart lib/pages/proxies_page.dart lib/widget/proxy_list_item.dart lib/util/cert_trust.dart test/cert_trust_test.dart scripts/release-page/index.html scripts/release_all.sh dist-setup.iss windows/packaging/exe/setup.iss lib/util/updater.dart lib/util/utils.dart render_iss.py
 if [ "$CHANNEL" == "beta" ]; then
   git add appcast-beta.json 2>/dev/null || true
   git commit -m "release (beta): $VERSION"
