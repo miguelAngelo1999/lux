@@ -1,17 +1,17 @@
 {
-  "version": "1.50.104",
+  "version": "1.50.105",
   "channel": "beta",
-  "notes": "fix(proxy): trim proxy fields, surface delay error details, and reconcile Windows home directory",
+  "notes": "chore: update universal macOS checksums and release script",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "5b892ef4a411ec3724d7cff1ae763a1fb936494742dc3059f454039b3e55ddf6",
-    "size": 45599100,
-    "version": "1.50.104"
+    "sha256": "a58039aecec5b4ffdc17d46610311cc7aa5996317399e0b545fb0fbe001a5937",
+    "size": 42664680,
+    "version": "1.50.105"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "a65758013e14def510ee5f3838349034dfc62f5420265cd822d6013ec1e095f8",
-    "size": 34469402,
-    "version": "1.50.104"
+    "sha256": "91356d95406fab746b50a2d402d1ec8bdc40dd4feb4c16a5ae154a64a21dfd87",
+    "size": 32624503,
+    "version": "1.50.105"
   }
 }
