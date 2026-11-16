@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -44,7 +45,9 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Setting? _setting;
   bool _isLoading = true;
+  bool _isReconnecting = false;
   bool _isSaving = false;
+  Timer? _recoveryTimer;
   List<String> _interfaces = [];
 
   int _selected = 0;
@@ -87,12 +90,36 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   @override
   void dispose() {
+    _recoveryTimer?.cancel();
     windowManager.removeListener(this);
     _searchCtrl.dispose();
     super.dispose();
   }
 
+  bool _isConnectionError(dynamic e) {
+    if (e is DioException) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        return true;
+      }
+      final errStr = e.error?.toString() ?? '';
+      if (errStr.contains('SocketException') ||
+          errStr.contains('Connection refused') ||
+          errStr.contains('errno = 61')) {
+        return true;
+      }
+    }
+    if (e is SocketException) return true;
+    final s = e.toString();
+    return s.contains('Connection refused') ||
+        s.contains('SocketException') ||
+        s.contains('connection error');
+  }
+
   Future<void> _load() async {
+    _recoveryTimer?.cancel();
     try {
       final setting = await widget.coreManager.getSetting();
       final ifaces = await widget.coreManager.getSettingInterfaces();
@@ -120,12 +147,45 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         _appVersion = rawVersion;
         _pendingUpdateVersion = pending ?? '';
         _isLoading = false;
+        _isReconnecting = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      _notify('Could not load settings: $e', isError: true);
+      if (_isConnectionError(e)) {
+        setState(() {
+          _isLoading = false;
+          _isReconnecting = true;
+        });
+        _attemptCoreRecoveryAndReload();
+      } else {
+        setState(() => _isLoading = false);
+        _notify('Could not load settings: $e', isError: true);
+      }
     }
+  }
+
+  void _attemptCoreRecoveryAndReload([int attempt = 0]) {
+    if (!mounted || attempt >= 5) return;
+    _recoveryTimer?.cancel();
+    _recoveryTimer = Timer(const Duration(seconds: 1), () async {
+      if (!mounted) return;
+      try {
+        await widget.coreManager.ensureCoreRunning();
+        final setting = await widget.coreManager.getSetting();
+        final ifaces = await widget.coreManager.getSettingInterfaces();
+        if (!mounted) return;
+        setState(() {
+          _setting = setting;
+          _interfaces = ifaces;
+          _isLoading = false;
+          _isReconnecting = false;
+        });
+      } catch (_) {
+        if (mounted) {
+          _attemptCoreRecoveryAndReload(attempt + 1);
+        }
+      }
+    });
   }
 
   /// True if [candidate] is a strictly newer semver than [current]. Used to
@@ -146,10 +206,15 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       await widget.coreManager.saveSetting(updated);
       if (mounted) setState(() => _setting = updated);
     } catch (e) {
-      _notify('Could not save: $e', isError: true);
-      // Re-read so the UI shows what is actually stored rather than the value we
-      // failed to write.
-      await _load();
+      if (_isConnectionError(e)) {
+        _notify(tl(context, 'Reconnecting to Lux core...'), isError: false);
+        _attemptCoreRecoveryAndReload();
+      } else {
+        _notify('Could not save: $e', isError: true);
+        // Re-read so the UI shows what is actually stored rather than the value we
+        // failed to write.
+        await _load();
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -1188,13 +1253,79 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading || _setting == null) {
+    if (_setting == null) {
+      if (_isReconnecting) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                ),
+                const SizedBox(height: 20),
+                const TText(
+                  'Reconnecting to Lux core...',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                TText(
+                  'The core process is starting up or reconnecting.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    setState(() {
+                      _isLoading = true;
+                    });
+                    _load();
+                  },
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const TText('Retry'),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       return const Center(child: CircularProgressIndicator());
     }
     final searching = _query.isNotEmpty;
 
     return Column(
       children: [
+        if (_isReconnecting)
+          Container(
+            color: Colors.amber.withOpacity(0.15),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: TText(
+                    'Reconnecting to Lux core...',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _load,
+                  child: const TText('Retry'),
+                ),
+              ],
+            ),
+          ),
         _searchBar(),
         const Divider(height: 1),
         Expanded(

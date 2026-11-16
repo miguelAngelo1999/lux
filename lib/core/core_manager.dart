@@ -612,9 +612,38 @@ class CoreManager {
     }
   }
 
-  Future<void> restart() async {
+  /// Fully restarts the lux_core OS daemon, waits for it to respond to /ping,
+  /// and fires onReady() to reconnect WebSockets and app state.
+  Future<void> restartCore() async {
     coreProcess?.exit();
     await coreProcess?.run();
+    await ping();
+    onReady();
+  }
+
+  Future<void> restart() async {
+    await restartCore();
+  }
+
+  Future<bool> isAlive() async {
+    try {
+      final res = await dio.get('$baseHttpUrl/ping',
+          options: Options(
+            sendTimeout: const Duration(seconds: 2),
+            receiveTimeout: const Duration(seconds: 2),
+          ));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> ensureCoreRunning() async {
+    final alive = await isAlive();
+    if (!alive) {
+      appLog('CORE', 'lux_core unreachable — restarting process');
+      await restartCore();
+    }
   }
 
   Future<void> run() async {

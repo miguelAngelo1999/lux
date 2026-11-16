@@ -215,7 +215,9 @@
       "Hide to background": "Ocultar em segundo plano",
       "Download failed": "Falha no download",
       "Preparing…": "Preparando…",
-      "Verifying download…": "Verificando download…"
+      "Verifying download…": "Verificando download…",
+      "Reconnecting to Lux core...": "Reconectando ao núcleo do Lux...",
+      "The core process is starting up or reconnecting.": "O processo do núcleo está iniciando ou reconectando."
     },
     "es": {
       "Proxies": "Proxies",
@@ -431,7 +433,9 @@
       "Hide to background": "Ocultar en segundo plano",
       "Download failed": "Error al descargar",
       "Preparing…": "Preparando…",
-      "Verifying download…": "Verificando descarga…"
+      "Verifying download…": "Verificando descarga…",
+      "Reconnecting to Lux core...": "Reconectando al núcleo de Lux...",
+      "The core process is starting up or reconnecting.": "El proceso del núcleo se está iniciando o reconectando."
     },
     "it": {
       "Proxies": "Proxy",
@@ -647,7 +651,9 @@
       "Hide to background": "Nascondi in background",
       "Download failed": "Download non riuscito",
       "Preparing…": "Preparando…",
-      "Verifying download…": "Verifica download…"
+      "Verifying download…": "Verifica download…",
+      "Reconnecting to Lux core...": "Riconnessione al core di Lux...",
+      "The core process is starting up or reconnecting.": "Il processo del core si sta avviando o riconnettendo."
     },
     "fil": {
       "Proxies": "Mga Proxy",
@@ -863,7 +869,9 @@
       "Hide to background": "Itago sa background",
       "Download failed": "Nabigo ang pag-download",
       "Preparing…": "Naghahanda…",
-      "Verifying download…": "Bini-verify ang download…"
+      "Verifying download…": "Bini-verify ang download…",
+      "Reconnecting to Lux core...": "Muling kumokonekta sa Lux core...",
+      "The core process is starting up or reconnecting.": "Nagsisimula o muling kumokonekta ang core process."
     },
     "zh": {
       "Proxies": "代理",
@@ -1079,7 +1087,9 @@
       "Hide to background": "后台运行",
       "Download failed": "下载失败",
       "Preparing…": "准备中…",
-      "Verifying download…": "正在校验下载…"
+      "Verifying download…": "正在校验下载…",
+      "Reconnecting to Lux core...": "正在重新连接到 Lux 核心...",
+      "The core process is starting up or reconnecting.": "核心进程正在启动或重新连接。"
     }
   }
 }

@@ -461,6 +461,10 @@ class _HomeState extends State<Home>
           onDone: () {
             appLog('EVENT', 'event channel closed');
             eventChannel = null;
+            if (mounted && Provider.of<AppStateModel>(context, listen: false).userWantsRunning) {
+              appLog('EVENT', 'core event channel closed while running — triggering watchdog recovery');
+              _watchdog();
+            }
           },
           cancelOnError: true,
         );
@@ -519,43 +523,71 @@ class _HomeState extends State<Home>
     if (coreManager == null) return;
     final appState = Provider.of<AppStateModel>(context, listen: false);
     if (!appState.userWantsRunning) return;
+
+    bool coreProcessAlive = true;
+    bool isStarted = false;
     try {
-      final isStarted = await coreManager!.getIsStarted();
-      if (isStarted) {
-        // Healthy — clear the failure streak.
-        _watchdogRestartFails = 0;
-        return;
-      }
-
-      // Core is down but the user wants it running. Attempt a restart, but cap
-      // consecutive failures so a core that cannot stay up (bad config, auth
-      // rejected, TUN setup failing) does not loop forever every 30s. The
-      // 2026-10-20/26 crash-loop was exactly this: endless "core stopped —
-      // restarting" with no ceiling.
-      if (_watchdogRestartFails >= _maxWatchdogRestarts) {
-        // Give up: stop trying, surface it, and let the user re-enable.
-        appLog('WATCHDOG',
-            'core failed to stay up after $_maxWatchdogRestarts restarts — giving up');
-        appState.userWantsRunning = false;
-        _watchdogRestartFails = 0;
-        if (mounted) {
-          notifier.show(tl(context,
-              'Lux could not stay connected. Check your proxy and credentials, then reconnect.'));
-        }
-        return;
-      }
-
-      _watchdogRestartFails++;
-      appLog('WATCHDOG',
-          'core stopped unexpectedly — restarting (attempt $_watchdogRestartFails/$_maxWatchdogRestarts)');
-      await coreManager!.start();
-      // Confirm the restart actually took. If it did, the next tick clears the
-      // counter; if start() threw, we fall to catch and the counter stands.
+      isStarted = await coreManager!.getIsStarted();
     } catch (e) {
-      // start()/getIsStarted() failed — count it so we eventually give up
-      // instead of silently retrying forever.
-      _watchdogRestartFails++;
-      appLog('WATCHDOG', 'restart attempt failed: $e');
+      // Connection refused, timeout, or socket error indicates the daemon is down
+      coreProcessAlive = false;
+      appLog('WATCHDOG', 'core unreachable ($e) — process appears down');
+    }
+
+    if (coreProcessAlive && isStarted) {
+      // Healthy — clear the failure streak.
+      _watchdogRestartFails = 0;
+      return;
+    }
+
+    // Core or proxy is down but the user wants it running. Attempt a restart, but cap
+    // consecutive failures so a core that cannot stay up (bad config, auth
+    // rejected, TUN setup failing) does not loop forever every 30s. The
+    // 2026-10-20/26 crash-loop was exactly this: endless "core stopped —
+    // restarting" with no ceiling.
+    if (_watchdogRestartFails >= _maxWatchdogRestarts) {
+      // Give up: stop trying, surface it, and let the user re-enable.
+      appLog('WATCHDOG',
+          'core failed to stay up after $_maxWatchdogRestarts restarts — giving up');
+      appState.userWantsRunning = false;
+      _watchdogRestartFails = 0;
+      if (mounted) {
+        notifier.show(tl(context,
+            'Lux could not stay connected. Check your proxy and credentials, then reconnect.'));
+      }
+      return;
+    }
+
+    _watchdogRestartFails++;
+    appLog('WATCHDOG',
+        'core stopped unexpectedly (daemonDown=${!coreProcessAlive}) — restarting (attempt $_watchdogRestartFails/$_maxWatchdogRestarts)');
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        if (!coreProcessAlive) {
+          appLog('WATCHDOG', 'respawning lux_core process (retry $attempt/3)');
+          await coreManager!.restartCore();
+          coreProcessAlive = true;
+        }
+
+        await coreManager!.start();
+        final confirmed = await coreManager!.getIsStarted();
+        if (confirmed) {
+          appLog('WATCHDOG', 'core reconnected and proxy running on attempt $attempt');
+          _watchdogRestartFails = 0;
+          if (mounted) {
+            final state = Provider.of<AppStateModel>(context, listen: false);
+            state.updateIsStarted(true);
+            _refreshTray();
+          }
+          return;
+        }
+      } catch (err) {
+        appLog('WATCHDOG', 'restart attempt $attempt failed: $err');
+        if (attempt < 3) {
+          await Future.delayed(Duration(milliseconds: 500 * attempt));
+        }
+      }
     }
   }
 
