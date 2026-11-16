@@ -137,11 +137,24 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
       final resp2 = await req2.close().timeout(const Duration(seconds: 10));
       if (resp2.statusCode != 200) return null;
       final body2 = await resp2.transform(const SystemEncoding().decoder).join();
-      return _parseAppcast(body2, current);
+      final retryResult = _parseAppcast(body2, current);
+      if (retryResult != null && !updateStateNotifier.value.isDownloading) {
+        updateStateNotifier.value = UpdateState(
+          stage: retryResult.hasUpdate ? UpdateStage.available : UpdateStage.idle,
+          updateInfo: retryResult,
+        );
+      }
+      return retryResult;
     }
     client.close();
     appLog('UPDATE', 'appcast fetched status=${response.statusCode} body=${body.substring(0, body.length.clamp(0, 200))}');
     final result = _parseAppcast(body, current);
+    if (result != null && !updateStateNotifier.value.isDownloading) {
+      updateStateNotifier.value = UpdateState(
+        stage: result.hasUpdate ? UpdateStage.available : UpdateStage.idle,
+        updateInfo: result,
+      );
+    }
 
     // GDrive CDN sometimes serves a stale cached revision for ~30s after a new
     // upload, returning the previous version.  When the manual "Check" button
@@ -163,7 +176,14 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
       final body2 = await resp2.transform(const SystemEncoding().decoder).join();
       client2.close();
       appLog('UPDATE', 'retry appcast fetched status=${resp2.statusCode} body=${body2.substring(0, body2.length.clamp(0, 200))}');
-      return _parseAppcast(body2, current);
+      final retryResult = _parseAppcast(body2, current);
+      if (retryResult != null && !updateStateNotifier.value.isDownloading) {
+        updateStateNotifier.value = UpdateState(
+          stage: retryResult.hasUpdate ? UpdateStage.available : UpdateStage.idle,
+          updateInfo: retryResult,
+        );
+      }
+      return retryResult;
     }
 
     return result;
@@ -218,6 +238,41 @@ UpdateInfo? _parseAppcast(String body, String current) {
   }
 }
 
+enum UpdateStage {
+  idle,
+  checking,
+  available,
+  downloading,
+  verifying,
+  installing,
+  failed,
+}
+
+class UpdateState {
+  final UpdateStage stage;
+  final double? progress;
+  final String status;
+  final String? errorMessage;
+  final UpdateInfo? updateInfo;
+
+  const UpdateState({
+    this.stage = UpdateStage.idle,
+    this.progress,
+    this.status = '',
+    this.errorMessage,
+    this.updateInfo,
+  });
+
+  bool get isDownloading =>
+      stage == UpdateStage.downloading ||
+      stage == UpdateStage.verifying ||
+      stage == UpdateStage.installing;
+
+  bool get isFailed => stage == UpdateStage.failed;
+}
+
+final updateStateNotifier = ValueNotifier<UpdateState>(const UpdateState());
+
 /// Shows a non-blocking snackbar notification that a new version is available.
 /// Tapping "Update" starts the download progress in a second snackbar.
 /// Does NOT block the interface — users can keep using Lux while it downloads.
@@ -240,7 +295,7 @@ Future<bool> showUpdateDialog(BuildContext context, UpdateInfo info) async {
         label: updateLabel,
         onPressed: () {
           messenger.hideCurrentSnackBar();
-          _startInlineUpdate(context, info);
+          startUpdate(context, info, showDialog: true);
         },
       ),
     ),
@@ -248,10 +303,277 @@ Future<bool> showUpdateDialog(BuildContext context, UpdateInfo info) async {
   return false;
 }
 
+/// Opens a confirmation dialog offering the user to update now or later.
+Future<void> showUpdateConfirmDialog(BuildContext context, UpdateInfo info) async {
+  if (!context.mounted) return;
+  final lang = _getLang(context);
+  final updateTitle = _t(lang, 'Update available', 'Update available');
+  final updateNowLabel = _t(lang, 'Update Now', 'Update Now');
+  final laterLabel = _t(lang, 'Later', 'Later');
+
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.system_update_alt, color: Colors.orange, size: 22),
+          const SizedBox(width: 10),
+          Expanded(child: Text('$updateTitle: v${info.latestVersion}')),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${info.currentVersion}  →  ${info.latestVersion}',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          if (info.notes.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 180),
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.withAlpha(25),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.withAlpha(50)),
+              ),
+              child: SingleChildScrollView(
+                child: Text(info.notes, style: const TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text(laterLabel),
+        ),
+        FilledButton.icon(
+          icon: const Icon(Icons.download, size: 16),
+          label: Text(updateNowLabel),
+          style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+          onPressed: () {
+            Navigator.of(ctx).pop();
+            startUpdate(context, info, showDialog: true);
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+/// Opens a progress dialog showing active download / installation state.
+Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) async {
+  if (!context.mounted) return;
+  final lang = _getLang(context);
+  final hideLabel = _t(lang, 'Hide to background', 'Hide to background');
+  final retryLabel = _t(lang, 'Retry', 'Retry');
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return ValueListenableBuilder<UpdateState>(
+        valueListenable: updateStateNotifier,
+        builder: (context, state, _) {
+          final progress = state.progress;
+          final pct = progress != null ? (progress * 100).toInt() : null;
+          final isFailed = state.isFailed;
+          final statusText = state.status.isNotEmpty
+              ? state.status
+              : (pct != null ? 'Downloading… $pct%' : 'Updating…');
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  isFailed ? Icons.error_outline : Icons.downloading,
+                  color: isFailed ? Colors.red : Colors.orange,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Text('Lux ${info.latestVersion}')),
+              ],
+            ),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${info.currentVersion}  →  ${info.latestVersion}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  if (!isFailed) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (progress == null || progress < 0.02) ? null : progress,
+                        minHeight: 8,
+                        backgroundColor: Colors.grey.withAlpha(50),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            statusText,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (pct != null)
+                          Text(
+                            '$pct%',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withAlpha(25),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.red.withAlpha(60)),
+                      ),
+                      child: Text(
+                        state.errorMessage ?? state.status,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              if (isFailed) ...[
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Close'),
+                ),
+                FilledButton.icon(
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: Text(retryLabel),
+                  style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+                  onPressed: () {
+                    startUpdate(context, info, showDialog: false);
+                  },
+                ),
+              ] else ...[
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(hideLabel),
+                ),
+              ],
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+/// Begins downloading and installing the update, reporting state to [updateStateNotifier].
+Future<void> startUpdate(
+  BuildContext context,
+  UpdateInfo info, {
+  bool showDialog = false,
+}) async {
+  if (updateStateNotifier.value.isDownloading) {
+    if (showDialog && context.mounted) {
+      showUpdateProgressDialog(context, info);
+    }
+    return;
+  }
+
+  final lang = _getLang(context);
+  final preparingLabel = _t(lang, 'Preparing…', 'Preparing…');
+
+  updateStateNotifier.value = UpdateState(
+    stage: UpdateStage.downloading,
+    progress: 0.01,
+    status: preparingLabel,
+    updateInfo: info,
+  );
+
+  _startInlineUpdate(context, info);
+
+  if (showDialog && context.mounted) {
+    showUpdateProgressDialog(context, info);
+  }
+
+  try {
+    await downloadAndInstall(
+      context,
+      info,
+      onProgress: (p) {
+        final pct = (p * 100).toInt();
+        final downloadingLabel = _t(lang, 'Downloading update...', 'Downloading update...');
+        updateStateNotifier.value = UpdateState(
+          stage: UpdateStage.downloading,
+          progress: p,
+          status: '$downloadingLabel $pct%',
+          updateInfo: info,
+        );
+      },
+      onStatusChange: (s) {
+        UpdateStage stage = UpdateStage.downloading;
+        final sLower = s.toLowerCase();
+        if (sLower.contains('verif')) {
+          stage = UpdateStage.verifying;
+        } else if (sLower.contains('mount') ||
+            sLower.contains('install') ||
+            sLower.contains('updater')) {
+          stage = UpdateStage.installing;
+        }
+        updateStateNotifier.value = UpdateState(
+          stage: stage,
+          progress: updateStateNotifier.value.progress,
+          status: s,
+          updateInfo: info,
+        );
+      },
+    );
+
+    // downloadAndInstall only returns without process exit on failure
+    if (updateStateNotifier.value.isDownloading) {
+      updateStateNotifier.value = UpdateState(
+        stage: UpdateStage.failed,
+        status: _t(lang, 'Download failed', 'Download failed'),
+        errorMessage: 'Download or installation did not complete.',
+        updateInfo: info,
+      );
+    }
+  } catch (e) {
+    updateStateNotifier.value = UpdateState(
+      stage: UpdateStage.failed,
+      status: _t(lang, 'Download failed', 'Download failed'),
+      errorMessage: e.toString(),
+      updateInfo: info,
+    );
+  }
+}
+
 /// Starts the download and shows progress inside a persistent snackbar.
 void _startInlineUpdate(BuildContext context, UpdateInfo info) {
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
     SnackBar(
       content: _DownloadProgressBar(info: info),
       duration: const Duration(hours: 1),
@@ -266,77 +588,138 @@ String _getLang(BuildContext context) {
 
 String _t(String lang, String key, String fallback) {
   const strings = <String, Map<String, String>>{
-    'pt': {'Update': 'Atualizar', 'available': 'disponível', 'Later': 'Mais tarde', 'Download & Install': 'Baixar e instalar'},
-    'es': {'Update': 'Actualizar', 'available': 'disponible', 'Later': 'Más tarde', 'Download & Install': 'Descargar e instalar'},
-    'it': {'Update': 'Aggiorna', 'available': 'disponibile', 'Later': 'Più tardi', 'Download & Install': 'Scarica e installa'},
-    'fil': {'Update': 'I-update', 'available': 'available', 'Later': 'Mamaya', 'Download & Install': 'I-download at i-install'},
-    'zh': {'Update': '更新', 'available': '可用', 'Later': '稍后', 'Download & Install': '下载并安装'},
+    'pt': {
+      'Update': 'Atualizar',
+      'available': 'disponível',
+      'Update available': 'Atualização disponível',
+      'Updating...': 'Atualizando...',
+      'Update Now': 'Atualizar agora',
+      'Later': 'Mais tarde',
+      'Download & Install': 'Baixar e instalar',
+      'Hide to background': 'Ocultar em segundo plano',
+      'Downloading update...': 'Baixando atualização...',
+      'Installing...': 'Instalando...',
+      'Download failed': 'Falha no download',
+      'Preparing…': 'Preparando…',
+      'Retry': 'Tentar novamente',
+    },
+    'es': {
+      'Update': 'Actualizar',
+      'available': 'disponible',
+      'Update available': 'Actualización disponible',
+      'Updating...': 'Actualizando...',
+      'Update Now': 'Actualizar ahora',
+      'Later': 'Más tarde',
+      'Download & Install': 'Descargar e instalar',
+      'Hide to background': 'Ocultar em segundo plano',
+      'Downloading update...': 'Descargando actualización...',
+      'Installing...': 'Instalando...',
+      'Download failed': 'Error al descargar',
+      'Preparing…': 'Preparando…',
+      'Retry': 'Reintentar',
+    },
+    'it': {
+      'Update': 'Aggiorna',
+      'available': 'disponibile',
+      'Update available': 'Aggiornamento disponibile',
+      'Updating...': 'Aggiornamento in corso...',
+      'Update Now': 'Aggiorna ora',
+      'Later': 'Più tardi',
+      'Download & Install': 'Scarica e installa',
+      'Hide to background': 'Nascondi in background',
+      'Downloading update...': 'Download aggiornamento...',
+      'Installing...': 'Installazione...',
+      'Download failed': 'Download non riuscito',
+      'Preparing…': 'Preparando…',
+      'Retry': 'Riprova',
+    },
+    'fil': {
+      'Update': 'I-update',
+      'available': 'available',
+      'Update available': 'May available na update',
+      'Updating...': 'Nag-a-update...',
+      'Update Now': 'I-update Ngayon',
+      'Later': 'Mamaya',
+      'Download & Install': 'I-download at i-install',
+      'Hide to background': 'Itago sa background',
+      'Downloading update...': 'Dina-download ang update...',
+      'Installing...': 'Nag-i-install...',
+      'Download failed': 'Nabigo ang pag-download',
+      'Preparing…': 'Naghahanda…',
+      'Retry': 'Subukang muli',
+    },
+    'zh': {
+      'Update': '更新',
+      'available': '可用',
+      'Update available': '有新版本可用',
+      'Updating...': '正在更新...',
+      'Update Now': '立即更新',
+      'Later': '稍后',
+      'Download & Install': '下载并安装',
+      'Hide to background': '后台运行',
+      'Downloading update...': '正在下载更新...',
+      'Installing...': '正在安装...',
+      'Download failed': '下载失败',
+      'Preparing…': '准备中…',
+      'Retry': '重试',
+    },
   };
   return strings[lang]?[key] ?? fallback;
 }
 
-class _DownloadProgressBar extends StatefulWidget {
+class _DownloadProgressBar extends StatelessWidget {
   final UpdateInfo info;
   const _DownloadProgressBar({required this.info});
-  @override
-  State<_DownloadProgressBar> createState() => _DownloadProgressBarState();
-}
-
-class _DownloadProgressBarState extends State<_DownloadProgressBar> {
-  double? _progress;
-  String _status = '';
-  bool _failed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _run();
-  }
-
-  Future<void> _run() async {
-    setState(() { _status = 'Preparing…'; _progress = 0.01; _failed = false; });
-    await downloadAndInstall(
-      context,
-      widget.info,
-      onProgress:     (p) { if (mounted) setState(() => _progress = p); },
-      onStatusChange: (s) { if (mounted) setState(() => _status = s); },
-    );
-    // Only returns on failure — success calls exit(0)
-    if (mounted) setState(() { _failed = true; _status = 'Download failed.'; });
-  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _failed ? _status : 'Updating to ${widget.info.latestVersion}…',
-                style: const TextStyle(fontSize: 13),
-              ),
-              if (!_failed && _progress != null) ...[
-                const SizedBox(height: 6),
-                LinearProgressIndicator(value: (_progress ?? 0) < 0.02 ? null : _progress),
-                if (_status.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(_status, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+    return ValueListenableBuilder<UpdateState>(
+      valueListenable: updateStateNotifier,
+      builder: (context, state, _) {
+        final failed = state.isFailed;
+        final progress = state.progress;
+        final status = state.status;
+        final pct = progress != null ? (progress * 100).toInt() : null;
+        final lang = _getLang(context);
+        final retryLabel = _t(lang, 'Retry', 'Retry');
+
+        return Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    failed
+                        ? (state.errorMessage ?? status)
+                        : 'Lux ${info.latestVersion}: ${status.isNotEmpty ? status : (pct != null ? "$pct%" : _t(lang, "Updating...", "Updating..."))}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  if (!failed && progress != null) ...[
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(
+                      value: (progress < 0.02) ? null : progress,
+                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
+                    ),
+                    if (status.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(status, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                    ],
+                  ],
                 ],
-              ],
+              ),
+            ),
+            if (failed) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => startUpdate(context, info, showDialog: false),
+                child: Text(retryLabel, style: const TextStyle(color: Colors.orange)),
+              ),
             ],
-          ),
-        ),
-        if (_failed) ...[
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: _run,
-            child: const Text('Retry', style: TextStyle(color: Colors.orange)),
-          ),
-        ],
-      ],
+          ],
+        );
+      },
     );
   }
 }
@@ -738,6 +1121,7 @@ Future<void> downloadAndInstall(
       await writeLastUpdateCheckAt();
       exit(0);
     } else if (Platform.isWindows) {
+      onStatusChange?.call('Installing…');
       // Same pattern as macOS: write a standalone updater script, launch it
       // detached so it outlives this process, then exit lux.
       // The script waits for lux to fully die, then runs the installer.

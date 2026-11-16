@@ -10,7 +10,15 @@ import 'package:lux/core/core_manager.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/util/telemetry.dart' as telem;
-import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
+import 'package:lux/util/updater.dart'
+    show
+        checkForUpdate,
+        showUpdateConfirmDialog,
+        showUpdateProgressDialog,
+        startUpdate,
+        updateStateNotifier,
+        UpdateState,
+        UpdateInfo;
 import 'package:lux/widget/setting_tiles.dart';
 import 'package:version/version.dart';
 import 'package:provider/provider.dart';
@@ -50,6 +58,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   bool _checkingUpdate = false;
   String _appVersion = '';
   String _pendingUpdateVersion = ''; // non-empty when an update was found but not yet installed
+  UpdateInfo? _cachedUpdateInfo;
 
   static const _categories = [
     (id: 'general', icon: Icons.tune, label: 'General'),
@@ -404,12 +413,25 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           SettingRow(
             title: 'Check for Updates',
             keywords: ['version', 'upgrade', 'appcast'],
-            build: (ctx) => _pendingUpdateVersion.isNotEmpty
-                // Update is available — show it prominently with an Update button
-                ? ListTile(
+            build: (ctx) => ValueListenableBuilder<UpdateState>(
+              valueListenable: updateStateNotifier,
+              builder: (ctx, updateState, _) {
+                final isDownloading = updateState.isDownloading;
+                final hasPending = _pendingUpdateVersion.isNotEmpty ||
+                    (updateState.updateInfo != null && updateState.updateInfo!.hasUpdate);
+                final targetVersion = _pendingUpdateVersion.isNotEmpty
+                    ? _pendingUpdateVersion
+                    : (updateState.updateInfo?.latestVersion ?? '');
+
+                if (hasPending || isDownloading) {
+                  final progress = updateState.progress;
+                  final pct = progress != null ? (progress * 100).toInt() : null;
+                  final statusText = updateState.status;
+
+                  return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     title: Row(children: [
-                      const TText('Update available'),
+                      TText(isDownloading ? 'Updating...' : 'Update available'),
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -419,63 +441,126 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          _pendingUpdateVersion,
-                          style: const TextStyle(fontSize: 11, color: Colors.orange),
+                          targetVersion,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ]),
-                    subtitle: Text(
-                      '$_appVersion → $_pendingUpdateVersion',
-                      style: const TextStyle(fontSize: 11),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: 2),
+                        Text(
+                          '$_appVersion → $targetVersion',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        if (isDownloading) ...[
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: (progress == null || progress < 0.02) ? null : progress,
+                              minHeight: 5,
+                              backgroundColor: Colors.grey.withAlpha(50),
+                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            statusText.isNotEmpty
+                                ? statusText
+                                : (pct != null ? 'Downloading… $pct%' : 'Downloading…'),
+                            style: const TextStyle(fontSize: 11, color: Colors.orange),
+                          ),
+                        ],
+                      ],
                     ),
                     trailing: _checkingUpdate
-                        ? const SizedBox(width: 20, height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : FilledButton.icon(
-                            icon: const Icon(Icons.download, size: 15),
-                            label: const TText('Update'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              textStyle: const TextStyle(fontSize: 12),
-                            ),
-                            onPressed: () async {
-                              final info = await checkForUpdate();
-                              if (!mounted) return;
-                              // No genuinely newer version (the pending badge was
-                              // stale). Clear it so the tile reverts to
-                              // "Check for Updates" and tell the user they're
-                              // current — instead of an "Update" button that
-                              // silently does nothing.
-                              if (info == null || !info.hasUpdate) {
-                                await writePendingUpdateVersion(null);
-                                if (mounted) {
-                                  setState(() => _pendingUpdateVersion = '');
-                                  _notify(tl(context, 'You are up to date'));
-                                }
-                                return;
-                              }
-                              // Re-sync the badge to this fresh check so it can't
-                              // show a stale version (e.g. badge said 1.50.65
-                              // while the download fetched 1.50.68).
-                              await writePendingUpdateVersion(info.latestVersion);
-                              if (mounted) {
-                                setState(() => _pendingUpdateVersion = info.latestVersion);
-                              }
-                              if (!mounted) return;
-                              await showUpdateDialog(context, info);
-                            },
-                          ),
-                  )
-                : actionTile(
-                    context: ctx,
-                    title: 'Check for Updates',
-                    subtitle: 'Current version $_appVersion',
-                    buttonLabel: 'Check',
-                    icon: Icons.refresh,
-                    busy: _checkingUpdate,
-                    onPressed: _checkingUpdate ? null : _runUpdateCheck,
-                  ),
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : isDownloading
+                            ? FilledButton.icon(
+                                icon: const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                label: Text(pct != null ? '$pct%' : tl(context, 'Updating...')),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  textStyle: const TextStyle(fontSize: 12),
+                                ),
+                                onPressed: () {
+                                  if (updateState.updateInfo != null) {
+                                    showUpdateProgressDialog(context, updateState.updateInfo!);
+                                  }
+                                },
+                              )
+                            : FilledButton.icon(
+                                icon: const Icon(Icons.download, size: 15),
+                                label: const TText('Update'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  textStyle: const TextStyle(fontSize: 12),
+                                ),
+                                onPressed: () async {
+                                  UpdateInfo? info = _cachedUpdateInfo;
+                                  if (info == null ||
+                                      !info.hasUpdate ||
+                                      info.latestVersion != targetVersion) {
+                                    setState(() => _checkingUpdate = true);
+                                    try {
+                                      info = await checkForUpdate();
+                                      _cachedUpdateInfo = info;
+                                    } finally {
+                                      if (mounted) setState(() => _checkingUpdate = false);
+                                    }
+                                  }
+                                  if (!mounted) return;
+                                  if (info == null || !info.hasUpdate) {
+                                    await writePendingUpdateVersion(null);
+                                    if (mounted) {
+                                      setState(() => _pendingUpdateVersion = '');
+                                      _notify(tl(context, 'You are up to date'));
+                                    }
+                                    return;
+                                  }
+                                  final updateInfo = info;
+                                  await writePendingUpdateVersion(updateInfo.latestVersion);
+                                  if (mounted) {
+                                    setState(() => _pendingUpdateVersion = updateInfo.latestVersion);
+                                  }
+                                  if (!mounted) return;
+                                  await startUpdate(context, updateInfo, showDialog: true);
+                                },
+                              ),
+                  );
+                }
+
+                return actionTile(
+                  context: ctx,
+                  title: 'Check for Updates',
+                  subtitle: 'Current version $_appVersion',
+                  buttonLabel: 'Check',
+                  icon: Icons.refresh,
+                  busy: _checkingUpdate,
+                  onPressed: _checkingUpdate ? null : _runUpdateCheck,
+                );
+              },
+            ),
           ),
           SettingRow(
             title: 'Beta updates',
@@ -503,6 +588,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                       _notify(statusMsg);
                       await _load();
                       final info = await checkForUpdate();
+                      _cachedUpdateInfo = info;
                       if (!mounted) return;
                       if (info != null && info.hasUpdate) {
                         await writePendingUpdateVersion(info.latestVersion);
@@ -511,7 +597,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                             _pendingUpdateVersion = info.latestVersion;
                             _checkingUpdate = false;
                           });
-                          await showUpdateDialog(context, info);
+                          await showUpdateConfirmDialog(context, info);
                         }
                       } else {
                         // No newer build on this channel — clear any stale badge.
@@ -1079,6 +1165,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     setState(() => _checkingUpdate = true);
     try {
       final info = await checkForUpdate();
+      _cachedUpdateInfo = info;
       if (!mounted) return;
       if (info == null || !info.hasUpdate) {
         await writePendingUpdateVersion(null); // clear any stale pending
@@ -1088,7 +1175,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         // Persist so the tile shows the badge even after restart
         await writePendingUpdateVersion(info.latestVersion);
         setState(() => _pendingUpdateVersion = info.latestVersion);
-        await showUpdateDialog(context, info);
+        await showUpdateConfirmDialog(context, info);
       }
     } catch (e) {
       _notify('Update check failed: $e', isError: true);

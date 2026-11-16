@@ -205,7 +205,17 @@
       "Result": "Resultado",
       "No static rules extracted from PAC": "Nenhuma regra estática extraída do PAC",
       "No rules match filter": "Nenhuma regra corresponde ao filtro",
-      "Active PAC proxy. Click to view rules.": "Proxy PAC ativo. Clique para ver as regras."
+      "Active PAC proxy. Click to view rules.": "Proxy PAC ativo. Clique para ver as regras.",
+      "Update": "Atualizar",
+      "Update available": "Atualização disponível",
+      "Updating...": "Atualizando...",
+      "Update Now": "Atualizar agora",
+      "Downloading update...": "Baixando atualização...",
+      "Installing...": "Instalando...",
+      "Hide to background": "Ocultar em segundo plano",
+      "Download failed": "Falha no download",
+      "Preparing…": "Preparando…",
+      "Verifying download…": "Verificando download…"
     },
     "es": {
       "Proxies": "Proxies",
@@ -411,7 +421,17 @@
       "Result": "Resultado",
       "No static rules extracted from PAC": "No se extrajeron reglas estáticas del PAC",
       "No rules match filter": "Ninguna regla coincide con el filtro",
-      "Active PAC proxy. Click to view rules.": "Proxy PAC activo. Haga clic para ver las reglas."
+      "Active PAC proxy. Click to view rules.": "Proxy PAC activo. Haga clic para ver las reglas.",
+      "Update": "Actualizar",
+      "Update available": "Actualización disponible",
+      "Updating...": "Actualizando...",
+      "Update Now": "Actualizar ahora",
+      "Downloading update...": "Descargando actualización...",
+      "Installing...": "Instalando...",
+      "Hide to background": "Ocultar en segundo plano",
+      "Download failed": "Error al descargar",
+      "Preparing…": "Preparando…",
+      "Verifying download…": "Verificando descarga…"
     },
     "it": {
       "Proxies": "Proxy",
@@ -617,7 +637,17 @@
       "Result": "Risultato",
       "No static rules extracted from PAC": "Nessuna regola statica estratta dal PAC",
       "No rules match filter": "Nessuna regola corrisponde al filtro",
-      "Active PAC proxy. Click to view rules.": "Proxy PAC attivo. Fai clic per visualizzare le regole."
+      "Active PAC proxy. Click to view rules.": "Proxy PAC attivo. Fai clic per visualizzare le regole.",
+      "Update": "Aggiorna",
+      "Update available": "Aggiornamento disponibile",
+      "Updating...": "Aggiornamento in corso...",
+      "Update Now": "Aggiorna ora",
+      "Downloading update...": "Download aggiornamento...",
+      "Installing...": "Installazione...",
+      "Hide to background": "Nascondi in background",
+      "Download failed": "Download non riuscito",
+      "Preparing…": "Preparando…",
+      "Verifying download…": "Verifica download…"
     },
     "fil": {
       "Proxies": "Mga Proxy",
@@ -823,7 +853,17 @@
       "Result": "Resulta",
       "No static rules extracted from PAC": "Walang static na panuntunan na nakuha mula sa PAC",
       "No rules match filter": "Walang panuntunan na tumutugma sa filter",
-      "Active PAC proxy. Click to view rules.": "Aktibong PAC proxy. I-click para makita ang mga panuntunan."
+      "Active PAC proxy. Click to view rules.": "Aktibong PAC proxy. I-click para makita ang mga panuntunan.",
+      "Update": "I-update",
+      "Update available": "May available na update",
+      "Updating...": "Nag-a-update...",
+      "Update Now": "I-update Ngayon",
+      "Downloading update...": "Dina-download ang update...",
+      "Installing...": "Nag-i-install...",
+      "Hide to background": "Itago sa background",
+      "Download failed": "Nabigo ang pag-download",
+      "Preparing…": "Naghahanda…",
+      "Verifying download…": "Bini-verify ang download…"
     },
     "zh": {
       "Proxies": "代理",
@@ -1029,7 +1069,17 @@
       "Result": "结果",
       "No static rules extracted from PAC": "未从 PAC 中提取到静态规则",
       "No rules match filter": "没有匹配过滤条件的规则",
-      "Active PAC proxy. Click to view rules.": "活跃 PAC 代理。点击查看规则。"
+      "Active PAC proxy. Click to view rules.": "活跃 PAC 代理。点击查看规则。",
+      "Update": "更新",
+      "Update available": "有新版本可用",
+      "Updating...": "正在更新...",
+      "Update Now": "立即更新",
+      "Downloading update...": "正在下载更新...",
+      "Installing...": "正在安装...",
+      "Hide to background": "后台运行",
+      "Download failed": "下载失败",
+      "Preparing…": "准备中…",
+      "Verifying download…": "正在校验下载…"
     }
   }
 }
