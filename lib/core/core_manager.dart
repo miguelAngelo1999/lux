@@ -482,7 +482,7 @@ class CoreManager {
   Future<int> testProxyDelay(String id) async {
     try {
       final res = await dio.get('$baseHttpUrl/proxies/delay/$id',
-          options: Options(receiveTimeout: const Duration(seconds: 10)));
+          options: Options(receiveTimeout: const Duration(seconds: 13)));
       return res.data['delay'] as int? ?? -1;
     } catch (_) {
       return -1;
@@ -494,7 +494,7 @@ class CoreManager {
   Future<({int delay, bool certError, bool pacOnly, String error})> testProxyDelayDetailed(String id) async {
     try {
       final res = await dio.get('$baseHttpUrl/proxies/delay/$id',
-          options: Options(receiveTimeout: const Duration(seconds: 10)));
+          options: Options(receiveTimeout: const Duration(seconds: 13)));
       final delay = res.data['delay'] as int? ?? -1;
       final certError = res.data['certError'] as bool? ?? false;
       final pacOnly = res.data['pacOnly'] as bool? ?? false;
