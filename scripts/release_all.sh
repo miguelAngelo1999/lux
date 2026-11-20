@@ -68,12 +68,17 @@ CHECKSUM_BACKUP="$(mktemp /tmp/checksum.dart.XXXXXX)"
 cp "$ORIG_PUBSPEC" "$PUBSPEC_BACKUP"
 cp "$ORIG_CHECKSUM" "$CHECKSUM_BACKUP"
 OAUTH_TEMP_LINK=""
+MAC_PID=""
+WIN_PID=""
 
 cleanup_on_err() {
   local ec=$?
   local line=$1
   echo "" >&2
   echo "==> [ERROR] Build failed at line $line (exit code $ec)!" >&2
+  [ -n "${MAC_PID:-}" ] && kill "$MAC_PID" 2>/dev/null || true
+  [ -n "${WIN_PID:-}" ] && kill "$WIN_PID" 2>/dev/null || true
+  rm -f "$REPO/dist/.win_lux_core.exe" "$REPO/dist/win_build_all.ps1" 2>/dev/null || true
   if [ -f "$PUBSPEC_BACKUP" ]; then
     echo "==> Restoring original pubspec.yaml from backup..." >&2
     cp -f "$PUBSPEC_BACKUP" "$ORIG_PUBSPEC"
@@ -192,171 +197,69 @@ print('.'.join(v))
 ")
 echo "==> Version: $CURRENT → $VERSION"
 
-# ── Step 2: Bump pubspec ───────────────────────────────────────────────────
+# ── Step 2: Bump pubspec & render ISS ──────────────────────────────────────
 sed -i '' "s/^version: .*/version: ${VERSION}+1/" pubspec.yaml
 echo "==> pubspec bumped to $VERSION+1"
 python3 "$REPO/render_iss.py" "$VERSION"
-
-# ── Step 3: Build macOS ────────────────────────────────────────────────────
-echo "==> Building macOS..."
-rm -f assets/bin/lux_core.exe 2>/dev/null || true
-
-APP=build/macos/Build/Products/Release/Lux.app
-flutter build macos --release --no-pub
-xattr -cr "$APP"
-bash "$REPO/scripts/sign_and_notarize.sh" app "$APP" 2>/dev/null || true
-
-# Build DMG
-DMG_STAGE="/tmp/lux-dmg-stage"
-rm -rf "$DMG_STAGE"; mkdir -p "$DMG_STAGE"
-cp -R "$APP" "$DMG_STAGE/"
-cp "$REPO/macos/install.sh" "$DMG_STAGE/"
-DMG_NAME="Lux-${VERSION}-macOS-universal.dmg"
-SIZE_KB=$(du -sk "$DMG_STAGE" | awk '{print $1}'); SIZE_KB=$((SIZE_KB + 5000))
-hdiutil create -size ${SIZE_KB}k -fs HFS+ -volname "Lux $VERSION" -ov /tmp/lux_tmp.dmg >/dev/null
-MOUNT_DIR=$(hdiutil attach /tmp/lux_tmp.dmg | grep "/Volumes" | awk -F'\t' '{print $NF}')
-cp -R "$DMG_STAGE/Lux.app" "$MOUNT_DIR/"
-cp "$DMG_STAGE/install.sh" "$MOUNT_DIR/"
-sync
-for i in 1 2 3 4 5; do
-  hdiutil detach "$MOUNT_DIR" -force >/dev/null 2>&1 && break || sleep 2
-done
-rm -f "dist/$DMG_NAME"   # -ov below also overwrites, but clear it so a stale same-name DMG never blocks convert
-hdiutil convert /tmp/lux_tmp.dmg -format UDZO -ov -o "dist/$DMG_NAME" >/dev/null
-rm -f /tmp/lux_tmp.dmg; rm -rf "$DMG_STAGE"
-hdiutil verify "dist/$DMG_NAME" >/dev/null
-bash "$REPO/scripts/sign_and_notarize.sh" dmg "dist/$DMG_NAME" 2>/dev/null || true
-echo "==> macOS DMG ready: dist/$DMG_NAME ($(ls -lh "dist/$DMG_NAME" | awk '{print $5}'))"
-
-# ── Step 4: Build Windows (via Parallels VM) ──────────────────────────────
-echo "==> Building Windows..."
-VM="Windows 11 (1)"
-WIN_LUX="C:\\lux-build\\lux"
-INSTALLER_WIN="C:\\lux-build\\dist2\\lux-${VERSION}-setup.exe"
-
-win() {
-  local cmd="$*"
-  local out="" attempt=1 ec=0
-  for attempt in 1 2 3 4 5; do
-    ec=0
-    out=$(prlctl exec "$VM" cmd /c "$cmd" 2>&1) || ec=$?
-    if echo "$out" | grep -q -E "(PrlJob_|Unable to open new session|PrlVmGuest_RunProgram|Failed to get session|guest OS is not available)"; then
-      echo "==> [retry $attempt] prlctl cmd transient error, waiting 2s..." >&2
-      sleep 2
-      continue
-    fi
-    echo "$out"
-    return "$ec"
-  done
-  echo "ERROR: prlctl cmd failed after 5 attempts: $out" >&2
-  echo "$out"
-  return 1
-}
-
-win_ps_script() {
-  local name="$1" content="$2"
-  printf '%s' "$content" > "$REPO/$name"
-  local copied=false
-  for copy_att in 1 2 3 4 5; do
-    win "copy /y \"${REPO_WIN_SHARE}\\${name}\" \"C:\\lux-build\\${name}\" >nul" >/dev/null 2>&1 || true
-    local chk=""
-    chk=$(win "if exist \"C:\\lux-build\\${name}\" (echo FILE_EXISTS)" 2>/dev/null || true)
-    if echo "$chk" | grep -q "FILE_EXISTS"; then
-      copied=true
-      break
-    fi
-    sleep 2
-  done
-  if [ "$copied" != "true" ]; then
-    echo "ERROR: Failed to copy $name to VM after 5 attempts" >&2
-    rm -f "$REPO/$name"
-    return 1
-  fi
-
-  local out="" attempt=1 ec=0
-  for attempt in 1 2 3 4 5; do
-    ec=0
-    out=$(prlctl exec "$VM" powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass \
-      -File "C:\\lux-build\\${name}" 2>&1) || ec=$?
-    if echo "$out" | grep -q -E "(PrlJob_|Unable to open new session|PrlVmGuest_RunProgram|Failed to get session|guest OS is not available)"; then
-      echo "==> [retry $attempt] prlctl ps transient error, waiting 2s..." >&2
-      sleep 2
-      continue
-    fi
-    break
-  done
-  win "del /f /q \"C:\\lux-build\\${name}\" >nul 2>&1 & exit 0" >/dev/null 2>&1 || true
-  rm -f "$REPO/$name"
-
-  # Strip CLIXML cleanly without eating valid output starting with '<'
-  out=$(echo "$out" | strip_clixml)
-  echo "$out"
-  return "$ec"
-}
-
-win_robocopy() {
-  local args="$*"
-  # Robocopy exit codes:
-  # 0-7: Success (0=no change, 1=copied, 2=extra, etc.)
-  # >=8: Error (8=copy errors, 16=fatal error)
-  # Mask 0-7 to 0, >=8 to 1 so set -e trips only on genuine failures.
-  win "robocopy ${args} & if errorlevel 8 (exit 1) else (exit 0)"
-}
-
-VM_STATUS=$(prlctl status "$VM" 2>/dev/null | awk '{print $NF}' || echo "stopped")
-if [ "$VM_STATUS" != "running" ]; then prlctl start "$VM"; sleep 25; fi
-win "echo VM_READY"
-
-# Kill any stale compiler helper processes before starting build
-win "taskkill /F /IM vctip.exe >nul 2>&1 & exit 0" >/dev/null 2>&1 || true
-
-# Sync repos using hardened robocopy wrapper
-win_robocopy "${REPO_WIN_SHARE}" "C:\\lux-build\\lux" /E /XD .git build dist dist2 /XF *.dmg *.exe pubspec.yaml /NP /NFL /NDL 2>nul
-win "attrib -R C:\\lux-build\\lux\\*.* /S /D >nul 2>&1 & exit 0"
-win "del /F C:\\lux-build\\lux\\.flutter-plugins C:\\lux-build\\lux\\.flutter-plugins-dependencies >nul 2>&1 & exit 0"
-# Also remove hooks_runner which can be locked as Hidden+ReadOnly after robocopy
-win "if exist C:\\lux-build\\lux\\.dart_tool\\hooks_runner attrib -R -H C:\\lux-build\\lux\\.dart_tool\\hooks_runner /S /D >nul 2>&1 & exit 0"
-win "if exist C:\\lux-build\\lux\\.dart_tool\\hooks_runner rmdir /S /Q C:\\lux-build\\lux\\.dart_tool\\hooks_runner >nul 2>&1 & exit 0"
-
-# Write pubspec with Windows version
-PUBSPEC_WIN=$(sed "s/^version: .*/version: ${VERSION}+1/" "$REPO/pubspec.yaml")
-printf '%s' "$PUBSPEC_WIN" > "$REPO/pubspec_win.yaml"
-win "copy \"${REPO_WIN_SHARE}\\pubspec_win.yaml\" \"C:\\lux-build\\lux\\pubspec.yaml\" && echo PUBSPEC_OK"
-rm -f "$REPO/pubspec_win.yaml"
-
-win_robocopy "${ITUN_WIN_SHARE}" "C:\\lux-build\\itun2socks" /E /XD .git /NP /NFL /NDL 2>nul
-win "attrib -R C:\\lux-build\\itun2socks\\*.* /S /D >nul 2>&1 & exit 0"
-
-# Fix executor.go mixed→system
-win_ps_script "fix_executor.ps1" '
-$f = "C:\lux-build\itun2socks\internal\executor\executor.go"
-$c = [System.IO.File]::ReadAllText($f)
-$c = $c.Replace("NewStack(`"mixed`"","NewStack(`"system`"")
-[System.IO.File]::WriteAllText($f,$c)
-Write-Host "executor patched"
-'
-
-# Build lux_core.exe
-win_ps_script "build_core.ps1" "
-Set-Content 'C:\\lux-build\\build_core.bat' '@echo off
-setlocal
-set CGO_ENABLED=0
-set GOOS=windows
-set GOARCH=amd64
-set GOPROXY=file:///C:/Users/virgoh/go/pkg/mod/cache/download,off
-set GONOSUMCHECK=*
-set GONOSUMDB=*
-set GOINSECURE=*
-set GOFLAGS=-mod=mod
-cd /d C:\\lux-build\\itun2socks
-go build -ldflags=\"-s -w\" -trimpath -o ..\\lux\\assets\\bin\\lux_core.exe .
-if %ERRORLEVEL% EQU 0 (echo BUILD_OK) else (echo BUILD_FAILED)
-endlocal'
+python3 -c "
+import re
+p = '$REPO/dist-setup.iss'
+with open(p, encoding='utf-8-sig') as f:
+    c = f.read()
+if '$CHANNEL' == 'beta':
+    comp, solid = 'lzma2/fast', 'no'
+else:
+    comp, solid = 'lzma', 'yes'
+c = re.sub(r'(?m)^Compression=.*$', f'Compression={comp}', c)
+c = re.sub(r'(?m)^SolidCompression=.*$', f'SolidCompression={solid}', c)
+with open(p, 'w', encoding='utf-8-sig') as f:
+    f.write(c)
 "
-win "C:\\lux-build\\build_core.bat" | grep -q "BUILD_OK" || { echo "ERROR: Windows core build failed"; exit 1; }
+echo "==> dist-setup.iss configured for $CHANNEL compression"
 
-# Update checksum
-WIN_HASH=$(win_ps_script "hash.ps1" "(Get-FileHash 'C:\lux-build\lux\assets\bin\lux_core.exe' -Algorithm SHA256).Hash.ToLower()" | tr -d '[:space:]\r\n')
+# Never bundle Windows lux_core.exe inside macOS app assets
+rm -f "$REPO/assets/bin/lux_core.exe" 2>/dev/null || true
+
+# ── Step 2.5: Cross-compile & cache Windows lux_core.exe natively on Mac ──
+WIN_CORE_CACHE_DIR="/tmp/lux-win-core-cache"
+WIN_CORE_CACHED_EXE="$WIN_CORE_CACHE_DIR/lux_core.exe"
+WIN_CORE_CACHE_KEY_FILE="$WIN_CORE_CACHE_DIR/cache.key"
+mkdir -p "$WIN_CORE_CACHE_DIR"
+
+ITUN_HEAD=$(git -C "$ITUN_DIR" rev-parse HEAD 2>/dev/null || echo "no-git")
+ITUN_DIFF_HASH=$(git -C "$ITUN_DIR" diff 2>/dev/null | shasum -a 256 | awk '{print $1}')
+WIN_CORE_KEY="${ITUN_HEAD}:${ITUN_DIFF_HASH}"
+
+if [ -s "$WIN_CORE_CACHED_EXE" ] && [ -f "$WIN_CORE_CACHE_KEY_FILE" ] && [ "$(cat "$WIN_CORE_CACHE_KEY_FILE")" = "$WIN_CORE_KEY" ]; then
+  echo "==> Windows lux_core.exe cache HIT ($WIN_CORE_KEY)"
+else
+  echo "==> Windows lux_core.exe cache MISS — cross-compiling on Mac..."
+  CORE_T0=$(date +%s)
+  ITUN_TMP=$(mktemp -d /tmp/lux-itun-build.XXXXXX)
+  rsync -a --exclude='.git' --exclude='lux_core' --exclude='lux_core_*.zip' "$ITUN_DIR/" "$ITUN_TMP/"
+  python3 -c "
+import pathlib
+p = pathlib.Path('$ITUN_TMP/internal/executor/executor.go')
+if p.exists():
+    c = p.read_text()
+    c2 = c.replace('NewStack(\"mixed\"', 'NewStack(\"system\"')
+    if c2 != c:
+        p.write_text(c2)
+"
+  WIN_CORE_TMP_OUT="$WIN_CORE_CACHE_DIR/lux_core.exe.tmp.$$"
+  (
+    cd "$ITUN_TMP"
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o "$WIN_CORE_TMP_OUT" .
+  )
+  rm -rf "$ITUN_TMP"
+  [ -s "$WIN_CORE_TMP_OUT" ] || { echo "ERROR: Mac Go cross-compile of lux_core.exe failed"; exit 1; }
+  mv -f "$WIN_CORE_TMP_OUT" "$WIN_CORE_CACHED_EXE"
+  printf '%s' "$WIN_CORE_KEY" > "$WIN_CORE_CACHE_KEY_FILE"
+  CORE_DT=$(( $(date +%s) - CORE_T0 ))
+  echo "==> Windows lux_core.exe compiled in ${CORE_DT}s and cached ($WIN_CORE_KEY)"
+fi
+
+WIN_HASH=$(shasum -a 256 "$WIN_CORE_CACHED_EXE" | awk '{print $1}')
 echo "==> Windows core hash: $WIN_HASH"
 python3 -c "
 import re
@@ -364,12 +267,158 @@ with open('$REPO/lib/core/checksum.dart') as f: c = f.read()
 c = re.sub(r'windowsAmd64Checksum = \"[a-f0-9]*\"', 'windowsAmd64Checksum = \"$WIN_HASH\"', c)
 with open('$REPO/lib/core/checksum.dart', 'w') as f: f.write(c)
 "
-win "copy \"${REPO_WIN_SHARE}\\lib\\core\\checksum.dart\" \"C:\\lux-build\\lux\\lib\\core\\checksum.dart\" && echo CHECKSUM_SYNCED"
 
-# Build Flutter Windows with vctip guard and timeout.
-FLUTTER_OUT=$(win_ps_script "build_flutter.ps1" '
+# ── Step 3 & 4: Build macOS + Windows concurrently ────────────────────────
+DMG_NAME="Lux-${VERSION}-macOS-universal.dmg"
+WIN_INSTALLER="$REPO/dist/Lux-${VERSION}-Windows-x64-Setup.exe"
+mkdir -p "$REPO/dist"
+
+build_macos() {
+  trap - ERR INT TERM
+  set -euo pipefail
+  local t0
+  t0=$(date +%s)
+  echo "==> [macOS] Building..."
+  rm -f "$REPO/assets/bin/lux_core.exe" 2>/dev/null || true
+
+  local APP="build/macos/Build/Products/Release/Lux.app"
+  flutter build macos --release --no-pub
+  xattr -cr "$APP"
+  bash "$REPO/scripts/sign_and_notarize.sh" app "$APP" 2>/dev/null || true
+
+  # Build DMG
+  local DMG_STAGE="/tmp/lux-dmg-stage"
+  rm -rf "$DMG_STAGE"; mkdir -p "$DMG_STAGE"
+  cp -R "$APP" "$DMG_STAGE/"
+  cp "$REPO/macos/install.sh" "$DMG_STAGE/"
+  local SIZE_KB
+  SIZE_KB=$(du -sk "$DMG_STAGE" | awk '{print $1}')
+  SIZE_KB=$((SIZE_KB + 5000))
+  hdiutil create -size "${SIZE_KB}k" -fs HFS+ -volname "Lux $VERSION" -ov /tmp/lux_tmp.dmg >/dev/null
+  local MOUNT_DIR
+  MOUNT_DIR=$(hdiutil attach /tmp/lux_tmp.dmg | grep "/Volumes" | awk -F'\t' '{print $NF}')
+  cp -R "$DMG_STAGE/Lux.app" "$MOUNT_DIR/"
+  cp "$DMG_STAGE/install.sh" "$MOUNT_DIR/"
+  sync
+  for i in 1 2 3 4 5; do
+    hdiutil detach "$MOUNT_DIR" -force >/dev/null 2>&1 && break || sleep 2
+  done
+  rm -f "dist/$DMG_NAME"   # -ov below also overwrites, but clear it so a stale same-name DMG never blocks convert
+  if [ "$CHANNEL" == "beta" ]; then
+    echo "==> [macOS] Compressing beta DMG (zlib-level=1)..."
+    hdiutil convert /tmp/lux_tmp.dmg -format UDZO -imagekey zlib-level=1 -ov -o "dist/$DMG_NAME" >/dev/null
+  else
+    echo "==> [macOS] Compressing stable DMG..."
+    hdiutil convert /tmp/lux_tmp.dmg -format UDZO -ov -o "dist/$DMG_NAME" >/dev/null
+  fi
+  rm -f /tmp/lux_tmp.dmg; rm -rf "$DMG_STAGE"
+  hdiutil verify "dist/$DMG_NAME" >/dev/null
+  bash "$REPO/scripts/sign_and_notarize.sh" dmg "dist/$DMG_NAME" 2>/dev/null || true
+  local dt=$(( $(date +%s) - t0 ))
+  echo "==> [macOS] DMG ready in ${dt}s: dist/$DMG_NAME ($(ls -lh "dist/$DMG_NAME" | awk '{print $5}'))"
+}
+
+build_windows() {
+  trap - ERR INT TERM
+  set -euo pipefail
+  local t0
+  t0=$(date +%s)
+  echo "==> [Windows] Building..."
+  local VM="Windows 11 (1)"
+
+  win() {
+    local cmd="$*"
+    local out="" attempt=1 ec=0
+    for attempt in 1 2 3 4 5; do
+      ec=0
+      out=$(prlctl exec "$VM" cmd /c "$cmd" 2>&1) || ec=$?
+      if echo "$out" | grep -q -E "(PrlJob_|Unable to open new session|PrlVmGuest_RunProgram|Failed to get session|guest OS is not available)"; then
+        echo "==> [Windows][retry $attempt] prlctl cmd transient error, waiting 2s..." >&2
+        sleep 2
+        continue
+      fi
+      echo "$out"
+      return "$ec"
+    done
+    echo "ERROR: prlctl cmd failed after 5 attempts: $out" >&2
+    echo "$out"
+    return 1
+  }
+
+  win_ps_file() {
+    local name="$1"
+    local copied=false
+    for copy_att in 1 2 3 4 5; do
+      win "copy /y \"${REPO_WIN_SHARE}\\dist\\${name}\" \"C:\\lux-build\\${name}\" >nul" >/dev/null 2>&1 || true
+      local chk=""
+      chk=$(win "if exist \"C:\\lux-build\\${name}\" (echo FILE_EXISTS)" 2>/dev/null || true)
+      if echo "$chk" | grep -q "FILE_EXISTS"; then
+        copied=true
+        break
+      fi
+      sleep 2
+    done
+    if [ "$copied" != "true" ]; then
+      echo "ERROR: Failed to copy $name to VM after 5 attempts" >&2
+      rm -f "$REPO/dist/$name"
+      return 1
+    fi
+
+    local out="" attempt=1 ec=0
+    for attempt in 1 2 3 4 5; do
+      ec=0
+      out=$(prlctl exec "$VM" powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass \
+        -File "C:\\lux-build\\${name}" 2>&1) || ec=$?
+      if echo "$out" | grep -q -E "(PrlJob_|Unable to open new session|PrlVmGuest_RunProgram|Failed to get session|guest OS is not available)"; then
+        echo "==> [Windows][retry $attempt] prlctl ps transient error, waiting 2s..." >&2
+        sleep 2
+        continue
+      fi
+      break
+    done
+    win "del /f /q \"C:\\lux-build\\${name}\" >nul 2>&1 & exit 0" >/dev/null 2>&1 || true
+    rm -f "$REPO/dist/$name"
+
+    # Strip CLIXML cleanly without eating valid output starting with '<'
+    out=$(echo "$out" | strip_clixml)
+    echo "$out"
+    return "$ec"
+  }
+
+  local VM_STATUS
+  VM_STATUS=$(prlctl status "$VM" 2>/dev/null | awk '{print $NF}' || echo "stopped")
+  if [ "$VM_STATUS" != "running" ]; then
+    echo "==> [Windows] Starting VM '$VM'..."
+    prlctl start "$VM"
+  fi
+
+  echo "==> [Windows] Waiting for VM_READY (polling every 2s, up to 60s)..."
+  local VM_UP=false poll_i=0
+  for poll_i in $(seq 1 30); do
+    if prlctl exec "$VM" cmd /c "echo VM_READY" 2>/dev/null | grep -q "VM_READY"; then
+      VM_UP=true
+      echo "==> [Windows] VM_READY (elapsed $(( (poll_i - 1) * 2 ))s)"
+      break
+    fi
+    sleep 2
+  done
+  if [ "$VM_UP" != "true" ]; then
+    echo "ERROR: Windows VM did not become ready within 60s" >&2
+    return 1
+  fi
+
+  rm -f "$WIN_INSTALLER" "$REPO/dist/lux-${VERSION}-setup.exe"
+
+  local ps_name="win_build_all.ps1"
+  cat > "$REPO/dist/$ps_name" <<PSEOF
+\$Version = "${VERSION}"
+\$Channel = "${CHANNEL}"
+\$RepoShare = "${REPO_WIN_SHARE}"
+PSEOF
+  cat >> "$REPO/dist/$ps_name" <<'PSEOF'
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
+
 $env:PUB_CACHE = "C:\Users\virgoh\AppData\Local\Pub\Cache"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 $env:VCPKG_DISABLE_METRICS = "1"
@@ -383,25 +432,56 @@ function Stop-LingeringBuildHelpers {
 }
 
 Stop-LingeringBuildHelpers
+Remove-Item -Force "C:\lux-build\flutter_build_result.txt", "C:\lux-build\win_pipeline_result.txt" -ErrorAction SilentlyContinue
 
-Remove-Item -Force "C:\lux-build\flutter_build_result.txt" -ErrorAction SilentlyContinue
+# 1. Sync repo from Mac share (exclude .git, build, dist, dist2, .dart_tool, installers)
+Write-Host "==> [VM] Syncing lux repo via robocopy..."
+& robocopy "$RepoShare" "C:\lux-build\lux" /E /XD .git build dist dist2 .dart_tool /XF *.dmg *.exe pubspec.yaml /NP /NFL /NDL 2>$null
+if ($LASTEXITCODE -ge 8) {
+  Write-Host "ROBOCOPY_LUX_FAILED exit=$LASTEXITCODE"
+  exit 1
+}
+
+# Clear read-only/hidden/system attributes so Flutter & overwrites never fail
+& attrib -R -H -S "C:\lux-build\lux\*.*" /S /D 2>$null
+
+# Explicitly copy version-bumped / generated files to defeat any SMB timestamp skew
+Copy-Item -Force "$RepoShare\pubspec.yaml" "C:\lux-build\lux\pubspec.yaml"
+Copy-Item -Force "$RepoShare\lib\core\checksum.dart" "C:\lux-build\lux\lib\core\checksum.dart"
+Copy-Item -Force "$RepoShare\dist-setup.iss" "C:\lux-build\lux\dist-setup.iss"
+
+# 2. Copy Mac-cross-compiled cached lux_core.exe into Windows assets\bin
+$coreShare = "$RepoShare\dist\.win_lux_core.exe"
+$coreDest = "C:\lux-build\lux\assets\bin\lux_core.exe"
+New-Item -ItemType Directory -Force -Path "C:\lux-build\lux\assets\bin" | Out-Null
+if (-not (Test-Path $coreShare)) {
+  Write-Host "CORE_EXE_MISSING_ON_SHARE: $coreShare"
+  exit 1
+}
+Copy-Item -Force $coreShare $coreDest
+if (-not (Test-Path $coreDest) -or ((Get-Item $coreDest).Length -lt 1000000)) {
+  Write-Host "CORE_EXE_COPY_FAILED"
+  exit 1
+}
+Write-Host "==> [VM] lux_core.exe staged ($((Get-Item $coreDest).Length) bytes)"
+
+# 3. Clean stale plugins/assets & run Flutter Windows build
 Set-Location C:\lux-build\lux
-# Clear read-only/hidden/system on the tree so flutter can write the plugin
-# registrant (.flutter-plugins-dependencies)
-& attrib -R -H -S C:\lux-build\lux\*.* /S /D 2>$null
-foreach ($f in @(".flutter-plugins",".flutter-plugins-dependencies")) {
+foreach ($f in @(".flutter-plugins", ".flutter-plugins-dependencies")) {
   if (Test-Path $f) { & attrib -R -H -S $f 2>$null; Remove-Item -Force $f -ErrorAction SilentlyContinue }
 }
-if (Test-Path windows\flutter\ephemeral) { Remove-Item -Recurse -Force windows\flutter\ephemeral -ErrorAction SilentlyContinue }
-if (Test-Path .dart_tool\hooks_runner) { Remove-Item -Recurse -Force .dart_tool\hooks_runner -ErrorAction SilentlyContinue }
-if (Test-Path build\flutter_assets) { Remove-Item -Recurse -Force build\flutter_assets -ErrorAction SilentlyContinue }
+if (Test-Path "windows\flutter\ephemeral") { Remove-Item -Recurse -Force "windows\flutter\ephemeral" -ErrorAction SilentlyContinue }
+if (Test-Path ".dart_tool\hooks_runner") { Remove-Item -Recurse -Force ".dart_tool\hooks_runner" -ErrorAction SilentlyContinue }
+if (Test-Path "build\flutter_assets") { Remove-Item -Recurse -Force "build\flutter_assets" -ErrorAction SilentlyContinue }
 
 $exe = "build\windows\x64\runner\Release\lux.exe"
 if (Test-Path $exe) { Remove-Item -Force $exe -ErrorAction SilentlyContinue }
 
+Write-Host "==> [VM] Running flutter pub get --offline..."
 & "C:\lux-build\flutter\bin\flutter.bat" pub get --offline
 if (-not (Test-Path ".flutter-plugins-dependencies")) {
-  Write-Host "FLUTTER_FAILED: pub get did not write .flutter-plugins-dependencies"; exit 1
+  Write-Host "FLUTTER_FAILED: pub get did not write .flutter-plugins-dependencies"
+  exit 1
 }
 
 $outLog = "C:\lux-build\flutter_stdout.log"
@@ -417,10 +497,11 @@ function Invoke-FlutterWinBuild {
   return $proc.ExitCode
 }
 
+Write-Host "==> [VM] Running flutter build windows --release --no-pub..."
 $buildExit = Invoke-FlutterWinBuild
 if ($buildExit -ne 0) {
-  Write-Host "==> First build attempt exited with $buildExit, retrying once..."
-  if (Test-Path build\flutter_assets) { Remove-Item -Recurse -Force build\flutter_assets -ErrorAction SilentlyContinue }
+  Write-Host "==> [VM] First build attempt exited with $buildExit, retrying once..."
+  if (Test-Path "build\flutter_assets") { Remove-Item -Recurse -Force "build\flutter_assets" -ErrorAction SilentlyContinue }
   $buildExit = Invoke-FlutterWinBuild
 }
 if ($buildExit -ne 0) {
@@ -435,38 +516,16 @@ if (-not (Test-Path $exe)) {
   exit 1
 }
 Set-Content -Path "C:\lux-build\flutter_build_result.txt" -Value "FLUTTER_OK" -NoNewline
-if (Test-Path $outLog) { Get-Content $outLog }
-if (Test-Path $errLog) { Get-Content $errLog }
+if (Test-Path $outLog) { Get-Content $outLog | Select-Object -Last 10 }
+if (Test-Path $errLog) { Get-Content $errLog | Select-Object -Last 10 }
 Write-Host "FLUTTER_OK"
-') || true
-echo "$FLUTTER_OUT" | tail -5
 
-# Ensure no lingering vctip survives the Flutter step on the host VM
-win "taskkill /F /IM vctip.exe >nul 2>&1 & exit 0" >/dev/null 2>&1 || true
-
-# Read the result from the sentinel file the PS script wrote, which survives a
-# prlctl-exec stdout wedge (2026-11-01). Fall back to captured stdout only if
-# the sentinel is unreadable.
-FLUTTER_RESULT=$(win "type C:\\lux-build\\flutter_build_result.txt" 2>/dev/null | tr -d '\r\n' || true)
-if [ "$FLUTTER_RESULT" != "FLUTTER_OK" ]; then
-  if echo "$FLUTTER_OUT" | grep -q "FLUTTER_OK"; then
-    echo "WARN: sentinel unreadable ('$FLUTTER_RESULT') but stdout shows FLUTTER_OK — trusting stdout"
-  else
-    echo "ERROR: Windows Flutter build failed — aborting release so a stale lux.exe is never packaged/published."
-    echo "       sentinel='$FLUTTER_RESULT'. Common cause: read-only .flutter-plugins-dependencies from the SMB robocopy, or pub-cache empty stubs."
-    exit 1
-  fi
-fi
-
-# Bundle the Visual C++ runtime next to lux.exe (app-local deployment).
-VCRT_OUT=$(win_ps_script "bundle_vcrt.ps1" '
-$ErrorActionPreference = "Continue"
-$ProgressPreference = "SilentlyContinue"
+# 4. Bundle Visual C++ runtime next to lux.exe (app-local deployment)
 $rel = "C:\lux-build\lux\build\windows\x64\runner\Release"
-$required = @("msvcp140.dll","vcruntime140.dll","vcruntime140_1.dll")
-$optional = @("msvcp140_1.dll","msvcp140_2.dll","concrt140.dll")
+$required = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+$optional = @("msvcp140_1.dll", "msvcp140_2.dll", "concrt140.dll")
 $src = $null
-foreach ($root in @("C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio")) {
+foreach ($root in @("C:\Program Files\Microsoft Visual Studio", "C:\Program Files (x86)\Microsoft Visual Studio")) {
   if (-not (Test-Path $root)) { continue }
   $dirs = Get-ChildItem -Path $root -Recurse -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue |
           Where-Object { $_.FullName -match "\\x64\\" -and $_.FullName -notmatch "\\onecore\\" -and $_.FullName -notmatch "\\debug_nonredist\\" } |
@@ -494,80 +553,149 @@ foreach ($n in $required) {
   if (-not (Test-Path (Join-Path $rel $n))) { Write-Host "VCRT_MISSING $n (not in Release folder)"; exit 1 }
 }
 Write-Host "VCRT_OK"
-')
-echo "$VCRT_OUT" | grep -E "VCRT_" || true
-echo "$VCRT_OUT" | grep -q "VCRT_OK" || {
-  echo "ERROR: could not bundle the Visual C++ runtime (msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll) into the Windows Release folder."
-  echo "       Without them the installer fails on PCs lacking the VC++ Redistributable. Install the VC++ x64 redist or Visual Studio on the build VM, then rerun."
+
+# 5. Verify & patch dist-setup.iss, then run ISCC.exe
+$issPath = "C:\lux-build\lux\dist-setup.iss"
+$c = Get-Content $issPath -Raw
+if ($c -match "(?i)runner\\Release") {
+  Write-Host "ISS_SRC_OK"
+} else {
+  Write-Host "ISS_SRC_MISSING: dist-setup.iss does not reference runner\Release"
   exit 1
 }
 
-# The DLLs only help if the installer script packs the Release folder they were
-# copied into. Refuse to build if the VM's ISS never references it.
-ISS_SRC=$(win_ps_script "check_iss_source.ps1" '
-$c = Get-Content "C:\lux-build\lux\dist-setup.iss" -Raw
-if ($c -match "(?i)runner\\Release") { Write-Host "ISS_SRC_OK" } else { Write-Host "ISS_SRC_MISSING" }
-')
-echo "$ISS_SRC" | grep -E "ISS_SRC_" || true
-echo "$ISS_SRC" | grep -q "ISS_SRC_OK" || { echo "ERROR: C:\\lux-build\\lux\\dist-setup.iss does not reference build\\windows\\x64\\runner\\Release — the bundled VC++ DLLs would not be packed. Fix the Source line."; exit 1; }
+$comp = if ($Channel -eq "beta") { "lzma2/fast" } else { "lzma" }
+$solid = if ($Channel -eq "beta") { "no" } else { "yes" }
+$c = $c -replace 'AppVersion=[^\r\n]*', "AppVersion=$Version"
+$c = $c -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion `"$Version`""
+$c = $c -replace 'OutputBaseFilename=[^\r\n]*', "OutputBaseFilename=lux-$Version-setup"
+$c = $c -replace 'OutputDir=[^\r\n]*', 'OutputDir=C:\lux-build\dist2'
+$c = [regex]::Replace($c, '(?m)^Compression=[^\r\n]*', "Compression=$comp")
+$c = [regex]::Replace($c, '(?m)^SolidCompression=[^\r\n]*', "SolidCompression=$solid")
+# Strip AppMutex so Inno never blocks before InitializeSetup runs
+$c = [regex]::Replace($c, '(?m)^[ \t]*AppMutex[ \t]*=[^\r\n]*\r?\n', '')
+# Ensure CloseApplications=no and RestartApplications=no are active
+if ($c -notmatch '(?m)^[ \t]*CloseApplications=no') {
+  $c = [regex]::Replace($c, '(?m)^\[Setup\]\r?\n', "[Setup]`r`nCloseApplications=no`r`nRestartApplications=no`r`n")
+}
+$utf8Bom = New-Object System.Text.UTF8Encoding($true)
+[System.IO.File]::WriteAllText($issPath, $c, $utf8Bom)
 
-# Package installer
-win "if exist C:\\lux-build\\dist2\\*.exe del /F /Q C:\\lux-build\\dist2\\*.exe >nul 2>&1 & exit 0"
-for patch_attempt in 1 2 3 4 5; do
-  win_ps_script "patch_iss.ps1" "
-\$f = 'C:\\lux-build\\lux\\dist-setup.iss'
-\$c = Get-Content \$f -Raw
-\$c = \$c -replace 'AppVersion=[^\r\n]*', 'AppVersion=${VERSION}'
-\$c = \$c -replace '#define MyAppVersion \"[^\"]*\"', '#define MyAppVersion \"${VERSION}\"'
-\$c = \$c -replace 'OutputBaseFilename=[^\r\n]*', 'OutputBaseFilename=lux-${VERSION}-setup'
-\$c = \$c -replace 'OutputDir=[^\r\n]*', 'OutputDir=C:\\lux-build\\dist2'
-[System.IO.File]::WriteAllText(\$f, \$c)
-Write-Host 'iss patched'
-"
-  sleep 1
-  iss_ver=$(win "type C:\\lux-build\\lux\\dist-setup.iss")
-  if [[ "$iss_ver" == *"OutputBaseFilename=lux-${VERSION}-setup"* ]]; then
-    echo "==> dist-setup.iss verified for $VERSION"
-    break
+$cCheck = Get-Content $issPath -Raw
+if ($cCheck -notmatch [regex]::Escape("OutputBaseFilename=lux-$Version-setup")) {
+  Write-Host "ISS_PATCH_FAILED: OutputBaseFilename mismatch"
+  exit 1
+}
+if (($cCheck -match "procedure KillLux") -and ($cCheck -match "function InitializeSetup")) {
+  Write-Host "ISS_KILL_OK"
+} else {
+  Write-Host "ISS_KILL_MISSING"
+  exit 1
+}
+
+New-Item -ItemType Directory -Force -Path "C:\lux-build\dist2" | Out-Null
+Get-ChildItem "C:\lux-build\dist2\*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+
+Write-Host "==> [VM] Running ISCC.exe dist-setup.iss ($comp, SolidCompression=$solid)..."
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "C:\lux-build\lux\dist-setup.iss"
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "ISCC_FAILED exit=$LASTEXITCODE"
+  exit 1
+}
+$builtInstaller = "C:\lux-build\dist2\lux-$Version-setup.exe"
+if (-not (Test-Path $builtInstaller)) {
+  Write-Host "ISCC_FAILED: missing $builtInstaller"
+  exit 1
+}
+Write-Host "ISCC_OK"
+
+# 6. Copy built installer back to Mac share
+New-Item -ItemType Directory -Force -Path "$RepoShare\dist" | Out-Null
+& robocopy "C:\lux-build\dist2" "$RepoShare\dist" "lux-$Version-setup.exe" /NP /R:3 /W:5 2>$null
+if ($LASTEXITCODE -ge 8) {
+  Write-Host "ROBOCOPY_INSTALLER_BACK_FAILED exit=$LASTEXITCODE"
+  exit 1
+}
+
+Set-Content -Path "C:\lux-build\win_pipeline_result.txt" -Value "WIN_PIPELINE_OK" -NoNewline
+Write-Host "WIN_PIPELINE_OK"
+PSEOF
+
+  local WIN_OUT="" PS_EC=0
+  WIN_OUT=$(win_ps_file "$ps_name") || PS_EC=$?
+  echo "$WIN_OUT"
+
+  # Ensure no lingering vctip survives on VM
+  win "taskkill /F /IM vctip.exe >nul 2>&1 & exit 0" >/dev/null 2>&1 || true
+
+  if [ "$PS_EC" -ne 0 ] || ! echo "$WIN_OUT" | grep -q "WIN_PIPELINE_OK"; then
+    local WIN_SENTINEL
+    WIN_SENTINEL=$(win "type C:\\lux-build\\win_pipeline_result.txt" 2>/dev/null | tr -d '\r\n' || true)
+    if [ "$WIN_SENTINEL" = "WIN_PIPELINE_OK" ]; then
+      echo "WARN: prlctl stdout missed WIN_PIPELINE_OK (PS_EC=$PS_EC) but sentinel shows WIN_PIPELINE_OK — trusting sentinel"
+    else
+      echo "ERROR: Windows build pipeline failed (PS_EC=$PS_EC, sentinel='$WIN_SENTINEL')" >&2
+      return 1
+    fi
   fi
-  echo "==> [retry $patch_attempt] Waiting 2s before retrying patch_iss..."
-  sleep 2
-done
-iss_ver=$(win "type C:\\lux-build\\lux\\dist-setup.iss")
-if [[ "$iss_ver" != *"OutputBaseFilename=lux-${VERSION}-setup"* ]]; then
-  echo "ERROR: dist-setup.iss not patched with $VERSION"
+
+  [ -f "$REPO/dist/lux-${VERSION}-setup.exe" ] && mv -f "$REPO/dist/lux-${VERSION}-setup.exe" "$WIN_INSTALLER"
+  [ -f "$WIN_INSTALLER" ] || { echo "ERROR: Windows installer not found — ISCC output missing or copy failed" >&2; return 1; }
+  local WIN_SIZE
+  WIN_SIZE=$(stat -f%z "$WIN_INSTALLER" 2>/dev/null || echo 0)
+  [ "$WIN_SIZE" -ge 5000000 ] || { echo "ERROR: Windows installer is only ${WIN_SIZE} bytes — too small, aborting" >&2; return 1; }
+  local dt=$(( $(date +%s) - t0 ))
+  echo "==> [Windows] Installer ready in ${dt}s: $(ls -lh "$WIN_INSTALLER" | awk '{print $5, $9}')"
+}
+
+MACOS_LOG="/tmp/lux_build_macos.log"
+WIN_LOG="/tmp/lux_build_windows.log"
+: > "$MACOS_LOG"
+: > "$WIN_LOG"
+
+# Stage cached lux_core.exe in dist/ (gitignored, excluded from robocopy & macOS bundle)
+cp -f "$WIN_CORE_CACHED_EXE" "$REPO/dist/.win_lux_core.exe"
+
+echo "==> Starting parallel builds: macOS ($MACOS_LOG) + Windows ($WIN_LOG)..."
+BUILD_T0=$(date +%s)
+
+( build_macos ) > "$MACOS_LOG" 2>&1 &
+MAC_PID=$!
+
+( build_windows ) > "$WIN_LOG" 2>&1 &
+WIN_PID=$!
+
+MAC_EC=0
+WIN_EC=0
+wait "$MAC_PID" || MAC_EC=$?
+wait "$WIN_PID" || WIN_EC=$?
+MAC_PID=""
+WIN_PID=""
+
+rm -f "$REPO/dist/.win_lux_core.exe"
+BUILD_DT=$(( $(date +%s) - BUILD_T0 ))
+echo "==> Parallel builds finished in ${BUILD_DT}s (macOS=$MAC_EC, Windows=$WIN_EC)"
+
+echo "── macOS build summary ──"
+tail -n 15 "$MACOS_LOG" || true
+echo "── Windows build summary ──"
+tail -n 25 "$WIN_LOG" || true
+
+if [ "$MAC_EC" -ne 0 ] || [ "$WIN_EC" -ne 0 ]; then
+  echo "" >&2
+  [ "$MAC_EC" -ne 0 ] && echo "ERROR: macOS build failed (exit $MAC_EC). Full log: $MACOS_LOG" >&2
+  [ "$WIN_EC" -ne 0 ] && echo "ERROR: Windows build failed (exit $WIN_EC). Full log: $WIN_LOG" >&2
   exit 1
 fi
 
-ISS_CHECK=$(win_ps_script "ensure_iss_kill.ps1" '
-$f = "C:\lux-build\lux\dist-setup.iss"
-$c = Get-Content $f -Raw
-# Strip AppMutex so Inno never blocks before InitializeSetup runs
-$c2 = [regex]::Replace($c, "(?m)^[ \t]*AppMutex[ \t]*=[^\r\n]*\r?\n", "")
-# Ensure CloseApplications=no and RestartApplications=no are active to bypass Windows Restart Manager
-if ($c2 -notmatch "(?m)^[ \t]*CloseApplications=no") {
-  $c2 = [regex]::Replace($c2, "(?m)^\[Setup\]\r?\n", "[Setup]`r`nCloseApplications=no`r`nRestartApplications=no`r`n")
-}
-if ($c2 -ne $c) { [System.IO.File]::WriteAllText($f, $c2); Write-Host "ISS_DIRECTIVES_UPDATED" }
-if (($c2 -match "procedure KillLux") -and ($c2 -match "function InitializeSetup")) { Write-Host "ISS_KILL_OK" } else { Write-Host "ISS_KILL_MISSING" }
-')
-echo "$ISS_CHECK" | grep -E "ISS_" || true
-echo "$ISS_CHECK" | grep -q "ISS_KILL_OK" || { echo "ERROR: Windows installer script has no auto-kill (KillLux/InitializeSetup) — would prompt and hang. Fix C:\\lux-build\\lux\\dist-setup.iss from windows/packaging/exe/setup.iss"; exit 1; }
-win "cd C:\\lux-build\\lux && \"C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe\" dist-setup.iss && echo ISCC_OK" | grep -q "ISCC_OK" || { echo "ERROR: Inno Setup failed"; exit 1; }
-
-# Copy to Mac
-mkdir -p "$REPO/dist"
-WIN_INSTALLER="$REPO/dist/Lux-${VERSION}-Windows-x64-Setup.exe"
-rm -f "$WIN_INSTALLER"   # never let a previous version's installer masquerade as this one
-win_robocopy "C:\\lux-build\\dist2" "${REPO_WIN_SHARE}\\dist" "lux-${VERSION}-setup.exe" /NP /R:3 /W:5
-[ -f "$REPO/dist/lux-${VERSION}-setup.exe" ] && mv -f "$REPO/dist/lux-${VERSION}-setup.exe" "$WIN_INSTALLER"
-[ -f "$WIN_INSTALLER" ] || { echo "ERROR: Windows installer not found — ISCC output missing or copy failed"; exit 1; }
-WIN_SIZE=$(stat -f%z "$WIN_INSTALLER" 2>/dev/null || echo 0)
-[ "$WIN_SIZE" -ge 5000000 ] || { echo "ERROR: Windows installer is only ${WIN_SIZE} bytes — too small, aborting"; exit 1; }
-echo "==> Windows installer ready: $(ls -lh "$WIN_INSTALLER" | awk '{print $5, $9}')"
+[ -f "dist/$DMG_NAME" ] || { echo "ERROR: macOS DMG missing: dist/$DMG_NAME" >&2; exit 1; }
+[ -f "$WIN_INSTALLER" ] || { echo "ERROR: Windows installer missing: $WIN_INSTALLER" >&2; exit 1; }
 
 # ── Step 5: Upload BOTH platforms, then update appcast atomically ──────────
-echo "==> Uploading both platforms..."
+# Sequential by design: both publish_appcast.py and publish_appcast_windows.py
+# read-modify-write the same appcast file (appcast.json / appcast-beta.json).
+# Parallelizing them would race and clobber one platform's entry.
+echo "==> Uploading both platforms (sequentially for atomic appcast updates)..."
 
 # Upload macOS DMG
 $UPLOAD_PY "$REPO/scripts/publish_appcast.py" "$VERSION" "dist/$DMG_NAME" --channel "$CHANNEL"
