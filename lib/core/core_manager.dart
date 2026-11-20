@@ -6,7 +6,9 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:lux/error.dart';
+import 'package:lux/model/app.dart';
 import 'package:lux/util/app_log.dart';
 import 'package:lux/util/process_manager.dart';
 import 'package:lux/util/proxy_env.dart';
@@ -45,6 +47,14 @@ class CoreManager {
   final String baseUrl;
 
   final Function onReady;
+  final AppStateModel appState;
+  final Future<List<ConnectivityResult>> Function() _checkConnectivity;
+  final Duration _disconnectDebounce;
+  final Duration _resumeDebounce;
+  final Duration _resumeRetryDelay;
+  final VoidCallback? onConnectionStateChanged;
+  final void Function(String msg)? _showNotification;
+
   final dio = Dio();
   var needRestart = false;
   late String baseHttpUrl;
@@ -52,13 +62,43 @@ class CoreManager {
   WebSocketChannel? _trafficChannel;
   WebSocketChannel? _runtimeStatusChannel;
   WebSocketChannel? _eventChannel;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  Timer? _disconnectTimer;
+  Timer? _resumeTimer;
+  bool _isResuming = false;
+
+  bool get pausedForNoNetwork => appState.pausedForNoNetwork;
+  set pausedForNoNetwork(bool value) => appState.pausedForNoNetwork = value;
+
+  bool get userWantsRunning => appState.userWantsRunning;
+  set userWantsRunning(bool value) => appState.userWantsRunning = value;
+
+  /// Returns true when [result] represents active online connectivity
+  /// (`wifi`, `ethernet`, `mobile`, `vpn`, `other`, etc.).
+  static bool isOnlineConnectivity(List<ConnectivityResult> result) {
+    return result.isNotEmpty && !result.contains(ConnectivityResult.none);
+  }
 
   CoreManager(
     this.baseUrl,
     this.coreProcess,
     this.token,
-    this.onReady,
-  ) {
+    this.onReady, {
+    AppStateModel? appState,
+    Stream<List<ConnectivityResult>>? connectivityStream,
+    Future<List<ConnectivityResult>> Function()? checkConnectivity,
+    Duration disconnectDebounce = const Duration(seconds: 2),
+    Duration resumeDebounce = const Duration(seconds: 2),
+    Duration resumeRetryDelay = const Duration(seconds: 3),
+    this.onConnectionStateChanged,
+    void Function(String msg)? showNotification,
+  })  : appState = appState ?? AppStateModel(ThemeMode.light, const Locale('en')),
+        _checkConnectivity =
+            checkConnectivity ?? (() => Connectivity().checkConnectivity()),
+        _disconnectDebounce = disconnectDebounce,
+        _resumeDebounce = resumeDebounce,
+        _resumeRetryDelay = resumeRetryDelay,
+        _showNotification = showNotification {
     baseHttpUrl = "http://$baseUrl";
     baseWsUrl = "ws://$baseUrl";
     dio.transformer = BackgroundTransformer()..jsonDecodeCallback = parseJson;
@@ -87,33 +127,183 @@ class CoreManager {
       return handler.next(options);
     }));
 
-    Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> result) async {
-      // Received changes in available connectivity types!
-
-      if (result.contains(ConnectivityResult.none)) {
-        await Future.delayed(const Duration(seconds: 2));
-        final List<ConnectivityResult> connectivityResult =
-            await (Connectivity().checkConnectivity());
-        if (!connectivityResult.contains(ConnectivityResult.none)) {
-          return;
-        }
-        var isStarted = await getIsStarted();
-        if (!isStarted) {
-          return;
-        }
-        var setting = await getSetting();
-        if (setting.mode == ProxyMode.tun || setting.mode == ProxyMode.mixed) {
-          await stop();
-          notifier.show(tr().noConnectionMsg);
-          debugPrint("no connection, stop core");
-        }
-      }
+    final stream = connectivityStream ?? Connectivity().onConnectivityChanged;
+    _connectivitySub = stream.listen((List<ConnectivityResult> result) {
+      handleConnectivityChanged(result);
       if (kDebugMode) {
         print(result);
       }
     });
+  }
+
+  void _notify(String Function() messageBuilder, String fallback) {
+    try {
+      final msg = buildContext != null ? messageBuilder() : fallback;
+      if (_showNotification != null) {
+        _showNotification!(msg);
+        return;
+      }
+      if (buildContext == null) return;
+      notifier.show(msg);
+    } catch (e) {
+      debugPrint('notify error: $e');
+    }
+  }
+
+  /// Cancels any pending disconnect or auto-resume debounce timers.
+  void cancelNetworkTimers() {
+    _disconnectTimer?.cancel();
+    _disconnectTimer = null;
+    _resumeTimer?.cancel();
+    _resumeTimer = null;
+  }
+
+  /// Releases connectivity subscription and timers.
+  void dispose() {
+    cancelNetworkTimers();
+    _connectivitySub?.cancel();
+    _connectivitySub = null;
+  }
+
+  /// Processes an OS connectivity change event.
+  void handleConnectivityChanged(List<ConnectivityResult> result) {
+    if (result.contains(ConnectivityResult.none)) {
+      _resumeTimer?.cancel();
+      _resumeTimer = null;
+
+      if (_disconnectTimer?.isActive ?? false) {
+        return;
+      }
+      _disconnectTimer = Timer(_disconnectDebounce, () async {
+        _disconnectTimer = null;
+        await _handleConfirmedDisconnect();
+      });
+      return;
+    }
+
+    if (isOnlineConnectivity(result)) {
+      _disconnectTimer?.cancel();
+      _disconnectTimer = null;
+
+      if (pausedForNoNetwork && userWantsRunning) {
+        scheduleAutoResume();
+      }
+    }
+  }
+
+  Future<void> _handleConfirmedDisconnect() async {
+    try {
+      final connectivityResult = await _checkConnectivity();
+      if (isOnlineConnectivity(connectivityResult)) {
+        return;
+      }
+      final isStarted = await getIsStarted();
+      if (!isStarted) {
+        return;
+      }
+      final setting = await getSetting();
+      if (setting.mode == ProxyMode.tun || setting.mode == ProxyMode.mixed) {
+        if (!userWantsRunning) {
+          await stop();
+          appState.updateIsStarted(false);
+          onConnectionStateChanged?.call();
+          return;
+        }
+        pausedForNoNetwork = true;
+        await stop();
+        appState.updateIsStarted(false);
+        onConnectionStateChanged?.call();
+        _notify(() => tr().noConnectionMsg, 'No available network. Disconnected');
+        appLog('NET', 'no connection, paused core (pausedForNoNetwork=true)');
+      }
+    } catch (e) {
+      appLog('NET', 'disconnect handler error: $e');
+    }
+  }
+
+  /// Debounces auto-resume for DHCP/route settling before starting the core.
+  void scheduleAutoResume() {
+    _resumeTimer?.cancel();
+    _resumeTimer = Timer(_resumeDebounce, () async {
+      _resumeTimer = null;
+      await triggerAutoResume();
+    });
+  }
+
+  /// Attempts to resume Lux after connectivity returns, retrying up to 2 times
+  /// while DHCP/routes settle.
+  Future<void> triggerAutoResume() async {
+    if (_isResuming) return;
+    if (!pausedForNoNetwork || !userWantsRunning) return;
+
+    _isResuming = true;
+    try {
+      final current = await _checkConnectivity();
+      if (!isOnlineConnectivity(current)) {
+        appLog('NET', 'auto-resume skipped: still offline ($current)');
+        return;
+      }
+
+      try {
+        if (await getIsStarted()) {
+          pausedForNoNetwork = false;
+          appState.updateIsStarted(true);
+          onConnectionStateChanged?.call();
+          return;
+        }
+      } catch (_) {}
+
+      const maxAttempts = 3; // initial attempt + up to 2 short retries
+      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (!pausedForNoNetwork || !userWantsRunning) {
+          appLog('NET', 'auto-resume aborted: cleared or manually stopped');
+          return;
+        }
+        final onlineNow = await _checkConnectivity();
+        if (!isOnlineConnectivity(onlineNow)) {
+          appLog('NET', 'auto-resume aborted: connectivity lost ($onlineNow)');
+          return;
+        }
+
+        try {
+          await start();
+          // Respect a manual OFF that occurred while start() was awaiting.
+          if (!userWantsRunning) {
+            pausedForNoNetwork = false;
+            try {
+              await stop();
+            } catch (_) {}
+            appState.updateIsStarted(false);
+            onConnectionStateChanged?.call();
+            return;
+          }
+          pausedForNoNetwork = false;
+          appState.updateIsStarted(true);
+          onConnectionStateChanged?.call();
+          _notify(() => tr().reconnectedMsg, 'Reconnected');
+          appLog('NET', 'auto-resumed core on attempt $attempt/$maxAttempts');
+          return;
+        } catch (e) {
+          appLog('NET', 'auto-resume attempt $attempt/$maxAttempts failed: $e');
+          if (attempt < maxAttempts) {
+            await Future.delayed(_resumeRetryDelay);
+          }
+        }
+      }
+    } finally {
+      _isResuming = false;
+    }
+  }
+
+  /// User-initiated stop (UI toggle or tray menu). Clears both
+  /// [pausedForNoNetwork] and [userWantsRunning] so manual OFF is always respected.
+  Future<void> manualStop() async {
+    cancelNetworkTimers();
+    pausedForNoNetwork = false;
+    userWantsRunning = false;
+    await stop();
+    appState.updateIsStarted(false);
+    onConnectionStateChanged?.call();
   }
 
   Future<void> makeRequestUntilSuccess(String url) async {

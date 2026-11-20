@@ -100,9 +100,11 @@ class _State extends State<AppHeaderBar> with WindowListener {
         isLoadingSwitch = true;
       });
       // Update intent before calling start/stop so the watchdog in home.dart
-      // knows whether to restart.
+      // knows whether to restart. Manual toggle always clears pausedForNoNetwork.
       final appState = Provider.of<AppStateModel>(context, listen: false);
+      appState.pausedForNoNetwork = false;
       appState.userWantsRunning = value;
+      widget.coreManager.cancelNetworkTimers();
       // Safety timeout: start() can retry ~15s x3 (~45s) and a wedged UAC
       // dialog or unresponsive core could hang longer. Cap the awaited op so
       // the spinner can never stick on forever and leave the toggle disabled.
@@ -112,7 +114,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
         // tools) are set centrally in CoreManager.start() — every start path
         // (toggle, tray, auto-connect, watchdog, wake) gets them.
       } else {
-        await widget.coreManager.stop().timeout(const Duration(seconds: 30));
+        await widget.coreManager.manualStop().timeout(const Duration(seconds: 30));
         // Env vars cleared centrally in CoreManager.stop().
       }
     } catch (e) {

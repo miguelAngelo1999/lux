@@ -9,6 +9,9 @@ class AppStateModel extends ChangeNotifier {
   // The watchdog only restarts when this is true, so a deliberate toggle-off
   // is respected and the app doesn't fight the user.
   bool userWantsRunning = false;
+  // Set when Lux was paused automatically due to loss of network connectivity
+  // (or woke up offline), so it auto-resumes when connectivity returns.
+  bool pausedForNoNetwork = false;
 
   Locale get locale => _locale;
   ThemeMode get theme => _theme;

@@ -48,6 +48,143 @@ Future<void> initClient(CoreManager? coreManager) async {
   await setAutoLaunch(coreManager);
 }
 
+/// Coordinates periodic watchdog health checks, offline skipping, and the
+/// safety-net auto-resume if an OS connectivity event was missed.
+class WatchdogController {
+  WatchdogController({
+    Future<List<ConnectivityResult>> Function()? checkConnectivity,
+    Duration retryDelayBase = const Duration(milliseconds: 500),
+    void Function(String msg)? showNotification,
+    VoidCallback? onRecovered,
+  })  : _checkConnectivity =
+            checkConnectivity ?? (() => Connectivity().checkConnectivity()),
+        _retryDelayBase = retryDelayBase,
+        _showNotification = showNotification,
+        _onRecovered = onRecovered;
+
+  final Future<List<ConnectivityResult>> Function() _checkConnectivity;
+  final Duration _retryDelayBase;
+  final void Function(String msg)? _showNotification;
+  final VoidCallback? _onRecovered;
+
+  int restartFails = 0;
+  static const int maxRestarts = 3;
+
+  Future<void> tick(CoreManager coreManager, AppStateModel appState) async {
+    if (!appState.userWantsRunning) return;
+
+    final connectivityResult = await _checkConnectivity();
+    if (!CoreManager.isOnlineConnectivity(connectivityResult)) {
+      appLog('WATCHDOG',
+          'offline ($connectivityResult) — skipping restart, preserving userWantsRunning');
+      return;
+    }
+
+    // Safety net: if an OS connectivity event was missed while paused for no
+    // network, trigger the auto-resume flow now that connectivity is online.
+    if (appState.pausedForNoNetwork) {
+      appLog('WATCHDOG',
+          'online while pausedForNoNetwork=true — triggering auto-resume');
+      await coreManager.triggerAutoResume();
+      return;
+    }
+
+    bool coreProcessAlive = true;
+    bool isStarted = false;
+    try {
+      isStarted = await coreManager.getIsStarted();
+    } catch (e) {
+      // Connection refused, timeout, or socket error indicates the daemon is down
+      coreProcessAlive = false;
+      appLog('WATCHDOG', 'core unreachable ($e) — process appears down');
+    }
+
+    if (coreProcessAlive && isStarted) {
+      // Healthy — clear the failure streak.
+      restartFails = 0;
+      return;
+    }
+
+    // Core or proxy is down but the user wants it running. Attempt a restart,
+    // but cap consecutive failures so a core that cannot stay up (bad config,
+    // auth rejected, TUN setup failing) does not loop forever every 30s.
+    if (restartFails >= maxRestarts) {
+      appLog('WATCHDOG',
+          'core failed to stay up after $maxRestarts restarts — giving up');
+      appState.userWantsRunning = false;
+      restartFails = 0;
+      _showNotification?.call(
+          'Lux could not stay connected. Check your proxy and credentials, then reconnect.');
+      return;
+    }
+
+    restartFails++;
+    appLog('WATCHDOG',
+        'core stopped unexpectedly (daemonDown=${!coreProcessAlive}) — restarting (attempt $restartFails/$maxRestarts)');
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        if (!coreProcessAlive) {
+          appLog('WATCHDOG', 'respawning lux_core process (retry $attempt/3)');
+          await coreManager.restartCore();
+          coreProcessAlive = true;
+        }
+
+        await coreManager.start();
+        final confirmed = await coreManager.getIsStarted();
+        if (confirmed) {
+          appLog('WATCHDOG',
+              'core reconnected and proxy running on attempt $attempt');
+          restartFails = 0;
+          appState.updateIsStarted(true);
+          _onRecovered?.call();
+          return;
+        }
+      } catch (err) {
+        appLog('WATCHDOG', 'restart attempt $attempt failed: $err');
+        if (attempt < 3) {
+          await Future.delayed(_retryDelayBase * attempt);
+        }
+      }
+    }
+  }
+}
+
+/// Handles wake-from-sleep network recovery: if offline at wake, preserves
+/// [AppStateModel.userWantsRunning] and marks [AppStateModel.pausedForNoNetwork]
+/// so Lux auto-resumes as soon as Wi-Fi/Ethernet associates.
+Future<bool> handlePowerWake({
+  required CoreManager coreManager,
+  required AppStateModel appState,
+  required bool needRestart,
+  Future<List<ConnectivityResult>> Function()? checkConnectivity,
+  VoidCallback? onNoConnection,
+}) async {
+  final check = checkConnectivity ?? (() => Connectivity().checkConnectivity());
+  if (needRestart) {
+    final connectivityResult = await check();
+    if (!CoreManager.isOnlineConnectivity(connectivityResult)) {
+      appState.pausedForNoNetwork = true;
+      onNoConnection?.call();
+      appLog('WAKE',
+          'offline at wake ($connectivityResult) — set pausedForNoNetwork=true');
+      return false;
+    }
+    appState.pausedForNoNetwork = true;
+    coreManager.scheduleAutoResume();
+    return true;
+  }
+
+  if (appState.pausedForNoNetwork && appState.userWantsRunning) {
+    final connectivityResult = await check();
+    if (CoreManager.isOnlineConnectivity(connectivityResult)) {
+      coreManager.scheduleAutoResume();
+      return true;
+    }
+  }
+  return false;
+}
+
 class _HomeState extends State<Home>
     with TrayListener, WindowListener, PowerMonitorListener {
   String baseUrl = "";
@@ -62,12 +199,16 @@ class _HomeState extends State<Home>
   dynamic coreError;
   bool _quickEditMode = false;
   Timer? _watchdogTimer;
-  // Watchdog restart backoff: count consecutive failed auto-restarts. After
-  // _maxWatchdogRestarts in a row the watchdog gives up instead of looping
-  // forever (the crash-loop seen on 2026-10-20/26), sets userWantsRunning=false
-  // and notifies the user. Reset to 0 whenever the core is confirmed running.
-  int _watchdogRestartFails = 0;
-  static const int _maxWatchdogRestarts = 3;
+  late final WatchdogController _watchdogController = WatchdogController(
+    showNotification: (msg) {
+      if (mounted) {
+        notifier.show(tl(context, msg));
+      }
+    },
+    onRecovered: () {
+      if (mounted) _refreshTray();
+    },
+  );
   // Mirrors AppStateModel.isStarted so the tray tooltip can be refreshed the
   // moment the live connection state changes (auto-connect, watchdog restart,
   // net-switch), not only on explicit user actions. Prevents the tray showing
@@ -238,9 +379,16 @@ class _HomeState extends State<Home>
     var curUrlStr =
         '$curHttpUrl/?client_version=$currentVersion&token=$secret&theme=${appState.theme == ThemeMode.dark ? 'dark' : 'light'}';
     debugPrint("dashboard url: $curUrlStr");
-    coreManager = CoreManager(curBaseUrl, process, secret, () {
-      _onCoreReady(appState);
-    });
+    coreManager = CoreManager(
+      curBaseUrl,
+      process,
+      secret,
+      () {
+        _onCoreReady(appState);
+      },
+      appState: appState,
+      onConnectionStateChanged: _refreshTray,
+    );
 
     coreManager!.certPrompt.addListener(_onCertPrompt);
 
@@ -522,73 +670,7 @@ class _HomeState extends State<Home>
   Future<void> _watchdog() async {
     if (coreManager == null) return;
     final appState = Provider.of<AppStateModel>(context, listen: false);
-    if (!appState.userWantsRunning) return;
-
-    bool coreProcessAlive = true;
-    bool isStarted = false;
-    try {
-      isStarted = await coreManager!.getIsStarted();
-    } catch (e) {
-      // Connection refused, timeout, or socket error indicates the daemon is down
-      coreProcessAlive = false;
-      appLog('WATCHDOG', 'core unreachable ($e) — process appears down');
-    }
-
-    if (coreProcessAlive && isStarted) {
-      // Healthy — clear the failure streak.
-      _watchdogRestartFails = 0;
-      return;
-    }
-
-    // Core or proxy is down but the user wants it running. Attempt a restart, but cap
-    // consecutive failures so a core that cannot stay up (bad config, auth
-    // rejected, TUN setup failing) does not loop forever every 30s. The
-    // 2026-10-20/26 crash-loop was exactly this: endless "core stopped —
-    // restarting" with no ceiling.
-    if (_watchdogRestartFails >= _maxWatchdogRestarts) {
-      // Give up: stop trying, surface it, and let the user re-enable.
-      appLog('WATCHDOG',
-          'core failed to stay up after $_maxWatchdogRestarts restarts — giving up');
-      appState.userWantsRunning = false;
-      _watchdogRestartFails = 0;
-      if (mounted) {
-        notifier.show(tl(context,
-            'Lux could not stay connected. Check your proxy and credentials, then reconnect.'));
-      }
-      return;
-    }
-
-    _watchdogRestartFails++;
-    appLog('WATCHDOG',
-        'core stopped unexpectedly (daemonDown=${!coreProcessAlive}) — restarting (attempt $_watchdogRestartFails/$_maxWatchdogRestarts)');
-
-    for (int attempt = 1; attempt <= 3; attempt++) {
-      try {
-        if (!coreProcessAlive) {
-          appLog('WATCHDOG', 'respawning lux_core process (retry $attempt/3)');
-          await coreManager!.restartCore();
-          coreProcessAlive = true;
-        }
-
-        await coreManager!.start();
-        final confirmed = await coreManager!.getIsStarted();
-        if (confirmed) {
-          appLog('WATCHDOG', 'core reconnected and proxy running on attempt $attempt');
-          _watchdogRestartFails = 0;
-          if (mounted) {
-            final state = Provider.of<AppStateModel>(context, listen: false);
-            state.updateIsStarted(true);
-            _refreshTray();
-          }
-          return;
-        }
-      } catch (err) {
-        appLog('WATCHDOG', 'restart attempt $attempt failed: $err');
-        if (attempt < 3) {
-          await Future.delayed(Duration(milliseconds: 500 * attempt));
-        }
-      }
-    }
+    await _watchdogController.tick(coreManager!, appState);
   }
 
   /// When proxy credentials expire / stop authenticating and ALL proxies are
@@ -607,9 +689,8 @@ class _HomeState extends State<Home>
     bool answered = false;
     final graceTimer = Timer(const Duration(minutes: 5), () {
       if (!answered && mounted) {
-        coreManager?.stop();
+        coreManager?.manualStop();
         appLog('CRED-EXPIRY', 'grace period elapsed — stopped core');
-        Provider.of<AppStateModel>(context, listen: false).userWantsRunning = false;
       }
     });
 
@@ -668,6 +749,7 @@ class _HomeState extends State<Home>
     _connectivitySub?.cancel();
     _autoSwitchDebounce?.cancel();
     coreManager?.certPrompt.removeListener(_onCertPrompt);
+    coreManager?.dispose();
     _appStateForTray?.removeListener(_onAppStateChanged);
     trayManager.removeListener(this);
     windowManager.removeListener(this);
@@ -702,10 +784,20 @@ class _HomeState extends State<Home>
       await windowManager.show();
       await windowManager.focus();
     } else if (key == 'connect') {
+      final appState = Provider.of<AppStateModel>(context, listen: false);
+      coreManager?.cancelNetworkTimers();
+      appState.pausedForNoNetwork = false;
+      appState.userWantsRunning = true;
       await coreManager?.start();
+      if (mounted) {
+        appState.updateIsStarted(true);
+      }
       _refreshTray();
     } else if (key == 'disconnect') {
-      await coreManager?.stop();
+      final appState = Provider.of<AppStateModel>(context, listen: false);
+      appState.pausedForNoNetwork = false;
+      appState.userWantsRunning = false;
+      await coreManager?.manualStop();
       _refreshTray();
     } else if (key.startsWith('proxy_select_')) {
       // Switch to selected proxy
@@ -762,26 +854,32 @@ class _HomeState extends State<Home>
     }
     final setting = await coreManager!.getSetting();
     if (setting.mode == ProxyMode.tun || setting.mode == ProxyMode.mixed) {
+      coreManager!.cancelNetworkTimers();
       needRestart = true;
       await coreManager!.stop();
+      if (mounted) {
+        Provider.of<AppStateModel>(context, listen: false)
+            .updateIsStarted(false);
+      }
     }
   }
 
   @override
   onPowerMonitorWokeUp() async {
     if (coreManager == null) return;
-    if (needRestart) {
-      needRestart = false;
-      final List<ConnectivityResult> connectivityResult =
-          await (Connectivity().checkConnectivity());
-      if (connectivityResult.contains(ConnectivityResult.none)) {
-        notifier.show(tr().noConnectionMsg);
-        return;
-      }
-      await Future.delayed(const Duration(seconds: 2));
-      await coreManager!.start();
-      notifier.show(tr().reconnectedMsg);
-    }
+    final appState = Provider.of<AppStateModel>(context, listen: false);
+    final wasNeedRestart = needRestart;
+    needRestart = false;
+    await handlePowerWake(
+      coreManager: coreManager!,
+      appState: appState,
+      needRestart: wasNeedRestart,
+      onNoConnection: () {
+        if (buildContext != null) {
+          notifier.show(tr().noConnectionMsg);
+        }
+      },
+    );
     // Wake is the highest-value trigger for auto-switch: laptop closed at
     // home, opened at the office (or vice versa).
     _scheduleAutoSwitchTrigger('wake');
