@@ -78,7 +78,7 @@ cleanup_on_err() {
   echo "==> [ERROR] Build failed at line $line (exit code $ec)!" >&2
   [ -n "${MAC_PID:-}" ] && kill "$MAC_PID" 2>/dev/null || true
   [ -n "${WIN_PID:-}" ] && kill "$WIN_PID" 2>/dev/null || true
-  rm -f "$REPO/dist/.win_lux_core.exe" "$REPO/dist/win_build_all.ps1" 2>/dev/null || true
+  rm -f "$REPO/dist/win_lux_core.exe" "$REPO/dist/win_build_all.ps1" 2>/dev/null || true
   if [ -f "$PUBSPEC_BACKUP" ]; then
     echo "==> Restoring original pubspec.yaml from backup..." >&2
     cp -f "$PUBSPEC_BACKUP" "$ORIG_PUBSPEC"
@@ -451,7 +451,7 @@ Copy-Item -Force "$RepoShare\lib\core\checksum.dart" "C:\lux-build\lux\lib\core\
 Copy-Item -Force "$RepoShare\dist-setup.iss" "C:\lux-build\lux\dist-setup.iss"
 
 # 2. Copy Mac-cross-compiled cached lux_core.exe into Windows assets\bin
-$coreShare = "$RepoShare\dist\.win_lux_core.exe"
+$coreShare = "$RepoShare\dist\win_lux_core.exe"
 $coreDest = "C:\lux-build\lux\assets\bin\lux_core.exe"
 New-Item -ItemType Directory -Force -Path "C:\lux-build\lux\assets\bin" | Out-Null
 if (-not (Test-Path $coreShare)) {
@@ -459,6 +459,7 @@ if (-not (Test-Path $coreShare)) {
   exit 1
 }
 Copy-Item -Force $coreShare $coreDest
+& attrib -R -H -S $coreDest 2>$null
 if (-not (Test-Path $coreDest) -or ((Get-Item $coreDest).Length -lt 1000000)) {
   Write-Host "CORE_EXE_COPY_FAILED"
   exit 1
@@ -654,7 +655,7 @@ WIN_LOG="/tmp/lux_build_windows.log"
 : > "$WIN_LOG"
 
 # Stage cached lux_core.exe in dist/ (gitignored, excluded from robocopy & macOS bundle)
-cp -f "$WIN_CORE_CACHED_EXE" "$REPO/dist/.win_lux_core.exe"
+cp -f "$WIN_CORE_CACHED_EXE" "$REPO/dist/win_lux_core.exe"
 
 echo "==> Starting parallel builds: macOS ($MACOS_LOG) + Windows ($WIN_LOG)..."
 BUILD_T0=$(date +%s)
@@ -672,7 +673,7 @@ wait "$WIN_PID" || WIN_EC=$?
 MAC_PID=""
 WIN_PID=""
 
-rm -f "$REPO/dist/.win_lux_core.exe"
+rm -f "$REPO/dist/win_lux_core.exe"
 BUILD_DT=$(( $(date +%s) - BUILD_T0 ))
 echo "==> Parallel builds finished in ${BUILD_DT}s (macOS=$MAC_EC, Windows=$WIN_EC)"
 
@@ -685,7 +686,7 @@ if [ "$MAC_EC" -ne 0 ] || [ "$WIN_EC" -ne 0 ]; then
   echo "" >&2
   [ "$MAC_EC" -ne 0 ] && echo "ERROR: macOS build failed (exit $MAC_EC). Full log: $MACOS_LOG" >&2
   [ "$WIN_EC" -ne 0 ] && echo "ERROR: Windows build failed (exit $WIN_EC). Full log: $WIN_LOG" >&2
-  exit 1
+  false
 fi
 
 [ -f "dist/$DMG_NAME" ] || { echo "ERROR: macOS DMG missing: dist/$DMG_NAME" >&2; exit 1; }
