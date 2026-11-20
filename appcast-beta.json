@@ -1,17 +1,17 @@
 {
-  "version": "1.50.114",
+  "version": "1.50.115",
   "channel": "beta",
-  "notes": "feat(proxies): inline proxy credentials strip and plain-language status banner",
+  "notes": "fix(updater,proxies): refresh stale appcast hash on retry/verify and polish inline proxy auth UI",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "3f4bc056d0f34fea8ecb4141a6ec6df9b4cec9a2c0bd51e65d8b3fc9a360a191",
-    "size": 42853356,
-    "version": "1.50.114"
+    "sha256": "10a7e3f7ad2c61bd24ce374d3fd4ca305837db485d92be0a4db11eaa2a1110d8",
+    "size": 42861179,
+    "version": "1.50.115"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "10b3b2f47be9958208c38ca99d7ad21211b77526a90020ec67b5591eed059489",
-    "size": 32727462,
-    "version": "1.50.114"
+    "sha256": "8f080a4103a117bd647e12a2c95d5f9c12e36818604fd23c086c98202cfd1cd3",
+    "size": 32729090,
+    "version": "1.50.115"
   }
 }
