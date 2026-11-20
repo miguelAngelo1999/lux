@@ -1,17 +1,17 @@
 {
-  "version": "1.50.115",
+  "version": "1.50.116",
   "channel": "beta",
-  "notes": "fix(updater,proxies): refresh stale appcast hash on retry/verify and polish inline proxy auth UI",
+  "notes": "fix(windows): enforce atomic Win32 single-instance mutex and cross-UIPI window focus",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "10a7e3f7ad2c61bd24ce374d3fd4ca305837db485d92be0a4db11eaa2a1110d8",
-    "size": 42861179,
-    "version": "1.50.115"
+    "sha256": "5d4bc3922ac7a1df4d872f1dad0ddf3456a056918ca8d825da2e8b388dc4a52f",
+    "size": 42861584,
+    "version": "1.50.116"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "8f080a4103a117bd647e12a2c95d5f9c12e36818604fd23c086c98202cfd1cd3",
-    "size": 32729090,
-    "version": "1.50.115"
+    "sha256": "2120b5372877f50e0ce7b9bc47a86d42cea7c66f9c1d8afcf3d2b0ae710834b3",
+    "size": 32727725,
+    "version": "1.50.116"
   }
 }

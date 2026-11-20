@@ -375,6 +375,7 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 $env:VCPKG_DISABLE_METRICS = "1"
 $env:VCToolsTelemetry = "0"
 $env:VSCMD_SKIP_SENDTELEMETRY = "1"
+$env:MSBUILDDISABLENODEREUSE = "1"
 
 function Stop-LingeringBuildHelpers {
   Get-Process -Name "vctip" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -393,6 +394,7 @@ foreach ($f in @(".flutter-plugins",".flutter-plugins-dependencies")) {
 }
 if (Test-Path windows\flutter\ephemeral) { Remove-Item -Recurse -Force windows\flutter\ephemeral -ErrorAction SilentlyContinue }
 if (Test-Path .dart_tool\hooks_runner) { Remove-Item -Recurse -Force .dart_tool\hooks_runner -ErrorAction SilentlyContinue }
+if (Test-Path build\flutter_assets) { Remove-Item -Recurse -Force build\flutter_assets -ErrorAction SilentlyContinue }
 
 $exe = "build\windows\x64\runner\Release\lux.exe"
 if (Test-Path $exe) { Remove-Item -Force $exe -ErrorAction SilentlyContinue }
@@ -404,27 +406,27 @@ if (-not (Test-Path ".flutter-plugins-dependencies")) {
 
 $outLog = "C:\lux-build\flutter_stdout.log"
 $errLog = "C:\lux-build\flutter_stderr.log"
-Remove-Item -Force $outLog, $errLog -ErrorAction SilentlyContinue
 
-$p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
-     -ArgumentList "build","windows","--release","--no-pub" `
-     -RedirectStandardOutput $outLog -RedirectStandardError $errLog `
-     -Wait -PassThru -NoNewWindow
-Stop-LingeringBuildHelpers
-if (Test-Path $outLog) { Get-Content $outLog }
-if (Test-Path $errLog) { Get-Content $errLog }
-if ($p.ExitCode -ne 0) {
-  Write-Host "==> First build attempt exited with $($p.ExitCode), retrying once..."
-  $p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
-       -ArgumentList "build","windows","--release","--no-pub" `
-       -RedirectStandardOutput $outLog -RedirectStandardError $errLog `
-       -Wait -PassThru -NoNewWindow
+function Invoke-FlutterWinBuild {
+  Remove-Item -Force $outLog, $errLog -ErrorAction SilentlyContinue
+  $proc = Start-Process -FilePath "cmd.exe" `
+       -ArgumentList "/c","C:\lux-build\flutter\bin\flutter.bat build windows --release --no-pub > `"$outLog`" 2> `"$errLog`"" `
+       -PassThru -WindowStyle Hidden
+  while (-not $proc.HasExited) { Start-Sleep -Seconds 2 }
   Stop-LingeringBuildHelpers
+  return $proc.ExitCode
+}
+
+$buildExit = Invoke-FlutterWinBuild
+if ($buildExit -ne 0) {
+  Write-Host "==> First build attempt exited with $buildExit, retrying once..."
+  if (Test-Path build\flutter_assets) { Remove-Item -Recurse -Force build\flutter_assets -ErrorAction SilentlyContinue }
+  $buildExit = Invoke-FlutterWinBuild
+}
+if ($buildExit -ne 0) {
   if (Test-Path $outLog) { Get-Content $outLog }
   if (Test-Path $errLog) { Get-Content $errLog }
-}
-if ($p.ExitCode -ne 0) {
-  Write-Host "FLUTTER_FAILED: build exit $($p.ExitCode)"
+  Write-Host "FLUTTER_FAILED: build exit $buildExit"
   exit 1
 }
 if (-not (Test-Path $exe)) {
@@ -433,6 +435,8 @@ if (-not (Test-Path $exe)) {
   exit 1
 }
 Set-Content -Path "C:\lux-build\flutter_build_result.txt" -Value "FLUTTER_OK" -NoNewline
+if (Test-Path $outLog) { Get-Content $outLog }
+if (Test-Path $errLog) { Get-Content $errLog }
 Write-Host "FLUTTER_OK"
 ') || true
 echo "$FLUTTER_OUT" | tail -5
@@ -443,7 +447,7 @@ win "taskkill /F /IM vctip.exe >nul 2>&1 & exit 0" >/dev/null 2>&1 || true
 # Read the result from the sentinel file the PS script wrote, which survives a
 # prlctl-exec stdout wedge (2026-11-01). Fall back to captured stdout only if
 # the sentinel is unreadable.
-FLUTTER_RESULT=$(win "type C:\\lux-build\\flutter_build_result.txt" | tr -d '\r\n')
+FLUTTER_RESULT=$(win "type C:\\lux-build\\flutter_build_result.txt" 2>/dev/null | tr -d '\r\n' || true)
 if [ "$FLUTTER_RESULT" != "FLUTTER_OK" ]; then
   if echo "$FLUTTER_OUT" | grep -q "FLUTTER_OK"; then
     echo "WARN: sentinel unreadable ('$FLUTTER_RESULT') but stdout shows FLUTTER_OK — trusting stdout"
