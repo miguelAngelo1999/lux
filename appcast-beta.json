@@ -1,17 +1,17 @@
 {
-  "version": "1.50.117",
+  "version": "1.50.118",
   "channel": "beta",
-  "notes": "fix(release): clear SMB readonly attribute on copied ISS and handle non-UTF8 VM output",
+  "notes": "feat(ui,security): collapse proxy cards by default and require admin auth to peek non-locked inline passwords",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "3d879fbd18a6ef6ad296797986c212a553898b7bfd05fa5fbc1fd5550697b851",
-    "size": 42866311,
-    "version": "1.50.117"
+    "sha256": "43514ca3279092f37a5abd4dc07955157ae071c3fee217f48bd672c628313463",
+    "size": 42866908,
+    "version": "1.50.118"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "f206fd56942f2c256c4b40522c4756669ecc81ef7cf9db8e8464a9e3cc2547db",
-    "size": 38343187,
-    "version": "1.50.117"
+    "sha256": "92687749eb34ea263f1e0032be01b1ca9270ef369b726131e2bb5986f8b50563",
+    "size": 38343079,
+    "version": "1.50.118"
   }
 }
