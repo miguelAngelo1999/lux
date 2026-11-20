@@ -96,14 +96,6 @@ void exitApp() async {
     try {
       Process.runSync('taskkill', ['/F', '/IM', 'lux_core.exe']);
     } catch (_) {}
-    try {
-      final appDir = Platform.environment['APPDATA'] ??
-          Platform.environment['LOCALAPPDATA'] ??
-          Platform.environment['TEMP'] ??
-          '';
-      final lockFile = File('$appDir/lux/lux_app.lock');
-      if (await lockFile.exists()) await lockFile.delete();
-    } catch (_) {}
   }
   // Remove the single-instance lock file so a future launch isn't blocked
   if (Platform.isMacOS) {

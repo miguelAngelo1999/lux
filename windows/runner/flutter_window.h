@@ -8,6 +8,10 @@
 
 #include "win32_window.h"
 
+// Returns the registered custom Win32 message used to wake and focus an
+// existing Lux window across instances (including across UIPI).
+UINT GetShowWindowMessage();
+
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:

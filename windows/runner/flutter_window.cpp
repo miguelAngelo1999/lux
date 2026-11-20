@@ -4,6 +4,12 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+UINT GetShowWindowMessage() {
+  static const UINT kShowWindowMsg =
+      ::RegisterWindowMessageW(L"com.github.igoogolx.lux.SHOW_WINDOW");
+  return kShowWindowMsg;
+}
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -13,6 +19,10 @@ bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+
+  // Allow non-elevated launches to send kShowWindowMsg to an elevated window.
+  ::ChangeWindowMessageFilterEx(GetHandle(), GetShowWindowMessage(),
+                                MSGFLT_ALLOW, nullptr);
 
   RECT frame = GetClientArea();
 
@@ -46,6 +56,21 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == GetShowWindowMessage()) {
+    LONG_PTR ex_style = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if ((ex_style & WS_EX_TOOLWINDOW) != 0) {
+      ::SetWindowLongPtrW(
+          hwnd, GWL_EXSTYLE,
+          (ex_style & ~static_cast<LONG_PTR>(WS_EX_TOOLWINDOW)) |
+              WS_EX_APPWINDOW);
+    }
+    ::ShowWindow(hwnd, SW_SHOW);
+    ::ShowWindow(hwnd, SW_RESTORE);
+    ::SetForegroundWindow(hwnd);
+    ::BringWindowToTop(hwnd);
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
