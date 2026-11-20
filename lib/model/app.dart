@@ -11,7 +11,13 @@ class AppStateModel extends ChangeNotifier {
   bool userWantsRunning = false;
   // Set when Lux was paused automatically due to loss of network connectivity
   // (or woke up offline), so it auto-resumes when connectivity returns.
-  bool pausedForNoNetwork = false;
+  bool _pausedForNoNetwork = false;
+  bool get pausedForNoNetwork => _pausedForNoNetwork;
+  set pausedForNoNetwork(bool value) {
+    if (_pausedForNoNetwork == value) return;
+    _pausedForNoNetwork = value;
+    notifyListeners();
+  }
 
   Locale get locale => _locale;
   ThemeMode get theme => _theme;

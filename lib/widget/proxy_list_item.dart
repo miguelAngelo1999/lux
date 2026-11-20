@@ -11,6 +11,36 @@ import '../util/cert_trust.dart';
 /// Result state of the per-proxy reachability test.
 enum TestState { untested, testing, reachable, unreachable, certError, authError, notApplicable }
 
+/// Snapshot of a proxy's latest test outcome reported to the parent page.
+class ProxyTestStatus {
+  final TestState state;
+  final int latencyMs;
+  final bool pacReachable;
+  final String errorMessage;
+
+  const ProxyTestStatus({
+    this.state = TestState.untested,
+    this.latencyMs = 0,
+    this.pacReachable = false,
+    this.errorMessage = '',
+  });
+}
+
+/// Callback bridge attached to the currently selected [ProxyListItem] so
+/// page-level actions (e.g. status banner buttons) can focus the inline
+/// password field, run a test, or open the cert-trust flow.
+class ProxyItemController {
+  VoidCallback? focusPassword;
+  VoidCallback? runTest;
+  VoidCallback? promptCertTrust;
+
+  void detach() {
+    focusPassword = null;
+    runTest = null;
+    promptCertTrust = null;
+  }
+}
+
 class ProxyListItem extends StatefulWidget {
   final ProxyItem item;
   final void Function(ProxyItemAction action) onChange;
@@ -19,6 +49,9 @@ class ProxyListItem extends StatefulWidget {
   // proxy, not only the radio dot. [selected] drives the selected styling.
   final bool selected;
   final void Function(String id)? onSelect;
+  final void Function(ProxyTestStatus status)? onTestStatusChanged;
+  final ProxyItemController? selectedController;
+  final VoidCallback? onCredentialsSaved;
 
   const ProxyListItem({
     super.key,
@@ -27,6 +60,9 @@ class ProxyListItem extends StatefulWidget {
     this.coreManager,
     this.selected = false,
     this.onSelect,
+    this.onTestStatusChanged,
+    this.selectedController,
+    this.onCredentialsSaved,
   });
 
   @override
@@ -35,10 +71,22 @@ class ProxyListItem extends StatefulWidget {
 
 class _ProxyListItemState extends State<ProxyListItem> {
   final menuController = MenuController();
+  final _usernameCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _passwordFocus = FocusNode();
+
   TestState _state = TestState.untested;
   int _latencyMs = 0;
   bool _pacReachable = false;
   String _errorMessage = '';
+
+  bool _obscurePassword = true;
+  bool _retyping = false;
+  bool _isSavingCredentials = false;
+  bool _usernameDirty = false;
+  bool _passwordDirty = false;
+  bool _effectivePasswordLocked = false;
+  bool _detailLoadedForSelection = false;
 
   /// A PAC-only proxy has a PAC URL and no fixed server, so a latency test to a
   /// single upstream is meaningless — show "PAC — n/a" instead of a red fail.
@@ -48,6 +96,205 @@ class _ProxyListItemState extends State<ProxyListItem> {
     return pac.isNotEmpty && server.isEmpty;
   }
 
+  /// Proxy types that authenticate with username/password.
+  bool get _supportsCredentials {
+    if (widget.item.type == 'direct') return false;
+    return widget.item.type == 'http' ||
+        widget.item.type == 'socks5' ||
+        (widget.item.pacUrl ?? '').isNotEmpty;
+  }
+
+  bool get _isLockedView => _effectivePasswordLocked && !_retyping;
+
+  ProxyTestStatus get _currentStatus => ProxyTestStatus(
+        state: _state,
+        latencyMs: _latencyMs,
+        pacReachable: _pacReachable,
+        errorMessage: _errorMessage,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    _syncInitialCredentials();
+    if (widget.selected) {
+      _attachSelectedController();
+      _loadSelectedDetail();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ProxyListItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.id != widget.item.id) {
+      _usernameDirty = false;
+      _passwordDirty = false;
+      _retyping = false;
+      _detailLoadedForSelection = false;
+      _state = TestState.untested;
+      _latencyMs = 0;
+      _pacReachable = false;
+      _errorMessage = '';
+      _syncInitialCredentials();
+    } else {
+      if (!_usernameDirty &&
+          (widget.item.username ?? '').isNotEmpty &&
+          _usernameCtrl.text != widget.item.username) {
+        _usernameCtrl.text = widget.item.username!;
+      }
+      if (!_retyping) {
+        _effectivePasswordLocked = widget.item.passwordLocked;
+      }
+    }
+
+    if (widget.selected && !oldWidget.selected) {
+      _attachSelectedController();
+      _loadSelectedDetail();
+      if (_state != TestState.untested) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.onTestStatusChanged?.call(_currentStatus);
+        });
+      }
+    } else if (!widget.selected && oldWidget.selected) {
+      oldWidget.selectedController?.detach();
+    } else if (widget.selected) {
+      _attachSelectedController();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.selected) {
+      widget.selectedController?.detach();
+    }
+    _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
+    _passwordFocus.dispose();
+    super.dispose();
+  }
+
+  void _syncInitialCredentials() {
+    _effectivePasswordLocked = widget.item.passwordLocked;
+    _usernameCtrl.text = widget.item.username ?? '';
+    if (!_effectivePasswordLocked) {
+      _passwordCtrl.text = widget.item.password ?? '';
+    } else {
+      _passwordCtrl.clear();
+    }
+  }
+
+  void _attachSelectedController() {
+    final ctrl = widget.selectedController;
+    if (ctrl == null || !widget.selected) return;
+    ctrl.focusPassword = _focusPasswordField;
+    ctrl.runTest = _testDelay;
+    ctrl.promptCertTrust = _promptCertTrust;
+  }
+
+  Future<void> _loadSelectedDetail() async {
+    if (!_supportsCredentials || widget.coreManager == null) return;
+    if (_detailLoadedForSelection) return;
+    _detailLoadedForSelection = true;
+    final detail = await widget.coreManager!.getProxyDetail(widget.item.id);
+    if (!mounted || detail == null) return;
+    final locked =
+        (detail.raw['passwordLocked'] as bool?) ?? widget.item.passwordLocked;
+    final remoteUser = (detail.raw['username'] as String?) ?? '';
+    final remotePass = detail.password ?? '';
+    setState(() {
+      if (!_retyping) {
+        _effectivePasswordLocked = locked;
+      }
+      if (!_usernameDirty && remoteUser.isNotEmpty) {
+        _usernameCtrl.text = remoteUser;
+      }
+      if (!locked && !_retyping && !_passwordDirty && remotePass.isNotEmpty) {
+        _passwordCtrl.text = remotePass;
+      }
+    });
+  }
+
+  void _startRetype() {
+    setState(() {
+      _retyping = true;
+      _obscurePassword = true;
+      _passwordCtrl.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _passwordFocus.requestFocus();
+    });
+  }
+
+  void _focusPasswordField() {
+    if (!mounted || !_supportsCredentials) return;
+    if (_isLockedView) {
+      _startRetype();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _passwordFocus.requestFocus();
+    });
+  }
+
+  Future<void> _saveAndTest() async {
+    if (_isSavingCredentials || _state == TestState.testing) return;
+    if (widget.coreManager == null) return;
+
+    final trimmedUsername = _usernameCtrl.text.trim();
+    _usernameCtrl.text = trimmedUsername;
+    setState(() => _isSavingCredentials = true);
+
+    try {
+      final detail = await widget.coreManager!.getProxyDetail(widget.item.id);
+      final updated = detail != null
+          ? Map<String, dynamic>.from(detail.raw)
+          : <String, dynamic>{
+              'id': widget.item.id,
+              'name': widget.item.name,
+              'type': widget.item.type,
+              if (widget.item.server != null) 'server': widget.item.server,
+              if (widget.item.port != null) 'port': widget.item.port,
+              if ((widget.item.pacUrl ?? '').isNotEmpty)
+                'pacUrl': widget.item.pacUrl,
+            };
+
+      updated['username'] = trimmedUsername;
+      if (!_isLockedView) {
+        updated['password'] = _passwordCtrl.text;
+        if (_retyping && _passwordCtrl.text.isNotEmpty) {
+          updated.remove('passwordLocked');
+        }
+      }
+
+      await widget.coreManager!.updateProxy(widget.item.id, updated);
+      if (!mounted) return;
+      setState(() {
+        _usernameDirty = false;
+        _passwordDirty = false;
+        if (_retyping && _passwordCtrl.text.isNotEmpty) {
+          _effectivePasswordLocked = false;
+          _retyping = false;
+        }
+      });
+      widget.onCredentialsSaved?.call();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save: $e')),
+        );
+      }
+      return;
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingCredentials = false);
+      }
+    }
+
+    if (mounted) {
+      await _testDelay();
+    }
+  }
+
   Future<void> _testDelay() async {
     if (_state == TestState.testing || widget.coreManager == null) return;
     setState(() {
@@ -55,6 +302,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
       _pacReachable = false;
       _errorMessage = '';
     });
+    widget.onTestStatusChanged?.call(_currentStatus);
     final result = await widget.coreManager!.testProxyDelayDetailed(widget.item.id);
     if (!mounted) return;
     setState(() {
@@ -81,6 +329,10 @@ class _ProxyListItemState extends State<ProxyListItem> {
         _state = TestState.unreachable;
       }
     });
+    widget.onTestStatusChanged?.call(_currentStatus);
+    if (_state == TestState.authError && widget.selected && _supportsCredentials) {
+      _focusPasswordField();
+    }
     // Note: unlike before, we do NOT auto-open the cert dialog. The certError
     // state shows a "Trust?" chip the user taps deliberately (_promptCertTrust).
   }
@@ -331,6 +583,198 @@ class _ProxyListItemState extends State<ProxyListItem> {
     );
   }
 
+  Widget _buildInlineCredentialsStrip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final item = widget.item;
+    final isAuthError = _state == TestState.authError;
+    const authErrorColor = Color(0xFFE05638);
+
+    final usernameField = TextField(
+      key: Key('inline-username-${item.id}'),
+      controller: _usernameCtrl,
+      style: const TextStyle(fontSize: 12),
+      decoration: InputDecoration(
+        labelText: tl(context, 'Username'),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        border: const OutlineInputBorder(),
+      ),
+      textInputAction: TextInputAction.done,
+      onChanged: (_) => _usernameDirty = true,
+      onSubmitted: (_) => _saveAndTest(),
+    );
+
+    final Widget passwordField = _isLockedView
+        ? InputDecorator(
+            key: Key('inline-password-locked-${item.id}'),
+            decoration: InputDecoration(
+              labelText: tl(context, 'Password'),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              border: const OutlineInputBorder(),
+              suffixIcon: TextButton(
+                key: Key('inline-retype-${item.id}'),
+                onPressed: _startRetype,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  tl(context, 'Retype'),
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+            ),
+            child: const Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '••••••••••',
+                    style: TextStyle(fontSize: 13, letterSpacing: 1.5),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(Icons.lock_outline, size: 14, color: Colors.grey),
+              ],
+            ),
+          )
+        : TextField(
+            key: Key('inline-password-${item.id}'),
+            controller: _passwordCtrl,
+            focusNode: _passwordFocus,
+            obscureText: _obscurePassword,
+            style: const TextStyle(fontSize: 12),
+            decoration: InputDecoration(
+              labelText: tl(context, 'Password'),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                key: Key('inline-password-toggle-${item.id}'),
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  size: 16,
+                ),
+                tooltip: tl(context, _obscurePassword ? 'Show' : 'Hide'),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              ),
+            ),
+            textInputAction: TextInputAction.done,
+            onChanged: (_) => _passwordDirty = true,
+            onSubmitted: (_) => _saveAndTest(),
+          );
+
+    final saveButton = SizedBox(
+      height: 32,
+      child: FilledButton.tonal(
+        key: Key('inline-save-test-${item.id}'),
+        onPressed: (widget.coreManager == null ||
+                _isSavingCredentials ||
+                _state == TestState.testing)
+            ? null
+            : _saveAndTest,
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(0, 32),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: _isSavingCredentials
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(
+                tl(context, 'Save & Test'),
+                style: const TextStyle(fontSize: 11.5),
+              ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(36, 0, 12, 10),
+      child: Container(
+        key: Key('inline-auth-strip-${item.id}'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isAuthError
+              ? authErrorColor.withValues(alpha: 0.08)
+              : cs.surface.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isAuthError
+                ? authErrorColor
+                : cs.outline.withValues(alpha: 0.25),
+            width: isAuthError ? 1.2 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isAuthError) ...[
+              Row(
+                children: [
+                  const Icon(Icons.error_outline,
+                      size: 14, color: authErrorColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      tl(context, 'Invalid username or password'),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: authErrorColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+            ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 360) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: usernameField),
+                          const SizedBox(width: 8),
+                          Expanded(child: passwordField),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: saveButton,
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(flex: 3, child: usernameField),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 4, child: passwordField),
+                    const SizedBox(width: 8),
+                    saveButton,
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -341,197 +785,207 @@ class _ProxyListItemState extends State<ProxyListItem> {
         ? item.name
         : '${item.server ?? ''}:${item.port ?? ''}';
 
+    final headerRow = InkWell(
+      // Whole-row select — the core fix. Tapping anywhere that isn't an
+      // explicit action control (Test button / result chip / ⋯ menu)
+      // selects this proxy.
+      onTap: widget.onSelect == null ? null : () => widget.onSelect!(item.id),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(children: [
+          // Leading radio (visual + keyboard; inherits the ancestor
+          // RadioGroup so Space/arrow keys still work).
+          Radio<String>(value: item.id),
+          const SizedBox(width: 4),
+          // Name + subtitle (part of the select surface)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Flexible(
+                    child: Text(
+                      titleText,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (selected) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withAlpha(36),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(tl(context, 'Active'),
+                          style: const TextStyle(
+                              fontSize: 9, color: Colors.green)),
+                    ),
+                  ],
+                ]),
+                const SizedBox(height: 2),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: cs.secondaryContainer,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(_typeLabel(item.type),
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: cs.onSecondaryContainer)),
+                  ),
+                  if (item.server != null && item.server!.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text('${item.server}:${item.port}',
+                          style:
+                              TextStyle(fontSize: 10, color: cs.outline),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ]),
+                if (_errorMessage.isNotEmpty &&
+                    (_state == TestState.unreachable ||
+                     _state == TestState.authError ||
+                     _state == TestState.certError)) ...[
+                  const SizedBox(height: 2),
+                  Tooltip(
+                    message: _errorMessage,
+                    child: Text(
+                      _errorMessage,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        color: _state == TestState.certError
+                            ? const Color(0xFFE0A31E)
+                            : cs.error,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // ── Trailing action cluster: bounded, do NOT select the row ──
+          if (widget.coreManager != null) ...[
+            _resultChip(context),
+            const SizedBox(width: 6),
+            // Explicit, labeled Trust button — only when the proxy is
+            // reachable but its certificate isn't trusted. Opens the
+            // same cert-trust flow as tapping the "Trust?" chip.
+            if (_state == TestState.certError) ...[
+              SizedBox(
+                height: 26,
+                child: OutlinedButton(
+                  onPressed: _promptCertTrust,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: const Size(0, 26),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: const BorderSide(color: Color(0xFFE0A31E)),
+                    foregroundColor: const Color(0xFFE0A31E),
+                  ),
+                  child: Text(tl(context, 'Trust'),
+                      style: const TextStyle(fontSize: 11)),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            // Explicit, labeled PAC Rules button
+            if ((item.pacUrl ?? '').isNotEmpty) ...[
+              SizedBox(
+                height: 26,
+                child: OutlinedButton(
+                  onPressed: _openPacRules,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 26),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: BorderSide(color: cs.outline.withAlpha(100)),
+                    foregroundColor: cs.onSurfaceVariant,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.alt_route, size: 12),
+                      const SizedBox(width: 4),
+                      Text(tl(context, 'PAC'),
+                          style: const TextStyle(fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            // Explicit, labeled Test button (Option B).
+            SizedBox(
+              height: 26,
+              child: OutlinedButton(
+                onPressed:
+                    _state == TestState.testing ? null : _testDelay,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(0, 26),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  side: BorderSide(color: cs.primary.withAlpha(140)),
+                  foregroundColor: cs.primary,
+                ),
+                child: Text(tl(context, 'Test'),
+                    style: const TextStyle(fontSize: 11)),
+              ),
+            ),
+            const SizedBox(width: 2),
+          ],
+          ProxyItemActionMenu(
+            onClick: widget.onChange,
+            controller: menuController,
+            id: item.id,
+            type: item.type,
+            passwordLocked: item.passwordLocked,
+            hasPac: (item.pacUrl ?? '').isNotEmpty,
+          ),
+        ]),
+      ),
+    );
+
     return Semantics(
       inMutuallyExclusiveGroup: true,
       selected: selected,
       label: titleText,
       child: Material(
         color: selected ? cs.primaryContainer.withAlpha(90) : Colors.transparent,
-        child: InkWell(
-          // Whole-row select — the core fix. Tapping anywhere that isn't an
-          // explicit action control (Test button / result chip / ⋯ menu)
-          // selects this proxy.
-          onTap: widget.onSelect == null ? null : () => widget.onSelect!(item.id),
-          child: Stack(children: [
-            if (selected)
-              Positioned(
-                left: 0, top: 6, bottom: 6,
-                child: Container(
-                  width: 3,
-                  decoration: BoxDecoration(
-                    color: cs.primary,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
+        child: Stack(children: [
+          if (selected)
+            Positioned(
+              left: 0, top: 6, bottom: 6,
+              child: Container(
+                width: 3,
+                decoration: BoxDecoration(
+                  color: cs.primary,
+                  borderRadius: BorderRadius.circular(3),
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Row(children: [
-                // Leading radio (visual + keyboard; inherits the ancestor
-                // RadioGroup so Space/arrow keys still work).
-                Radio<String>(value: item.id),
-                const SizedBox(width: 4),
-                // Name + subtitle (part of the select surface)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(children: [
-                        Flexible(
-                          child: Text(
-                            titleText,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight:
-                                  selected ? FontWeight.w600 : FontWeight.w400,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (selected) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withAlpha(36),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(tl(context, 'Active'),
-                                style: const TextStyle(
-                                    fontSize: 9, color: Colors.green)),
-                          ),
-                        ],
-                      ]),
-                      const SizedBox(height: 2),
-                      Row(children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: cs.secondaryContainer,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Text(_typeLabel(item.type),
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  color: cs.onSecondaryContainer)),
-                        ),
-                        if (item.server != null && item.server!.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text('${item.server}:${item.port}',
-                                style:
-                                    TextStyle(fontSize: 10, color: cs.outline),
-                                overflow: TextOverflow.ellipsis),
-                          ),
-                        ],
-                      ]),
-                      if (_errorMessage.isNotEmpty &&
-                          (_state == TestState.unreachable ||
-                           _state == TestState.authError ||
-                           _state == TestState.certError)) ...[
-                        const SizedBox(height: 2),
-                        Tooltip(
-                          message: _errorMessage,
-                          child: Text(
-                            _errorMessage,
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              color: _state == TestState.certError
-                                  ? const Color(0xFFE0A31E)
-                                  : cs.error,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                // ── Trailing action cluster: bounded, do NOT select the row ──
-                if (widget.coreManager != null) ...[
-                  _resultChip(context),
-                  const SizedBox(width: 6),
-                  // Explicit, labeled Trust button — only when the proxy is
-                  // reachable but its certificate isn't trusted. Opens the
-                  // same cert-trust flow as tapping the "Trust?" chip.
-                  if (_state == TestState.certError) ...[
-                    SizedBox(
-                      height: 26,
-                      child: OutlinedButton(
-                        onPressed: _promptCertTrust,
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          minimumSize: const Size(0, 26),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          side: const BorderSide(color: Color(0xFFE0A31E)),
-                          foregroundColor: const Color(0xFFE0A31E),
-                        ),
-                        child: Text(tl(context, 'Trust'),
-                            style: const TextStyle(fontSize: 11)),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  // Explicit, labeled PAC Rules button
-                  if ((item.pacUrl ?? '').isNotEmpty) ...[
-                    SizedBox(
-                      height: 26,
-                      child: OutlinedButton(
-                        onPressed: _openPacRules,
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          minimumSize: const Size(0, 26),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          side: BorderSide(color: cs.outline.withAlpha(100)),
-                          foregroundColor: cs.onSurfaceVariant,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.alt_route, size: 12),
-                            const SizedBox(width: 4),
-                            Text(tl(context, 'PAC'),
-                                style: const TextStyle(fontSize: 11)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  // Explicit, labeled Test button (Option B).
-                  SizedBox(
-                    height: 26,
-                    child: OutlinedButton(
-                      onPressed:
-                          _state == TestState.testing ? null : _testDelay,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        minimumSize: const Size(0, 26),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        side: BorderSide(color: cs.primary.withAlpha(140)),
-                        foregroundColor: cs.primary,
-                      ),
-                      child: Text(tl(context, 'Test'),
-                          style: const TextStyle(fontSize: 11)),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                ],
-                ProxyItemActionMenu(
-                  onClick: widget.onChange,
-                  controller: menuController,
-                  id: item.id,
-                  type: item.type,
-                  passwordLocked: item.passwordLocked,
-                  hasPac: (item.pacUrl ?? '').isNotEmpty,
-                ),
-              ]),
             ),
-          ]),
-        ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              headerRow,
+              if (selected && _supportsCredentials)
+                _buildInlineCredentialsStrip(context),
+            ],
+          ),
+        ]),
       ),
     );
   }

@@ -306,6 +306,31 @@ class CoreManager {
     onConnectionStateChanged?.call();
   }
 
+  /// Shared start/stop toggle used by both the header switch and the
+  /// ProxiesPage status banner's Connect button.
+  Future<bool> toggleConnection(bool shouldStart) async {
+    appState.pausedForNoNetwork = false;
+    appState.userWantsRunning = shouldStart;
+    cancelNetworkTimers();
+    bool succeeded = false;
+    try {
+      if (shouldStart) {
+        await start().timeout(const Duration(seconds: 60));
+      } else {
+        await manualStop().timeout(const Duration(seconds: 30));
+      }
+      succeeded = true;
+    } finally {
+      bool real = succeeded ? shouldStart : false;
+      try {
+        real = await getIsStarted();
+      } catch (_) {}
+      appState.updateIsStarted(real);
+      onConnectionStateChanged?.call();
+    }
+    return appState.isStarted;
+  }
+
   Future<void> makeRequestUntilSuccess(String url) async {
     final stopwatch = Stopwatch();
     stopwatch.start(); // Start the stopwatch

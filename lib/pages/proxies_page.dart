@@ -10,6 +10,7 @@ import 'package:lux/widget/password_peek_dialog.dart';
 import 'package:lux/widget/pac_rules_dialog.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/widget/proxy_list_card.dart';
+import 'package:lux/widget/proxy_list_item.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
@@ -56,6 +57,10 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   AppStateModel? _appState;
   int _lastProxyRevision = 0;
+
+  final Map<String, ProxyTestStatus> _testStatuses = {};
+  final ProxyItemController _selectedItemController = ProxyItemController();
+  bool _isConnecting = false;
 
   @override
   void initState() {
@@ -123,6 +128,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     final proxyList = await widget.coreManager.getProxyList();
     final subscriptionListValue =
         await widget.coreManager.getSubscriptionList();
+    if (!mounted) return;
     setState(() {
       subscriptionList = subscriptionListValue.value;
       proxyListGroup = ProxyListGroup(
@@ -130,17 +136,15 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           subscriptions: subscriptionList,
           selectedId: proxyList.id);
 
-      Provider.of<AppStateModel>(context, listen: false)
-          .updateSelectedProxyId(proxyListGroup.selectedId);
       for (var group in proxyListGroup.groups) {
         var key = group.id;
         if (!isCollapsedMap.containsKey(key)) {
-          setState(() {
-            isCollapsedMap[key] = true;
-          });
+          isCollapsedMap[key] = true;
         }
       }
     });
+    Provider.of<AppStateModel>(context, listen: false)
+        .updateSelectedProxyId(proxyListGroup.selectedId);
   }
 
   Future<void> refreshData() async {
@@ -346,10 +350,254 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     }
   }
 
+  Future<void> _connectFromBanner() async {
+    if (_isConnecting) return;
+    setState(() => _isConnecting = true);
+    try {
+      await widget.coreManager.toggleConnection(true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: TText('Could not connect. Check your proxy and try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isConnecting = false);
+      }
+    }
+  }
+
+  String _selectedProxyDisplayName() {
+    final selectedId = proxyListGroup.selectedId;
+    final selected = proxyListGroup.allProxies
+        .where((p) => p.id == selectedId)
+        .firstOrNull;
+    if (selected != null) {
+      if (selected.name.isNotEmpty) return selected.name;
+      if ((selected.server ?? '').isNotEmpty) {
+        return '${selected.server}:${selected.port ?? ''}';
+      }
+    }
+    return widget.curProxyInfo;
+  }
+
+  Widget _buildStatusBanner(BuildContext context, AppStateModel appState) {
+    final cs = Theme.of(context).colorScheme;
+    final selectedStatus =
+        _testStatuses[proxyListGroup.selectedId] ?? const ProxyTestStatus();
+    final proxyName = _selectedProxyDisplayName();
+
+    const amber = Color(0xFFE0A31E);
+    const authRed = Color(0xFFE05638);
+
+    final Color accent;
+    final IconData icon;
+    final String message;
+    final Widget? badge;
+    final List<Widget> actions;
+
+    if (appState.pausedForNoNetwork) {
+      accent = amber;
+      icon = Icons.wifi_off;
+      message = tl(context, 'Paused — waiting for Wi-Fi or Ethernet');
+      badge = null;
+      actions = const [];
+    } else if (selectedStatus.state == TestState.authError) {
+      accent = authRed;
+      icon = Icons.lock_outline;
+      message =
+          tl(context, 'Login required — check your username and password below');
+      badge = null;
+      actions = [
+        _bannerActionButton(
+          key: const Key('banner-action-auth'),
+          label: tl(context, 'Enter password'),
+          color: accent,
+          onPressed: () => _selectedItemController.focusPassword?.call(),
+        ),
+      ];
+    } else if (selectedStatus.state == TestState.certError) {
+      accent = amber;
+      icon = Icons.gpp_maybe_outlined;
+      message = tl(context, 'Proxy certificate not trusted');
+      badge = null;
+      actions = [
+        _bannerActionButton(
+          key: const Key('banner-action-trust'),
+          label: tl(context, 'Trust'),
+          color: accent,
+          onPressed: () => _selectedItemController.promptCertTrust?.call(),
+        ),
+      ];
+    } else if (selectedStatus.state == TestState.unreachable) {
+      accent = cs.error;
+      icon = Icons.error_outline;
+      message = tl(context, 'Proxy unreachable on this network');
+      badge = null;
+      actions = [
+        _bannerActionButton(
+          key: const Key('banner-action-test'),
+          label: tl(context, 'Test'),
+          color: accent,
+          onPressed: () => _selectedItemController.runTest?.call(),
+        ),
+        const SizedBox(width: 6),
+        _bannerActionButton(
+          key: const Key('banner-action-detect'),
+          label: tl(context, 'Detect Proxy'),
+          color: accent,
+          onPressed: _isDetecting ? null : _detectProxies,
+        ),
+      ];
+    } else if (appState.isStarted) {
+      accent = Colors.green;
+      icon = Icons.check_circle_outline;
+      message = proxyName.isNotEmpty
+          ? tl(context, 'Connected via {name}').replaceAll('{name}', proxyName)
+          : tl(context, 'Connected');
+      if (selectedStatus.state == TestState.reachable) {
+        final badgeText = selectedStatus.pacReachable
+            ? 'PAC OK'
+            : '${selectedStatus.latencyMs} ms';
+        badge = Container(
+          margin: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            badgeText,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: accent,
+            ),
+          ),
+        );
+      } else {
+        badge = null;
+      }
+      actions = const [];
+    } else {
+      accent = cs.outline;
+      icon = Icons.power_settings_new;
+      message = tl(context, 'Disconnected');
+      badge = null;
+      actions = [
+        _bannerActionButton(
+          key: const Key('banner-action-connect'),
+          label: tl(context, 'Connect'),
+          color: cs.primary,
+          filled: true,
+          loading: _isConnecting,
+          onPressed:
+              (_isConnecting || proxyListGroup.selectedId.isEmpty)
+                  ? null
+                  : _connectFromBanner,
+        ),
+      ];
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+      child: Container(
+        key: const Key('proxies-status-banner'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      message,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: cs.onSurface,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (badge != null) badge,
+                ],
+              ),
+            ),
+            if (actions.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              ...actions,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _bannerActionButton({
+    Key? key,
+    required String label,
+    required Color color,
+    required VoidCallback? onPressed,
+    bool filled = false,
+    bool loading = false,
+  }) {
+    final child = loading
+        ? const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Text(label, style: const TextStyle(fontSize: 11));
+    if (filled) {
+      return SizedBox(
+        height: 26,
+        child: FilledButton(
+          key: key,
+          onPressed: onPressed,
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: const Size(0, 26),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: child,
+        ),
+      );
+    }
+    return SizedBox(
+      height: 26,
+      child: OutlinedButton(
+        key: key,
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          minimumSize: const Size(0, 26),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          side: BorderSide(color: color.withValues(alpha: 0.7)),
+          foregroundColor: color,
+        ),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppStateModel>();
     return Column(
       children: [
+        _buildStatusBanner(context, appState),
         // Toolbar
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -436,6 +684,12 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                         selectedId: proxyListGroup.selectedId,
                         subscriptionList: subscriptionList,
                         coreManager: widget.coreManager,
+                        onTestStatusChanged: (id, status) {
+                          if (!mounted) return;
+                          setState(() => _testStatuses[id] = status);
+                        },
+                        selectedController: _selectedItemController,
+                        onCredentialsSaved: refreshData,
                       );
                     },
                   ),

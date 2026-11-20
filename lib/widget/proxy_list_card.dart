@@ -18,6 +18,9 @@ class ProxyListCard extends StatefulWidget {
   // tile select (not just the radio dot) and show selected styling.
   final void Function(String id)? onSelect;
   final String? selectedId;
+  final void Function(String id, ProxyTestStatus status)? onTestStatusChanged;
+  final ProxyItemController? selectedController;
+  final VoidCallback? onCredentialsSaved;
 
   const ProxyListCard({
     super.key,
@@ -29,6 +32,9 @@ class ProxyListCard extends StatefulWidget {
     this.coreManager,
     this.onSelect,
     this.selectedId,
+    this.onTestStatusChanged,
+    this.selectedController,
+    this.onCredentialsSaved,
   });
 
   @override
@@ -109,15 +115,22 @@ class _ProxyListCardState extends State<ProxyListCard> {
                   padding: EdgeInsetsGeometry.all(0),
                   itemCount: proxyList.proxies.length,
                   itemBuilder: (context, index) {
+                    final item = proxyList.proxies[index];
+                    final isSelected = widget.selectedId == item.id;
                     return ProxyListItem(
-                      key: Key(proxyList.proxies[index].id),
-                      item: proxyList.proxies[index],
+                      key: Key(item.id),
+                      item: item,
                       coreManager: widget.coreManager,
-                      selected:
-                          widget.selectedId == proxyList.proxies[index].id,
+                      selected: isSelected,
                       onSelect: widget.onSelect,
-                      onChange: (action) =>
-                          widget.onItemChange(action, proxyList.proxies[index]),
+                      onTestStatusChanged: widget.onTestStatusChanged == null
+                          ? null
+                          : (status) =>
+                              widget.onTestStatusChanged!(item.id, status),
+                      selectedController:
+                          isSelected ? widget.selectedController : null,
+                      onCredentialsSaved: widget.onCredentialsSaved,
+                      onChange: (action) => widget.onItemChange(action, item),
                     );
                   },
                   separatorBuilder: (BuildContext context, int index) {

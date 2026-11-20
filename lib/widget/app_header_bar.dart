@@ -99,24 +99,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
       setState(() {
         isLoadingSwitch = true;
       });
-      // Update intent before calling start/stop so the watchdog in home.dart
-      // knows whether to restart. Manual toggle always clears pausedForNoNetwork.
-      final appState = Provider.of<AppStateModel>(context, listen: false);
-      appState.pausedForNoNetwork = false;
-      appState.userWantsRunning = value;
-      widget.coreManager.cancelNetworkTimers();
-      // Safety timeout: start() can retry ~15s x3 (~45s) and a wedged UAC
-      // dialog or unresponsive core could hang longer. Cap the awaited op so
-      // the spinner can never stick on forever and leave the toggle disabled.
-      if (value) {
-        await widget.coreManager.start().timeout(const Duration(seconds: 60));
-        // Proxy env vars (HTTP_PROXY / NODE_EXTRA_CA_CERTS for Node/Electron
-        // tools) are set centrally in CoreManager.start() — every start path
-        // (toggle, tray, auto-connect, watchdog, wake) gets them.
-      } else {
-        await widget.coreManager.manualStop().timeout(const Duration(seconds: 30));
-        // Env vars cleared centrally in CoreManager.stop().
-      }
+      await widget.coreManager.toggleConnection(value);
     } catch (e) {
       appLog('CORE', 'toggle ${value ? "start" : "stop"} failed: $e');
       if (mounted) {
@@ -127,21 +110,11 @@ class _State extends State<AppHeaderBar> with WindowListener {
         );
       }
     } finally {
-      // Re-sync the switch position from the core's REAL state rather than
-      // assuming the op succeeded — a failed/timed-out start must not leave
-      // the toggle showing "on". Always clear the loading flag so the spinner
-      // and the disabled state can never wedge.
-      bool real = value;
-      try {
-        real = await widget.coreManager.getIsStarted();
-      } catch (_) {}
       if (mounted) {
         setState(() {
-          isStarted = real;
+          isStarted = widget.coreManager.appState.isStarted;
           isLoadingSwitch = false;
         });
-        Provider.of<AppStateModel>(context, listen: false)
-            .updateIsStarted(real);
       }
     }
   }
@@ -334,6 +307,9 @@ class _State extends State<AppHeaderBar> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final appStarted =
+        context.select<AppStateModel, bool>((model) => model.isStarted);
+    final switchValue = isLoadingSwitch ? isStarted : (isStarted || appStarted) && appStarted;
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
     return AppBar(
         // dashboard.dart wraps this in a 50px PreferredSize; without
@@ -380,7 +356,7 @@ class _State extends State<AppHeaderBar> with WindowListener {
                 children: [
                   FittedBox(
                     child: Switch(
-                      value: isStarted,
+                      value: switchValue,
                       // Non-clickable while a connect/disconnect is in flight
                       // (isLoadingSwitch) or no proxy is selected.
                       onChanged: isSwitchDisabled ? null : onSwitchChanged,

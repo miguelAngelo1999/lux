@@ -407,13 +407,17 @@ class ProxyItem {
   final String? server;
   final int? port;
   final String? subscription;
+  final String? username;
   final String? password;
   final bool passwordLocked;
   final String? pacUrl;
 
   ProxyItem(
       this.id, this.name, this.server, this.port, this.subscription, this.type,
-      {this.password, this.passwordLocked = false, this.pacUrl});
+      {this.username,
+      this.password,
+      this.passwordLocked = false,
+      this.pacUrl});
 
   ProxyItem.fromJson(Map<String, dynamic> json)
       : id = (json['id'] as String),
@@ -424,6 +428,8 @@ class ProxyItem {
             ? json['subscription'] as String
             : null),
         port = (json['port'] is int ? json['port'] as int : null),
+        username =
+            (json['username'] is String ? json['username'] as String : null),
         password = (json['password'] is String ? json['password'] : null),
         passwordLocked = (json['passwordLocked'] is bool ? json['passwordLocked'] : false),
         pacUrl = (json['pacUrl'] is String ? json['pacUrl'] as String : null);
