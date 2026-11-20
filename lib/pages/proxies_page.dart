@@ -502,45 +502,42 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       ];
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
-      child: Container(
-        key: const Key('proxies-status-banner'),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: accent.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: accent.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: accent),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      message,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: cs.onSurface,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+    return Container(
+      key: const Key('proxies-status-banner'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurface,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (badge != null) badge,
-                ],
-              ),
+                ),
+                if (badge != null) badge,
+              ],
             ),
-            if (actions.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              ...actions,
-            ],
+          ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            ...actions,
           ],
-        ),
+        ],
       ),
     );
   }
@@ -597,17 +594,18 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     final appState = context.watch<AppStateModel>();
     return Column(
       children: [
-        _buildStatusBanner(context, appState),
-        // Toolbar
+        // Combined Status Banner + Detect Proxy toolbar row
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
           child: Row(
             children: [
-              // Auto-switch trigger button (only when enabled)
+              Expanded(child: _buildStatusBanner(context, appState)),
               if (_autoSwitchEnabled) ...[
+                const SizedBox(width: 6),
                 _autoSwitching
                     ? const SizedBox(
-                        width: 16, height: 16,
+                        width: 16,
+                        height: 16,
                         child: CircularProgressIndicator(strokeWidth: 1.5))
                     : Tooltip(
                         message: 'Check network and auto-select best proxy',
@@ -619,19 +617,17 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                               minWidth: 28, minHeight: 28),
                         ),
                       ),
-                // Status chip
                 if (_autoSwitchState.isNotEmpty) ...[
                   const SizedBox(width: 4),
                   _AutoSwitchChip(
                       state: _autoSwitchState,
                       proxyName: _autoSwitchProxyName),
-                  const SizedBox(width: 4),
                 ],
               ],
-              const Spacer(),
+              const SizedBox(width: 8),
               _isDetecting
                   ? SizedBox(
-                      width: 140,
+                      width: 120,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -651,11 +647,22 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                         ],
                       ),
                     )
-                  : TextButton.icon(
-                      onPressed: _detectProxies,
-                      icon: const Icon(Icons.wifi_find, size: 16),
-                      label: const TText('Detect Proxy',
-                          style: TextStyle(fontSize: 12)),
+                  : SizedBox(
+                      height: 34,
+                      child: OutlinedButton.icon(
+                        key: const Key('proxies-detect-button'),
+                        onPressed: _detectProxies,
+                        icon: const Icon(Icons.wifi_find, size: 15),
+                        label: const TText('Detect Proxy',
+                            style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          minimumSize: const Size(0, 34),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
                     ),
             ],
           ),
@@ -917,7 +924,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: passwordMode,
+                  initialValue: passwordMode,
                   decoration: InputDecoration(
                     labelText: tl(ctx, 'Password type'),
                     isDense: true,
@@ -1065,7 +1072,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           }
 
           // Check if auth failed (407 in response body)
-          if (certResult != null && certResult.error.isNotEmpty) {
+          if (certResult.error.isNotEmpty) {
             final err = certResult.error.toLowerCase();
             if (err.contains('407') || err.contains('auth') || err.contains('denied')) {
               if (mounted) {
@@ -1081,7 +1088,6 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           }
           break; // auth succeeded or no error
         }
-        if (creds == null) return;
 
         // Step 4: Derive proxy name from cert issuer (only when MITM is detected)
         String suggestedName = firstProxy.host;

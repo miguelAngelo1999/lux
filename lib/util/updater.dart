@@ -164,7 +164,7 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
     if (result != null && !result.hasUpdate && baseUrl.contains('drive.usercontent.google.com')) {
       appLog('UPDATE', 'appcast returned same version as current — possible CDN cache hit, retrying in 3s');
       await Future.delayed(const Duration(seconds: 3));
-      final retryUrl = Uri.parse('$baseUrl${cacheBust}${DateTime.now().millisecondsSinceEpoch}');
+      final retryUrl = Uri.parse('$baseUrl$cacheBust${DateTime.now().millisecondsSinceEpoch}');
       final client2 = HttpClient();
       client2.badCertificateCallback = (_, __, ___) => true;
       client2.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort; DIRECT';
@@ -380,6 +380,7 @@ Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) asy
       return ValueListenableBuilder<UpdateState>(
         valueListenable: updateStateNotifier,
         builder: (context, state, _) {
+          final displayInfo = state.updateInfo ?? info;
           final progress = state.progress;
           final pct = progress != null ? (progress * 100).toInt() : null;
           final isFailed = state.isFailed;
@@ -396,7 +397,7 @@ Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) asy
                   size: 22,
                 ),
                 const SizedBox(width: 10),
-                Expanded(child: Text('Lux ${info.latestVersion}')),
+                Expanded(child: Text('Lux ${displayInfo.latestVersion}')),
               ],
             ),
             content: SizedBox(
@@ -406,7 +407,7 @@ Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) asy
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${info.currentVersion}  →  ${info.latestVersion}',
+                    '${displayInfo.currentVersion}  →  ${displayInfo.latestVersion}',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 16),
@@ -469,9 +470,11 @@ Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) asy
                   icon: const Icon(Icons.refresh, size: 16),
                   label: Text(retryLabel),
                   style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-                  onPressed: () {
-                    startUpdate(context, info, showDialog: false);
-                  },
+                  onPressed: () => retryUpdate(
+                    context,
+                    state.updateInfo ?? info,
+                    showDialog: false,
+                  ),
                 ),
               ] else ...[
                 TextButton(
@@ -485,6 +488,62 @@ Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) asy
       );
     },
   );
+}
+
+/// Optional test hooks so widget tests can exercise Retry without network I/O.
+@visibleForTesting
+Future<UpdateInfo?> Function()? debugAppcastFetcher;
+
+@visibleForTesting
+Future<void> Function(BuildContext, UpdateInfo, {bool showDialog})?
+    debugRetryStartUpdate;
+
+/// Re-fetches the live appcast before retrying a failed update so stale
+/// in-memory [UpdateInfo] (e.g. an older SHA-256 after a new release overwrote
+/// the fixed Google Drive binary) is replaced before downloading again.
+Future<void> retryUpdate(
+  BuildContext context,
+  UpdateInfo staleInfo, {
+  bool showDialog = false,
+  @visibleForTesting Future<UpdateInfo?> Function()? appcastFetcher,
+  @visibleForTesting
+  Future<void> Function(BuildContext, UpdateInfo, {bool showDialog})?
+      startUpdateFn,
+}) async {
+  if (updateStateNotifier.value.isDownloading ||
+      updateStateNotifier.value.stage == UpdateStage.checking) {
+    return;
+  }
+
+  final lang = _getLang(context);
+  updateStateNotifier.value = UpdateState(
+    stage: UpdateStage.checking,
+    progress: 0.01,
+    status: _t(lang, 'Preparing…', 'Preparing…'),
+    updateInfo: staleInfo,
+  );
+
+  UpdateInfo? fresh;
+  try {
+    fresh = await (appcastFetcher ?? debugAppcastFetcher ?? checkForUpdate)();
+  } catch (e) {
+    appLog('UPDATE', 'retry appcast refresh failed: $e');
+  }
+
+  if (!context.mounted) return;
+
+  if (fresh != null && !fresh.hasUpdate) {
+    updateStateNotifier.value = UpdateState(
+      stage: UpdateStage.idle,
+      updateInfo: fresh,
+    );
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    return;
+  }
+
+  final targetInfo = (fresh != null && fresh.hasUpdate) ? fresh : staleInfo;
+  final runner = startUpdateFn ?? debugRetryStartUpdate ?? startUpdate;
+  await runner(context, targetInfo, showDialog: showDialog);
 }
 
 /// Begins downloading and installing the update, reporting state to [updateStateNotifier].
@@ -676,6 +735,7 @@ class _DownloadProgressBar extends StatelessWidget {
     return ValueListenableBuilder<UpdateState>(
       valueListenable: updateStateNotifier,
       builder: (context, state, _) {
+        final displayInfo = state.updateInfo ?? info;
         final failed = state.isFailed;
         final progress = state.progress;
         final status = state.status;
@@ -693,7 +753,7 @@ class _DownloadProgressBar extends StatelessWidget {
                   Text(
                     failed
                         ? (state.errorMessage ?? status)
-                        : 'Lux ${info.latestVersion}: ${status.isNotEmpty ? status : (pct != null ? "$pct%" : _t(lang, "Updating...", "Updating..."))}',
+                        : 'Lux ${displayInfo.latestVersion}: ${status.isNotEmpty ? status : (pct != null ? "$pct%" : _t(lang, "Updating...", "Updating..."))}',
                     style: const TextStyle(fontSize: 13),
                   ),
                   if (!failed && progress != null) ...[
@@ -713,7 +773,11 @@ class _DownloadProgressBar extends StatelessWidget {
             if (failed) ...[
               const SizedBox(width: 8),
               TextButton(
-                onPressed: () => startUpdate(context, info, showDialog: false),
+                onPressed: () => retryUpdate(
+                  context,
+                  displayInfo,
+                  showDialog: false,
+                ),
                 child: Text(retryLabel, style: const TextStyle(color: Colors.orange)),
               ),
             ],
@@ -724,12 +788,53 @@ class _DownloadProgressBar extends StatelessWidget {
   }
 }
 
+/// Verifies [file]'s SHA-256 against [info.sha256].
+///
+/// If the digest mismatches [info] (e.g., a newer release overwrote the fixed
+/// Google Drive binary after [info] was fetched), re-fetches the live appcast
+/// once via [appcastFetcher] (defaulting to [checkForUpdate]) and returns the
+/// refreshed [UpdateInfo] when the digest matches it, or `null` on mismatch.
+@visibleForTesting
+Future<UpdateInfo?> verifyDownloadedFileHash(
+  File file,
+  UpdateInfo info, {
+  Future<UpdateInfo?> Function()? appcastFetcher,
+}) async {
+  final digest = await _sha256OfFile(file);
+  if (digest == info.sha256) {
+    appLog('UPDATE', 'sha256 verified: $digest');
+    return info;
+  }
+
+  appLog('UPDATE',
+      'sha256 mismatch: got $digest, appcast says ${info.sha256} — re-checking appcast');
+  UpdateInfo? fresh;
+  try {
+    fresh = await (appcastFetcher ?? checkForUpdate)();
+  } catch (e) {
+    appLog('UPDATE', 'appcast refresh during hash verify failed: $e');
+  }
+
+  if (fresh != null &&
+      fresh.sha256.isNotEmpty &&
+      digest == fresh.sha256) {
+    appLog('UPDATE',
+        'sha256 verified against refreshed appcast v${fresh.latestVersion}: $digest');
+    return fresh;
+  }
+
+  appLog('UPDATE',
+      'sha256 mismatch: got $digest, appcast says ${info.sha256}, refreshed=${fresh?.sha256 ?? "none"} — refusing');
+  return null;
+}
+
 /// Downloads the DMG/EXE to a temp file and opens it.
 Future<void> downloadAndInstall(
   BuildContext context,
   UpdateInfo info, {
   void Function(double progress)? onProgress,
   void Function(String status)? onStatusChange,
+  @visibleForTesting Future<UpdateInfo?> Function()? appcastFetcher,
 }) async {
   final url = Platform.isMacOS ? info.macOSUrl : info.windowsUrl;
   if (url.isEmpty) {
@@ -836,7 +941,7 @@ Future<void> downloadAndInstall(
           final pct = (received * 100 ~/ total);
           if (pct >= lastLoggedPct + 10) {
             lastLoggedPct = pct;
-            appLog('UPDATE', 'download progress $pct% (${received}/${total}B)');
+            appLog('UPDATE', 'download progress $pct% ($received/${total}B)');
           }
         }
       },
@@ -934,8 +1039,10 @@ Future<void> downloadAndInstall(
           if (retrySize < info.size - tolerance) {
             appLog('UPDATE', 'retry also too small: $retrySize vs ${info.size}');
             await retryFile.delete();
-            _reportBadDownload(context,
-                'Downloaded file is ${retrySize}B but expected ~${info.size}B. Try again in a minute.');
+            if (context.mounted) {
+              _reportBadDownload(context,
+                  'Downloaded file is ${retrySize}B but expected ~${info.size}B. Try again in a minute.');
+            }
             return;
           }
           await retryFile.rename(file.path);
@@ -947,20 +1054,24 @@ Future<void> downloadAndInstall(
       }
 
       if (info.sha256.isNotEmpty) {
-        final digest = await _sha256OfFile(file);
-        if (digest != info.sha256) {
-          appLog('UPDATE',
-              'sha256 mismatch: got $digest, appcast says ${info.sha256} — refusing');
+        final verifiedInfo = await verifyDownloadedFileHash(
+          file,
+          info,
+          appcastFetcher: appcastFetcher,
+        );
+        if (verifiedInfo == null) {
           await file.delete();
-          _reportBadDownload(
-            context,
-            'The downloaded update did not match its published checksum, so it '
-            'was discarded. This usually means a cached copy of an older '
-            'version was served. Try again in a minute.',
-          );
+          if (context.mounted) {
+            _reportBadDownload(
+              context,
+              'The downloaded update did not match its published checksum, so it '
+              'was discarded. This usually means a cached copy of an older '
+              'version was served. Try again in a minute.',
+            );
+          }
           return;
         }
-        appLog('UPDATE', 'sha256 verified: $digest');
+        info = verifiedInfo;
       }
     } else {
       // A feed without a digest cannot be verified. Say so rather than implying

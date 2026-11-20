@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lux/util/t_text.dart';
@@ -115,6 +118,143 @@ void main() {
 
       // Reset notifier
       updateStateNotifier.value = const UpdateState();
+    });
+  });
+
+  group('Stale appcast hash & Retry refresh tests', () {
+    test('verifyDownloadedFileHash refreshes appcast when cached hash is stale',
+        () async {
+      final tmpDir = await Directory.systemTemp.createTemp('lux_hash_test_');
+      addTearDown(() => tmpDir.delete(recursive: true));
+      final file = File('${tmpDir.path}/installer.bin');
+      final bytes = List<int>.generate(1024, (i) => i % 256);
+      await file.writeAsBytes(bytes);
+      final actualDigest = sha256.convert(bytes).toString();
+
+      const staleInfo = UpdateInfo(
+        latestVersion: '1.50.113',
+        currentVersion: '1.50.76',
+        notes: 'stale',
+        macOSUrl: 'https://example.com/mac',
+        windowsUrl: 'https://example.com/win',
+        hasUpdate: true,
+        sha256: '0000000000000000000000000000000000000000000000000000000000000000',
+        size: 1024,
+      );
+
+      final freshInfo = UpdateInfo(
+        latestVersion: '1.50.114',
+        currentVersion: '1.50.76',
+        notes: 'fresh',
+        macOSUrl: 'https://example.com/mac',
+        windowsUrl: 'https://example.com/win',
+        hasUpdate: true,
+        sha256: actualDigest,
+        size: 1024,
+      );
+
+      var fetchCalls = 0;
+      final verified = await verifyDownloadedFileHash(
+        file,
+        staleInfo,
+        appcastFetcher: () async {
+          fetchCalls++;
+          return freshInfo;
+        },
+      );
+
+      expect(fetchCalls, 1);
+      expect(verified, isNotNull);
+      expect(verified!.latestVersion, '1.50.114');
+      expect(verified.sha256, actualDigest);
+
+      // Still mismatches fresh appcast -> refuses (returns null).
+      final rejected = await verifyDownloadedFileHash(
+        file,
+        staleInfo,
+        appcastFetcher: () async => staleInfo,
+      );
+      expect(rejected, isNull);
+    });
+
+    testWidgets('Retry button in progress dialog fetches fresh UpdateInfo',
+        (tester) async {
+      const staleInfo = UpdateInfo(
+        latestVersion: '1.50.113',
+        currentVersion: '1.50.76',
+        notes: 'stale',
+        macOSUrl: 'https://example.com/mac',
+        windowsUrl: 'https://example.com/win',
+        hasUpdate: true,
+        sha256: 'stale-hash',
+        size: 1000,
+      );
+      const freshInfo = UpdateInfo(
+        latestVersion: '1.50.114',
+        currentVersion: '1.50.76',
+        notes: 'fresh',
+        macOSUrl: 'https://example.com/mac',
+        windowsUrl: 'https://example.com/win',
+        hasUpdate: true,
+        sha256: 'fresh-hash',
+        size: 2000,
+      );
+
+      var fetchCalls = 0;
+      UpdateInfo? startedWith;
+
+      debugAppcastFetcher = () async {
+        fetchCalls++;
+        return freshInfo;
+      };
+      debugRetryStartUpdate = (ctx, info, {bool showDialog = false}) async {
+        startedWith = info;
+        updateStateNotifier.value = UpdateState(
+          stage: UpdateStage.downloading,
+          progress: 0.2,
+          status: 'Downloading update... 20%',
+          updateInfo: info,
+        );
+      };
+      addTearDown(() {
+        debugAppcastFetcher = null;
+        debugRetryStartUpdate = null;
+        updateStateNotifier.value = const UpdateState();
+      });
+
+      updateStateNotifier.value = const UpdateState(
+        stage: UpdateStage.failed,
+        status: 'Download failed',
+        errorMessage: 'Download or installation did not complete.',
+        updateInfo: staleInfo,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showUpdateProgressDialog(context, staleInfo),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Lux 1.50.113'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+
+      expect(fetchCalls, 1);
+      expect(startedWith, isNotNull);
+      expect(startedWith!.latestVersion, '1.50.114');
+      expect(startedWith!.sha256, 'fresh-hash');
     });
   });
 }

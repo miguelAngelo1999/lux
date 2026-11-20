@@ -247,6 +247,31 @@ void main() {
       expect(find.byKey(const Key('inline-auth-strip-p-pac')), findsNothing);
       expect(find.byKey(const Key('inline-auth-strip-p-ss')), findsNothing);
 
+      // Username, Password, and Save & Test all share the exact 34px height.
+      expect(
+          tester
+              .getSize(find.byKey(const Key('inline-username-p-http')))
+              .height,
+          34.0);
+      expect(
+          tester
+              .getSize(find.byKey(const Key('inline-password-p-http')))
+              .height,
+          34.0);
+      expect(
+          tester
+              .getSize(find.byKey(const Key('inline-save-test-p-http')))
+              .height,
+          34.0);
+
+      // Status banner and Detect Proxy sit on the same top row.
+      final bannerRect =
+          tester.getRect(find.byKey(const Key('proxies-status-banner')));
+      final detectRect =
+          tester.getRect(find.byKey(const Key('proxies-detect-button')));
+      expect(bannerRect.right <= detectRect.left, isTrue);
+      expect((bannerRect.center.dy - detectRect.center.dy).abs() < 12, isTrue);
+
       // Username pre-populated, password obscured by default.
       final userField = tester.widget<TextField>(
           find.byKey(const Key('inline-username-p-http')));
@@ -297,6 +322,97 @@ void main() {
       await tester.tap(find.text('Shadowsocks'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('inline-auth-strip-p-ss')), findsNothing);
+      // Non-credential proxy (ss) does not show a credentials toggle chip.
+      expect(find.byKey(const Key('credentials-toggle-p-ss')), findsNothing);
+    });
+
+    testWidgets(
+        'expands and edits credentials on an unselected proxy without changing selection, and auto-expands unselected proxy on 407',
+        (tester) async {
+      final appState = AppStateModel(ThemeMode.light, const Locale('en'));
+      final core = _FakeProxiesCoreManager(
+        appState: appState,
+        selectedId: 'p-http',
+        proxies: [
+          ProxyItem('p-http', 'Corp HTTP', 'proxy.corp', 8080, null, 'http',
+              username: 'alice'),
+          ProxyItem('p-socks', 'Work SOCKS', 'socks.corp', 1080, null, 'socks5',
+              username: 'bob'),
+        ],
+        rawDetails: {
+          'p-http': {
+            'id': 'p-http',
+            'name': 'Corp HTTP',
+            'type': 'http',
+            'server': 'proxy.corp',
+            'port': 8080,
+            'username': 'alice',
+            'password': 'secret',
+            'passwordLocked': false,
+          },
+          'p-socks': {
+            'id': 'p-socks',
+            'name': 'Work SOCKS',
+            'type': 'socks5',
+            'server': 'socks.corp',
+            'port': 1080,
+            'username': 'bob',
+            'password': 'old',
+            'passwordLocked': false,
+          },
+        },
+      );
+
+      await _pumpProxiesPage(tester, appState: appState, core: core);
+
+      // Initially p-http is selected & expanded; p-socks is collapsed.
+      expect(find.byKey(const Key('inline-auth-strip-p-http')), findsOneWidget);
+      expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsNothing);
+
+      // Tap credentials toggle on unselected p-socks -> expands p-socks WITHOUT selecting it.
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-socks')));
+      await tester.pumpAndSettle();
+
+      expect(core.selectedId, 'p-http');
+      expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsOneWidget);
+
+      // Edit & save credentials on unselected p-socks.
+      await tester.enterText(
+          find.byKey(const Key('inline-username-p-socks')), 'bob.new');
+      await tester.enterText(
+          find.byKey(const Key('inline-password-p-socks')), 'socks-new');
+      await tester.tap(find.byKey(const Key('inline-save-test-p-socks')));
+      await tester.pumpAndSettle();
+
+      expect(core.selectedId, 'p-http');
+      expect(core.updatedPayloads, hasLength(1));
+      expect(core.updatedPayloads.single.id, 'p-socks');
+      expect(core.updatedPayloads.single.payload['username'], 'bob.new');
+      expect(core.updatedPayloads.single.payload['password'], 'socks-new');
+      expect(core.testedIds, contains('p-socks'));
+
+      // Collapse p-socks, then trigger HTTP 407 on its Test button -> auto-expands and focuses password.
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-socks')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsNothing);
+
+      core.nextDelayResult = (
+        delay: -1,
+        certError: false,
+        pacOnly: false,
+        error: 'HTTP 407 Proxy Authentication Required',
+      );
+      final testButtons = find.widgetWithText(OutlinedButton, 'Test');
+      await tester.tap(testButtons.at(1));
+      await tester.pumpAndSettle();
+
+      expect(core.selectedId, 'p-http');
+      expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsOneWidget);
+      final passEditable = tester.widget<EditableText>(find.descendant(
+        of: find.byKey(const Key('inline-password-p-socks')),
+        matching: find.byType(EditableText),
+      ));
+      expect(passEditable.focusNode.hasFocus, isTrue);
     });
 
     testWidgets('respects passwordLocked with Retype action and Enter submit',
