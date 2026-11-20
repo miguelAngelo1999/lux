@@ -1,17 +1,17 @@
 {
-  "version": "1.50.112",
+  "version": "1.50.113",
   "channel": "beta",
-  "notes": "release (beta): 1.50.111",
+  "notes": "fix(network): auto-resume on reconnect and wake after offline pause",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "b95771fdf53f2674cf7e8911331ae67d2045034482f217602ac349adf502c661",
-    "size": 42804112,
-    "version": "1.50.112"
+    "sha256": "9f4392c2962d7550f85fd3d3bbdbcea3a19cb38fcca39861c567d165e0498e22",
+    "size": 42814233,
+    "version": "1.50.113"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "1757314e38a5d88bfe7c21cb08073ca2484f1d475cf20ba5f6c5e86adb7484e8",
-    "size": 32703621,
-    "version": "1.50.112"
+    "sha256": "f3b620f4ae7a4a4b7da0e4d799957c9eac11630d2f72726ad13707d0008b17f3",
+    "size": 32705660,
+    "version": "1.50.113"
   }
 }

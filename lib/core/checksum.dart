@@ -9,7 +9,7 @@ import 'package:crypto/crypto.dart';
 // integrity before installing. A Dart-level check causes "checksum mismatch"
 // crashes on every update because the installer cannot kill lux_core.exe
 // (a SYSTEM process), leaving old lux.exe checking new lux_core.exe's hash.
- const windowsAmd64Checksum = "817dc04bcbfd24eeb4c27ff3bb090fae7c58c569aba49433de39a6776531a480";
+ const windowsAmd64Checksum = "285a05d319c5dee2b021050d559bda9e515f7411e0e5932acf20373f4e98cda8";
 // checksum-end
 
 Future<void> verifyCoreBinary(String filePath) async {
