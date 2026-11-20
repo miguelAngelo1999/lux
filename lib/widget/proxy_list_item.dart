@@ -73,6 +73,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
   final menuController = MenuController();
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _usernameFocus = FocusNode();
   final _passwordFocus = FocusNode();
 
   TestState _state = TestState.untested;
@@ -85,7 +86,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
   bool _isSavingCredentials = false;
   bool _usernameDirty = false;
   bool _passwordDirty = false;
-  bool _effectivePasswordLocked = false;
+  bool _hasStoredPassword = false;
   bool _detailLoaded = false;
   bool _credentialsExpanded = false;
 
@@ -105,7 +106,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
         (widget.item.pacUrl ?? '').isNotEmpty;
   }
 
-  bool get _isLockedView => _effectivePasswordLocked && !_retyping;
+  bool get _isLockedView => _hasStoredPassword && !_retyping;
 
   ProxyTestStatus get _currentStatus => ProxyTestStatus(
         state: _state,
@@ -131,7 +132,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
     if (oldWidget.item.id != widget.item.id) {
       _usernameDirty = false;
       _passwordDirty = false;
-      _retyping = false;
+      _obscurePassword = true;
       _detailLoaded = false;
       _credentialsExpanded = widget.selected && _supportsCredentials;
       _state = TestState.untested;
@@ -145,8 +146,10 @@ class _ProxyListItemState extends State<ProxyListItem> {
           _usernameCtrl.text != widget.item.username) {
         _usernameCtrl.text = widget.item.username!;
       }
-      if (!_retyping) {
-        _effectivePasswordLocked = widget.item.passwordLocked;
+      final itemHasStored =
+          widget.item.passwordLocked || (widget.item.password ?? '').isNotEmpty;
+      if (!_passwordDirty && !_retyping && itemHasStored) {
+        _hasStoredPassword = true;
       }
     }
 
@@ -174,18 +177,19 @@ class _ProxyListItemState extends State<ProxyListItem> {
     }
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
+    _usernameFocus.dispose();
     _passwordFocus.dispose();
     super.dispose();
   }
 
   void _syncInitialCredentials() {
-    _effectivePasswordLocked = widget.item.passwordLocked;
+    _hasStoredPassword =
+        widget.item.passwordLocked || (widget.item.password ?? '').isNotEmpty;
+    _retyping = !_hasStoredPassword;
+    _obscurePassword = true;
     _usernameCtrl.text = widget.item.username ?? '';
-    if (!_effectivePasswordLocked) {
-      _passwordCtrl.text = widget.item.password ?? '';
-    } else {
-      _passwordCtrl.clear();
-    }
+    // Never load a stored password into _passwordCtrl.
+    _passwordCtrl.clear();
   }
 
   void _attachSelectedController() {
@@ -206,15 +210,18 @@ class _ProxyListItemState extends State<ProxyListItem> {
         (detail.raw['passwordLocked'] as bool?) ?? widget.item.passwordLocked;
     final remoteUser = (detail.raw['username'] as String?) ?? '';
     final remotePass = detail.password ?? '';
+    final hasStored = locked || remotePass.isNotEmpty;
     setState(() {
-      if (!_retyping) {
-        _effectivePasswordLocked = locked;
+      _hasStoredPassword = hasStored;
+      if (!_passwordDirty) {
+        _retyping = !hasStored;
+        if (!_retyping) {
+          // Keep stored password out of _passwordCtrl at all times.
+          _passwordCtrl.clear();
+        }
       }
       if (!_usernameDirty && remoteUser.isNotEmpty) {
         _usernameCtrl.text = remoteUser;
-      }
-      if (!locked && !_retyping && !_passwordDirty && remotePass.isNotEmpty) {
-        _passwordCtrl.text = remotePass;
       }
     });
   }
@@ -277,21 +284,25 @@ class _ProxyListItemState extends State<ProxyListItem> {
             };
 
       updated['username'] = trimmedUsername;
-      if (!_isLockedView) {
+      if (_retyping) {
         updated['password'] = _passwordCtrl.text;
-        if (_retyping && _passwordCtrl.text.isNotEmpty) {
+        if (_passwordCtrl.text.isNotEmpty) {
           updated.remove('passwordLocked');
         }
       }
 
       await widget.coreManager!.updateProxy(widget.item.id, updated);
       if (!mounted) return;
+      final savedNewPassword = _retyping && _passwordCtrl.text.isNotEmpty;
       setState(() {
         _usernameDirty = false;
         _passwordDirty = false;
-        if (_retyping && _passwordCtrl.text.isNotEmpty) {
-          _effectivePasswordLocked = false;
+        if (savedNewPassword) {
+          // Immediately lock after saving so the stored password can never be revealed.
+          _hasStoredPassword = true;
           _retyping = false;
+          _obscurePassword = true;
+          _passwordCtrl.clear();
         }
       });
       widget.onCredentialsSaved?.call();
@@ -601,16 +612,18 @@ class _ProxyListItemState extends State<ProxyListItem> {
     );
   }
 
-  InputDecoration _inlineInputDecoration(
+  Widget _inlineFieldShell(
     BuildContext context, {
-    required String hintText,
+    Key? boxKey,
+    FocusNode? focusNode,
     required IconData prefixIcon,
+    required Widget child,
+    Widget? trailing,
     bool isAuthError = false,
-    Widget? suffixIcon,
-    BoxConstraints? suffixIconConstraints,
   }) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    const authErrorColor = Color(0xFFE05638);
     final fillColor = isDark
         ? (widget.selected
             ? Colors.black.withValues(alpha: 0.22)
@@ -619,86 +632,93 @@ class _ProxyListItemState extends State<ProxyListItem> {
             ? Colors.black.withValues(alpha: 0.04)
             : Colors.black.withValues(alpha: 0.02));
     final baseBorderColor = isAuthError
-        ? const Color(0xFFE05638).withValues(alpha: 0.75)
+        ? authErrorColor.withValues(alpha: 0.75)
         : (isDark
             ? Colors.white.withValues(alpha: 0.12)
             : Colors.black.withValues(alpha: 0.14));
-    final focusBorderColor =
-        isAuthError ? const Color(0xFFE05638) : cs.primary;
+    final focusBorderColor = isAuthError ? authErrorColor : cs.primary;
 
+    Widget buildShell(bool hasFocus) {
+      return SizedBox(
+        key: boxKey,
+        height: 34,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: fillColor,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: hasFocus ? focusBorderColor : baseBorderColor,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 30,
+                height: 34,
+                child: Center(
+                  child: Icon(prefixIcon, size: 15, color: cs.onSurfaceVariant),
+                ),
+              ),
+              Expanded(child: child),
+              if (trailing != null) trailing else const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (focusNode == null) {
+      return buildShell(false);
+    }
+    return ListenableBuilder(
+      listenable: focusNode,
+      builder: (context, _) => buildShell(focusNode.hasFocus),
+    );
+  }
+
+  InputDecoration _collapsedFieldDecoration(
+    BuildContext context, {
+    required String hintText,
+  }) {
+    final cs = Theme.of(context).colorScheme;
     return InputDecoration(
       hintText: hintText,
       hintStyle: TextStyle(
         fontSize: 12,
         color: cs.onSurfaceVariant.withValues(alpha: 0.65),
       ),
-      filled: true,
-      fillColor: fillColor,
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      prefixIcon: Icon(prefixIcon, size: 15, color: cs.onSurfaceVariant),
-      prefixIconConstraints:
-          const BoxConstraints(minWidth: 32, maxHeight: 34),
-      suffixIcon: suffixIcon,
-      suffixIconConstraints: suffixIconConstraints,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(7),
-        borderSide: BorderSide(color: baseBorderColor, width: 1),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(7),
-        borderSide: BorderSide(color: baseBorderColor, width: 1),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(7),
-        borderSide: BorderSide(color: focusBorderColor, width: 1),
-      ),
+      contentPadding: EdgeInsets.zero,
     );
   }
 
-  Widget _credentialsToggleChip(BuildContext context) {
+  Widget _credentialsToggleButton(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final username = _usernameCtrl.text.trim();
-    final active = _credentialsExpanded;
-    final fg = active ? cs.primary : cs.onSurfaceVariant;
-    final bg = active
-        ? cs.primary.withValues(alpha: 0.14)
-        : cs.onSurface.withValues(alpha: 0.04);
-    final border = active
-        ? cs.primary.withValues(alpha: 0.45)
-        : cs.outline.withValues(alpha: 0.35);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mutedColor = isDark ? Colors.white54 : cs.onSurfaceVariant;
 
     return Tooltip(
       message: tl(context, 'Credentials'),
       child: InkWell(
         key: Key('credentials-toggle-${widget.item.id}'),
         borderRadius: BorderRadius.circular(6),
+        hoverColor: cs.onSurface.withValues(alpha: 0.08),
         onTap: _toggleCredentialsExpanded,
-        child: Container(
-          height: 26,
-          padding:
-              EdgeInsets.symmetric(horizontal: username.isNotEmpty ? 8 : 7),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.key_rounded, size: 13, color: fg),
-              if (username.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 88),
-                  child: Text(
-                    username,
-                    style: TextStyle(fontSize: 11, color: fg),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ],
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: Center(
+            child: Icon(
+              _credentialsExpanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.key_rounded,
+              size: 16,
+              color: mutedColor,
+            ),
           ),
         ),
       ),
@@ -713,130 +733,109 @@ class _ProxyListItemState extends State<ProxyListItem> {
     const authErrorColor = Color(0xFFE05638);
     const accentBlue = Color(0xFF2563EB);
 
-    final lockedFill = isDark
-        ? (widget.selected
-            ? Colors.black.withValues(alpha: 0.22)
-            : Colors.white.withValues(alpha: 0.04))
-        : (widget.selected
-            ? Colors.black.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.02));
-    final lockedBorder = isAuthError
-        ? authErrorColor.withValues(alpha: 0.75)
-        : (isDark
-            ? Colors.white.withValues(alpha: 0.12)
-            : Colors.black.withValues(alpha: 0.14));
-
-    final usernameField = SizedBox(
-      height: 34,
-      child: TextField(
-        key: Key('inline-username-${item.id}'),
-        controller: _usernameCtrl,
-        style: const TextStyle(fontSize: 12.5, height: 1.2),
-        textAlignVertical: TextAlignVertical.center,
-        decoration: _inlineInputDecoration(
-          context,
-          hintText: tl(context, 'Username'),
-          prefixIcon: Icons.person_outline,
-          isAuthError: isAuthError,
+    final usernameField = _inlineFieldShell(
+      context,
+      focusNode: _usernameFocus,
+      prefixIcon: Icons.person_outline,
+      isAuthError: isAuthError,
+      child: SizedBox(
+        height: 34,
+        child: TextField(
+          key: Key('inline-username-${item.id}'),
+          controller: _usernameCtrl,
+          focusNode: _usernameFocus,
+          style: const TextStyle(fontSize: 12.5, height: 1.2),
+          textAlignVertical: TextAlignVertical.center,
+          maxLines: 1,
+          expands: false,
+          decoration: _collapsedFieldDecoration(
+            context,
+            hintText: tl(context, 'Username'),
+          ),
+          textInputAction: TextInputAction.done,
+          onChanged: (_) => _usernameDirty = true,
+          onSubmitted: (_) => _saveAndTest(),
         ),
-        textInputAction: TextInputAction.done,
-        onChanged: (_) => _usernameDirty = true,
-        onSubmitted: (_) => _saveAndTest(),
       ),
     );
 
     final Widget passwordField = _isLockedView
-        ? SizedBox(
-            height: 34,
-            child: Container(
-              key: Key('inline-password-locked-${item.id}'),
-              decoration: BoxDecoration(
-                color: lockedFill,
-                borderRadius: BorderRadius.circular(7),
-                border: Border.all(color: lockedBorder, width: 1),
+        ? _inlineFieldShell(
+            context,
+            boxKey: Key('inline-password-locked-${item.id}'),
+            prefixIcon: Icons.lock_outline,
+            isAuthError: isAuthError,
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '••••••••••••',
+                style: TextStyle(fontSize: 12.5, letterSpacing: 1.5),
+                overflow: TextOverflow.ellipsis,
               ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 32,
+            ),
+            trailing: TextButton(
+              key: Key('inline-retype-${item.id}'),
+              onPressed: _startRetype,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 34),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                tl(context, 'Retype'),
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
+          )
+        : _inlineFieldShell(
+            context,
+            focusNode: _passwordFocus,
+            prefixIcon: Icons.lock_outline,
+            isAuthError: isAuthError,
+            child: SizedBox(
+              height: 34,
+              child: TextField(
+                key: Key('inline-password-${item.id}'),
+                controller: _passwordCtrl,
+                focusNode: _passwordFocus,
+                obscureText: _obscurePassword,
+                style: const TextStyle(fontSize: 12.5, height: 1.2),
+                textAlignVertical: TextAlignVertical.center,
+                maxLines: 1,
+                expands: false,
+                decoration: _collapsedFieldDecoration(
+                  context,
+                  hintText: tl(context, 'Password'),
+                ),
+                textInputAction: TextInputAction.done,
+                onChanged: (_) => _passwordDirty = true,
+                onSubmitted: (_) => _saveAndTest(),
+              ),
+            ),
+            trailing: Tooltip(
+              message: tl(context, _obscurePassword ? 'Show' : 'Hide'),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: InkWell(
+                  key: Key('inline-password-toggle-${item.id}'),
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                  child: SizedBox(
+                    width: 30,
                     height: 34,
                     child: Center(
                       child: Icon(
-                        Icons.lock_outline,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         size: 15,
                         color: cs.onSurfaceVariant,
                       ),
                     ),
                   ),
-                  const Expanded(
-                    child: Text(
-                      '••••••••••',
-                      style: TextStyle(fontSize: 12.5, letterSpacing: 1.5),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  TextButton(
-                    key: Key('inline-retype-${item.id}'),
-                    onPressed: _startRetype,
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: const Size(0, 34),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      tl(context, 'Retype'),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-        : SizedBox(
-            height: 34,
-            child: TextField(
-              key: Key('inline-password-${item.id}'),
-              controller: _passwordCtrl,
-              focusNode: _passwordFocus,
-              obscureText: _obscurePassword,
-              style: const TextStyle(fontSize: 12.5, height: 1.2),
-              textAlignVertical: TextAlignVertical.center,
-              decoration: _inlineInputDecoration(
-                context,
-                hintText: tl(context, 'Password'),
-                prefixIcon: Icons.lock_outline,
-                isAuthError: isAuthError,
-                suffixIconConstraints:
-                    const BoxConstraints(minWidth: 30, maxHeight: 34),
-                suffixIcon: Tooltip(
-                  message: tl(context, _obscurePassword ? 'Show' : 'Hide'),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: InkWell(
-                      key: Key('inline-password-toggle-${item.id}'),
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                      child: SizedBox(
-                        width: 30,
-                        height: 34,
-                        child: Center(
-                          child: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                            size: 15,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
                 ),
               ),
-              textInputAction: TextInputAction.done,
-              onChanged: (_) => _passwordDirty = true,
-              onSubmitted: (_) => _saveAndTest(),
             ),
           );
 
@@ -854,6 +853,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           minimumSize: const Size(0, 34),
+          maximumSize: const Size(double.infinity, 34),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
         ),
@@ -963,7 +963,10 @@ class _ProxyListItemState extends State<ProxyListItem> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final selected = widget.selected;
+    final subtitleUsername = _usernameCtrl.text.trim();
+    final mutedSubtitleColor = isDark ? Colors.white54 : cs.onSurfaceVariant;
 
     final titleText = item.name.isNotEmpty
         ? item.name
@@ -1034,6 +1037,48 @@ class _ProxyListItemState extends State<ProxyListItem> {
                           style:
                               TextStyle(fontSize: 10, color: cs.outline),
                           overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                  if (_supportsCredentials &&
+                      subtitleUsername.isNotEmpty &&
+                      !_credentialsExpanded) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '·',
+                      style: TextStyle(fontSize: 11.5, color: mutedSubtitleColor),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: InkWell(
+                          key: Key('subtitle-username-${item.id}'),
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: _toggleCredentialsExpanded,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 2, vertical: 1),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.person_outline,
+                                    size: 12, color: mutedSubtitleColor),
+                                const SizedBox(width: 3),
+                                Flexible(
+                                  child: Text(
+                                    subtitleUsername,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: mutedSubtitleColor,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ]),
@@ -1111,10 +1156,10 @@ class _ProxyListItemState extends State<ProxyListItem> {
               ),
               const SizedBox(width: 6),
             ],
-            // Credentials toggle chip (available on every HTTP/SOCKS5/PAC proxy)
+            // Quiet, borderless credentials toggle (available on every HTTP/SOCKS5/PAC proxy)
             if (_supportsCredentials) ...[
-              _credentialsToggleChip(context),
-              const SizedBox(width: 6),
+              _credentialsToggleButton(context),
+              const SizedBox(width: 4),
             ],
             // Explicit, labeled Test button (Option B).
             SizedBox(

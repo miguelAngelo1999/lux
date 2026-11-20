@@ -247,7 +247,7 @@ void main() {
       expect(find.byKey(const Key('inline-auth-strip-p-pac')), findsNothing);
       expect(find.byKey(const Key('inline-auth-strip-p-ss')), findsNothing);
 
-      // Username, Password, and Save & Test all share the exact 34px height.
+      // Username, Locked Password, and Save & Test all share the exact 34px height.
       expect(
           tester
               .getSize(find.byKey(const Key('inline-username-p-http')))
@@ -255,7 +255,7 @@ void main() {
           34.0);
       expect(
           tester
-              .getSize(find.byKey(const Key('inline-password-p-http')))
+              .getSize(find.byKey(const Key('inline-password-locked-p-http')))
               .height,
           34.0);
       expect(
@@ -272,15 +272,45 @@ void main() {
       expect(bannerRect.right <= detectRect.left, isTrue);
       expect((bannerRect.center.dy - detectRect.center.dy).abs() < 12, isTrue);
 
-      // Username pre-populated, password obscured by default.
+      // Expanded row does not duplicate the username in the subtitle line;
+      // collapsed unselected rows show subtitle username once.
+      expect(find.byKey(const Key('subtitle-username-p-http')), findsNothing);
+      expect(find.byKey(const Key('subtitle-username-p-socks')), findsOneWidget);
+
+      // Username pre-populated; stored password is NEVER loaded or revealable.
       final userField = tester.widget<TextField>(
           find.byKey(const Key('inline-username-p-http')));
       expect(userField.controller!.text, 'alice');
+      expect(find.byKey(const Key('inline-password-locked-p-http')),
+          findsOneWidget);
+      expect(find.byKey(const Key('inline-password-p-http')), findsNothing);
+      expect(find.byKey(const Key('inline-password-toggle-p-http')),
+          findsNothing);
+      expect(find.text('old-secret'), findsNothing);
+
+      // Saving username-only while locked preserves stored password untouched.
+      await tester.enterText(
+          find.byKey(const Key('inline-username-p-http')), '  alice.trimmed  ');
+      await tester.tap(find.byKey(const Key('inline-save-test-p-http')));
+      await tester.pumpAndSettle();
+      expect(core.updatedPayloads, hasLength(1));
+      expect(core.updatedPayloads.last.payload['username'], 'alice.trimmed');
+      expect(core.updatedPayloads.last.payload['password'], 'old-secret');
+
+      // Clicking Retype opens an empty editable field (34px) with eye icon.
+      await tester.tap(find.byKey(const Key('inline-retype-p-http')));
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .getSize(find.byKey(const Key('inline-password-p-http')))
+              .height,
+          34.0);
       var passField = tester.widget<TextField>(
           find.byKey(const Key('inline-password-p-http')));
+      expect(passField.controller!.text, isEmpty);
       expect(passField.obscureText, isTrue);
 
-      // Eye toggle reveals then hides password.
+      // Eye toggle reveals then hides fresh password input.
       await tester.tap(find.byKey(const Key('inline-password-toggle-p-http')));
       await tester.pump();
       passField = tester.widget<TextField>(
@@ -292,16 +322,14 @@ void main() {
           find.byKey(const Key('inline-password-p-http')));
       expect(passField.obscureText, isTrue);
 
-      // Edit with leading/trailing spaces on username, new password, and tap Save & Test.
-      await tester.enterText(
-          find.byKey(const Key('inline-username-p-http')), '  alice.trimmed  ');
+      // Type new password and tap Save & Test -> saves, tests, and re-locks immediately.
       await tester.enterText(
           find.byKey(const Key('inline-password-p-http')), 'new-secret');
       await tester.tap(find.byKey(const Key('inline-save-test-p-http')));
       await tester.pumpAndSettle();
 
-      expect(core.updatedPayloads, hasLength(1));
-      final saved = core.updatedPayloads.single;
+      expect(core.updatedPayloads, hasLength(2));
+      final saved = core.updatedPayloads.last;
       expect(saved.id, 'p-http');
       expect(saved.payload['username'], 'alice.trimmed');
       expect(saved.payload['password'], 'new-secret');
@@ -309,6 +337,11 @@ void main() {
       expect(saved.payload['passwordMode'], 'timed');
       expect(saved.payload['passwordTTLMinutes'], 120);
       expect(core.testedIds, contains('p-http'));
+      expect(find.byKey(const Key('inline-password-locked-p-http')),
+          findsOneWidget);
+      expect(find.byKey(const Key('inline-password-toggle-p-http')),
+          findsNothing);
+      expect(find.text('new-secret'), findsNothing);
 
       // Selecting SOCKS5 shows strip; selecting PAC-only shows strip; selecting SS hides strip.
       await tester.tap(find.text('Work SOCKS'));
@@ -376,9 +409,11 @@ void main() {
       expect(core.selectedId, 'p-http');
       expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsOneWidget);
 
-      // Edit & save credentials on unselected p-socks.
+      // Edit & save credentials on unselected p-socks (retype first since it has a stored password).
       await tester.enterText(
           find.byKey(const Key('inline-username-p-socks')), 'bob.new');
+      await tester.tap(find.byKey(const Key('inline-retype-p-socks')));
+      await tester.pumpAndSettle();
       await tester.enterText(
           find.byKey(const Key('inline-password-p-socks')), 'socks-new');
       await tester.tap(find.byKey(const Key('inline-save-test-p-socks')));
@@ -520,6 +555,70 @@ void main() {
       await tester.tap(find.byKey(const Key('banner-action-auth')));
       await tester.pumpAndSettle();
       expect(passEditable.focusNode.hasFocus, isTrue);
+    });
+
+    testWidgets(
+        'never exposes stored password or eye icon even when passwordLocked is false, and re-locks immediately after save',
+        (tester) async {
+      final appState = AppStateModel(ThemeMode.light, const Locale('en'));
+      final core = _FakeProxiesCoreManager(
+        appState: appState,
+        selectedId: 'p-sec',
+        proxies: [
+          ProxyItem('p-sec', 'Corp Secure', 'proxy.sec', 8080, null, 'http',
+              username: 'nimish.coelho',
+              password: 'super-secret-password',
+              passwordLocked: false),
+        ],
+        rawDetails: {
+          'p-sec': {
+            'id': 'p-sec',
+            'name': 'Corp Secure',
+            'type': 'http',
+            'server': 'proxy.sec',
+            'port': 8080,
+            'username': 'nimish.coelho',
+            'password': 'super-secret-password',
+            'passwordLocked': false,
+          },
+        },
+      );
+
+      await _pumpProxiesPage(tester, appState: appState, core: core);
+
+      // Stored password is NEVER in the widget tree and NO eye icon is rendered.
+      expect(find.byKey(const Key('inline-password-locked-p-sec')),
+          findsOneWidget);
+      expect(find.byKey(const Key('inline-password-p-sec')), findsNothing);
+      expect(find.byKey(const Key('inline-password-toggle-p-sec')),
+          findsNothing);
+      expect(find.byIcon(Icons.visibility), findsNothing);
+      expect(find.byIcon(Icons.visibility_off), findsNothing);
+      expect(find.text('super-secret-password'), findsNothing);
+
+      // Retype opens an empty editable field with an eye icon for fresh input only.
+      await tester.tap(find.byKey(const Key('inline-retype-p-sec')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('inline-password-p-sec')), findsOneWidget);
+      expect(find.byKey(const Key('inline-password-toggle-p-sec')),
+          findsOneWidget);
+      final passField = tester.widget<TextField>(
+          find.byKey(const Key('inline-password-p-sec')));
+      expect(passField.controller!.text, isEmpty);
+
+      // Saving clears the controller and returns immediately to locked state with no eye icon.
+      await tester.enterText(
+          find.byKey(const Key('inline-password-p-sec')), 'fresh-secret-2');
+      await tester.tap(find.byKey(const Key('inline-save-test-p-sec')));
+      await tester.pumpAndSettle();
+
+      expect(passField.controller!.text, isEmpty);
+      expect(find.byKey(const Key('inline-password-locked-p-sec')),
+          findsOneWidget);
+      expect(find.byKey(const Key('inline-password-p-sec')), findsNothing);
+      expect(find.byKey(const Key('inline-password-toggle-p-sec')),
+          findsNothing);
+      expect(find.text('fresh-secret-2'), findsNothing);
     });
   });
 

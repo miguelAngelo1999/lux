@@ -502,13 +502,18 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       ];
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       key: const Key('proxies-status-banner'),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.10),
+        color: accent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accent.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.06),
+        ),
       ),
       child: Row(
         children: [
@@ -649,13 +654,13 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     )
                   : SizedBox(
                       height: 34,
-                      child: OutlinedButton.icon(
+                      child: TextButton.icon(
                         key: const Key('proxies-detect-button'),
                         onPressed: _detectProxies,
                         icon: const Icon(Icons.wifi_find, size: 15),
                         label: const TText('Detect Proxy',
                             style: TextStyle(fontSize: 12)),
-                        style: OutlinedButton.styleFrom(
+                        style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           minimumSize: const Size(0, 34),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
