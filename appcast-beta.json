@@ -1,17 +1,17 @@
 {
-  "version": "1.50.113",
+  "version": "1.50.114",
   "channel": "beta",
-  "notes": "fix(network): auto-resume on reconnect and wake after offline pause",
+  "notes": "feat(proxies): inline proxy credentials strip and plain-language status banner",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "9f4392c2962d7550f85fd3d3bbdbcea3a19cb38fcca39861c567d165e0498e22",
-    "size": 42814233,
-    "version": "1.50.113"
+    "sha256": "3f4bc056d0f34fea8ecb4141a6ec6df9b4cec9a2c0bd51e65d8b3fc9a360a191",
+    "size": 42853356,
+    "version": "1.50.114"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "f3b620f4ae7a4a4b7da0e4d799957c9eac11630d2f72726ad13707d0008b17f3",
-    "size": 32705660,
-    "version": "1.50.113"
+    "sha256": "10b3b2f47be9958208c38ca99d7ad21211b77526a90020ec67b5591eed059489",
+    "size": 32727462,
+    "version": "1.50.114"
   }
 }
