@@ -101,7 +101,7 @@ trap 'cleanup_on_err $LINENO' ERR INT TERM
 strip_clixml() {
   python3 -c '
 import sys, re
-raw = sys.stdin.read()
+raw = sys.stdin.buffer.read().decode("utf-8", errors="replace")
 cleaned = re.sub(r"#< CLIXML[\s\S]*?</Objs>\r?\n?", "", raw)
 lines = []
 for line in cleaned.splitlines():
@@ -449,6 +449,9 @@ if ($LASTEXITCODE -ge 8) {
 Copy-Item -Force "$RepoShare\pubspec.yaml" "C:\lux-build\lux\pubspec.yaml"
 Copy-Item -Force "$RepoShare\lib\core\checksum.dart" "C:\lux-build\lux\lib\core\checksum.dart"
 Copy-Item -Force "$RepoShare\dist-setup.iss" "C:\lux-build\lux\dist-setup.iss"
+foreach ($copiedFile in @("C:\lux-build\lux\pubspec.yaml", "C:\lux-build\lux\lib\core\checksum.dart", "C:\lux-build\lux\dist-setup.iss")) {
+  if (Test-Path -LiteralPath $copiedFile) { (Get-Item -LiteralPath $copiedFile -Force).Attributes = 'Normal' }
+}
 
 # 2. Copy Mac-cross-compiled cached lux_core.exe into Windows assets\bin
 $coreShare = "$RepoShare\dist\win_lux_core.exe"
@@ -579,6 +582,7 @@ $c = [regex]::Replace($c, '(?m)^[ \t]*AppMutex[ \t]*=[^\r\n]*\r?\n', '')
 if ($c -notmatch '(?m)^[ \t]*CloseApplications=no') {
   $c = [regex]::Replace($c, '(?m)^\[Setup\]\r?\n', "[Setup]`r`nCloseApplications=no`r`nRestartApplications=no`r`n")
 }
+if (Test-Path -LiteralPath $issPath) { (Get-Item -LiteralPath $issPath -Force).Attributes = 'Normal' }
 $utf8Bom = New-Object System.Text.UTF8Encoding($true)
 [System.IO.File]::WriteAllText($issPath, $c, $utf8Bom)
 
