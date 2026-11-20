@@ -373,9 +373,12 @@ $ProgressPreference = "SilentlyContinue"
 $env:PUB_CACHE = "C:\Users\virgoh\AppData\Local\Pub\Cache"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 $env:VCPKG_DISABLE_METRICS = "1"
+$env:VCToolsTelemetry = "0"
+$env:VSCMD_SKIP_SENDTELEMETRY = "1"
 
 function Stop-LingeringBuildHelpers {
   Get-Process -Name "vctip" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  & taskkill.exe /F /IM vctip.exe 2>$null | Out-Null
 }
 
 Stop-LingeringBuildHelpers
@@ -399,14 +402,26 @@ if (-not (Test-Path ".flutter-plugins-dependencies")) {
   Write-Host "FLUTTER_FAILED: pub get did not write .flutter-plugins-dependencies"; exit 1
 }
 
+$outLog = "C:\lux-build\flutter_stdout.log"
+$errLog = "C:\lux-build\flutter_stderr.log"
+Remove-Item -Force $outLog, $errLog -ErrorAction SilentlyContinue
+
 $p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
      -ArgumentList "build","windows","--release","--no-pub" `
+     -RedirectStandardOutput $outLog -RedirectStandardError $errLog `
      -Wait -PassThru -NoNewWindow
+Stop-LingeringBuildHelpers
+if (Test-Path $outLog) { Get-Content $outLog }
+if (Test-Path $errLog) { Get-Content $errLog }
 if ($p.ExitCode -ne 0) {
   Write-Host "==> First build attempt exited with $($p.ExitCode), retrying once..."
   $p = Start-Process -FilePath "C:\lux-build\flutter\bin\flutter.bat" `
        -ArgumentList "build","windows","--release","--no-pub" `
+       -RedirectStandardOutput $outLog -RedirectStandardError $errLog `
        -Wait -PassThru -NoNewWindow
+  Stop-LingeringBuildHelpers
+  if (Test-Path $outLog) { Get-Content $outLog }
+  if (Test-Path $errLog) { Get-Content $errLog }
 }
 if ($p.ExitCode -ne 0) {
   Write-Host "FLUTTER_FAILED: build exit $($p.ExitCode)"
