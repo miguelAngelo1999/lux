@@ -128,6 +128,7 @@ Future<void> _pumpProxiesPage(
   required AppStateModel appState,
   required _FakeProxiesCoreManager core,
   Size size = const Size(900, 720),
+  Future<void> Function(ProxyItem item)? onPeekPassword,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -159,6 +160,7 @@ Future<void> _pumpProxiesPage(
                 curProxyInfo: '',
                 onCurProxyInfoChange: (_) {},
                 dashboardUrl: 'http://127.0.0.1:1',
+                onPeekPassword: onPeekPassword,
               );
             },
           ),
@@ -241,11 +243,26 @@ void main() {
 
       await _pumpProxiesPage(tester, appState: appState, core: core);
 
-      // Selected http proxy shows inline strip; unselected/ss do not.
-      expect(find.byKey(const Key('inline-auth-strip-p-http')), findsOneWidget);
+      // Every card (including the selected proxy) starts collapsed by default.
+      expect(find.byKey(const Key('inline-auth-strip-p-http')), findsNothing);
       expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsNothing);
       expect(find.byKey(const Key('inline-auth-strip-p-pac')), findsNothing);
       expect(find.byKey(const Key('inline-auth-strip-p-ss')), findsNothing);
+      expect(find.byKey(const Key('subtitle-username-p-http')), findsOneWidget);
+      expect(find.byKey(const Key('subtitle-username-p-socks')), findsOneWidget);
+
+      // Status banner and Detect Proxy sit on the same top row.
+      final bannerRect =
+          tester.getRect(find.byKey(const Key('proxies-status-banner')));
+      final detectRect =
+          tester.getRect(find.byKey(const Key('proxies-detect-button')));
+      expect(bannerRect.right <= detectRect.left, isTrue);
+      expect((bannerRect.center.dy - detectRect.center.dy).abs() < 12, isTrue);
+
+      // Expand selected p-http via the credentials toggle.
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-http')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('inline-auth-strip-p-http')), findsOneWidget);
 
       // Username, Locked Password, and Save & Test all share the exact 34px height.
       expect(
@@ -264,26 +281,20 @@ void main() {
               .height,
           34.0);
 
-      // Status banner and Detect Proxy sit on the same top row.
-      final bannerRect =
-          tester.getRect(find.byKey(const Key('proxies-status-banner')));
-      final detectRect =
-          tester.getRect(find.byKey(const Key('proxies-detect-button')));
-      expect(bannerRect.right <= detectRect.left, isTrue);
-      expect((bannerRect.center.dy - detectRect.center.dy).abs() < 12, isTrue);
-
       // Expanded row does not duplicate the username in the subtitle line;
       // collapsed unselected rows show subtitle username once.
       expect(find.byKey(const Key('subtitle-username-p-http')), findsNothing);
       expect(find.byKey(const Key('subtitle-username-p-socks')), findsOneWidget);
 
-      // Username pre-populated; stored password is NEVER loaded or revealable.
+      // Username pre-populated; stored password is NEVER loaded or revealable (timed mode).
       final userField = tester.widget<TextField>(
           find.byKey(const Key('inline-username-p-http')));
       expect(userField.controller!.text, 'alice');
       expect(find.byKey(const Key('inline-password-locked-p-http')),
           findsOneWidget);
       expect(find.byKey(const Key('inline-password-p-http')), findsNothing);
+      expect(find.byKey(const Key('inline-password-peek-p-http')),
+          findsNothing);
       expect(find.byKey(const Key('inline-password-toggle-p-http')),
           findsNothing);
       expect(find.text('old-secret'), findsNothing);
@@ -343,12 +354,18 @@ void main() {
           findsNothing);
       expect(find.text('new-secret'), findsNothing);
 
-      // Selecting SOCKS5 shows strip; selecting PAC-only shows strip; selecting SS hides strip.
+      // Selecting SOCKS5/PAC keeps them collapsed until toggled; toggling expands cleanly.
       await tester.tap(find.text('Work SOCKS'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsNothing);
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-socks')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsOneWidget);
 
       await tester.tap(find.text('Auto PAC'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('inline-auth-strip-p-pac')), findsNothing);
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-pac')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('inline-auth-strip-p-pac')), findsOneWidget);
 
@@ -398,8 +415,8 @@ void main() {
 
       await _pumpProxiesPage(tester, appState: appState, core: core);
 
-      // Initially p-http is selected & expanded; p-socks is collapsed.
-      expect(find.byKey(const Key('inline-auth-strip-p-http')), findsOneWidget);
+      // Initially both p-http (selected) and p-socks (unselected) are collapsed.
+      expect(find.byKey(const Key('inline-auth-strip-p-http')), findsNothing);
       expect(find.byKey(const Key('inline-auth-strip-p-socks')), findsNothing);
 
       // Tap credentials toggle on unselected p-socks -> expands p-socks WITHOUT selecting it.
@@ -475,10 +492,18 @@ void main() {
 
       await _pumpProxiesPage(tester, appState: appState, core: core);
 
-      // Shows locked placeholder + Retype button, not an editable password field.
+      // Starts collapsed; tap toggle to expand.
+      expect(find.byKey(const Key('inline-auth-strip-p-locked')), findsNothing);
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-locked')));
+      await tester.pumpAndSettle();
+
+      // Shows locked placeholder + Retype button, NO eye/reveal button, not an editable password field.
       expect(find.byKey(const Key('inline-password-locked-p-locked')),
           findsOneWidget);
       expect(find.byKey(const Key('inline-retype-p-locked')), findsOneWidget);
+      expect(find.byKey(const Key('inline-password-peek-p-locked')),
+          findsNothing);
+      expect(find.byIcon(Icons.visibility_outlined), findsNothing);
       expect(find.byKey(const Key('inline-password-p-locked')), findsNothing);
 
       // Tap Retype -> unlocks typing field and focuses it.
@@ -558,9 +583,10 @@ void main() {
     });
 
     testWidgets(
-        'never exposes stored password or eye icon even when passwordLocked is false, and re-locks immediately after save',
+        'non-locked saved password hides stored value and invokes admin-auth on peek; locked/timed/one-time hides eye button',
         (tester) async {
       final appState = AppStateModel(ThemeMode.light, const Locale('en'));
+      final peekedIds = <String>[];
       final core = _FakeProxiesCoreManager(
         appState: appState,
         selectedId: 'p-sec',
@@ -568,7 +594,18 @@ void main() {
           ProxyItem('p-sec', 'Corp Secure', 'proxy.sec', 8080, null, 'http',
               username: 'nimish.coelho',
               password: 'super-secret-password',
-              passwordLocked: false),
+              passwordLocked: false,
+              passwordMode: 'persistent'),
+          ProxyItem('p-locked', 'Locked Proxy', 'proxy.lock', 8080, null, 'http',
+              username: 'locked.user',
+              password: 'locked-secret-password',
+              passwordLocked: true,
+              passwordMode: 'persistent'),
+          ProxyItem('p-timed', 'Timed Proxy', 'proxy.time', 8080, null, 'http',
+              username: 'timed.user',
+              password: 'timed-secret-password',
+              passwordLocked: false,
+              passwordMode: 'timed'),
         ],
         rawDetails: {
           'p-sec': {
@@ -580,23 +617,80 @@ void main() {
             'username': 'nimish.coelho',
             'password': 'super-secret-password',
             'passwordLocked': false,
+            'passwordMode': 'persistent',
+          },
+          'p-locked': {
+            'id': 'p-locked',
+            'name': 'Locked Proxy',
+            'type': 'http',
+            'server': 'proxy.lock',
+            'port': 8080,
+            'username': 'locked.user',
+            'password': 'locked-secret-password',
+            'passwordLocked': true,
+            'passwordMode': 'persistent',
+          },
+          'p-timed': {
+            'id': 'p-timed',
+            'name': 'Timed Proxy',
+            'type': 'http',
+            'server': 'proxy.time',
+            'port': 8080,
+            'username': 'timed.user',
+            'password': 'timed-secret-password',
+            'passwordLocked': false,
+            'passwordMode': 'timed',
           },
         },
       );
 
-      await _pumpProxiesPage(tester, appState: appState, core: core);
+      await _pumpProxiesPage(
+        tester,
+        appState: appState,
+        core: core,
+        onPeekPassword: (item) async {
+          peekedIds.add(item.id);
+        },
+      );
 
-      // Stored password is NEVER in the widget tree and NO eye icon is rendered.
+      // Selected p-sec starts collapsed; expand it via toggle.
+      expect(find.byKey(const Key('inline-auth-strip-p-sec')), findsNothing);
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-sec')));
+      await tester.pumpAndSettle();
+
+      // Stored password is NEVER in the widget tree; non-locked persistent shows admin-auth peek eye button.
       expect(find.byKey(const Key('inline-password-locked-p-sec')),
           findsOneWidget);
       expect(find.byKey(const Key('inline-password-p-sec')), findsNothing);
-      expect(find.byKey(const Key('inline-password-toggle-p-sec')),
-          findsNothing);
-      expect(find.byIcon(Icons.visibility), findsNothing);
-      expect(find.byIcon(Icons.visibility_off), findsNothing);
+      expect(find.byKey(const Key('inline-password-peek-p-sec')),
+          findsOneWidget);
+      expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
       expect(find.text('super-secret-password'), findsNothing);
 
-      // Retype opens an empty editable field with an eye icon for fresh input only.
+      // Tapping eye button invokes admin-auth peek callback instead of revealing inline.
+      await tester.tap(find.byKey(const Key('inline-password-peek-p-sec')));
+      await tester.pumpAndSettle();
+      expect(peekedIds, ['p-sec']);
+      expect(find.text('super-secret-password'), findsNothing);
+
+      // Expand locked and timed proxies: NEITHER renders an eye/reveal button at all.
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-locked')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('inline-password-locked-p-locked')),
+          findsOneWidget);
+      expect(find.byKey(const Key('inline-password-peek-p-locked')),
+          findsNothing);
+      expect(find.byKey(const Key('inline-retype-p-locked')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-timed')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('inline-password-locked-p-timed')),
+          findsOneWidget);
+      expect(find.byKey(const Key('inline-password-peek-p-timed')),
+          findsNothing);
+      expect(find.byKey(const Key('inline-retype-p-timed')), findsOneWidget);
+
+      // Retype on p-sec opens an empty editable field with fresh-input eye toggle.
       await tester.tap(find.byKey(const Key('inline-retype-p-sec')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('inline-password-p-sec')), findsOneWidget);
@@ -606,7 +700,7 @@ void main() {
           find.byKey(const Key('inline-password-p-sec')));
       expect(passField.controller!.text, isEmpty);
 
-      // Saving clears the controller and returns immediately to locked state with no eye icon.
+      // Saving clears the controller and returns immediately to locked masked state.
       await tester.enterText(
           find.byKey(const Key('inline-password-p-sec')), 'fresh-secret-2');
       await tester.tap(find.byKey(const Key('inline-save-test-p-sec')));
@@ -618,7 +712,21 @@ void main() {
       expect(find.byKey(const Key('inline-password-p-sec')), findsNothing);
       expect(find.byKey(const Key('inline-password-toggle-p-sec')),
           findsNothing);
+      expect(find.byKey(const Key('inline-password-peek-p-sec')),
+          findsOneWidget);
       expect(find.text('fresh-secret-2'), findsNothing);
+
+      // Without an onPeekPassword override, tapping the peek icon opens the real
+      // showPasswordPeekDialog admin-elevation prompt.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await _pumpProxiesPage(tester, appState: appState, core: core);
+      await tester.tap(find.byKey(const Key('credentials-toggle-p-sec')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('inline-password-peek-p-sec')));
+      await tester.pumpAndSettle();
+      expect(find.text(tr().peekPasswordTitle), findsOneWidget);
+      expect(find.text(tr().peekPasswordElevationRequired), findsOneWidget);
     });
   });
 

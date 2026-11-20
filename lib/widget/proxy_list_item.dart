@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lux/widget/pac_rules_dialog.dart';
+import 'package:lux/widget/password_peek_dialog.dart';
 import 'package:lux/widget/proxy_item_action_menu.dart';
 import 'package:lux/util/t_text.dart';
 
@@ -52,6 +53,7 @@ class ProxyListItem extends StatefulWidget {
   final void Function(ProxyTestStatus status)? onTestStatusChanged;
   final ProxyItemController? selectedController;
   final VoidCallback? onCredentialsSaved;
+  final Future<void> Function(ProxyItem item)? onPeekPassword;
 
   const ProxyListItem({
     super.key,
@@ -63,6 +65,7 @@ class ProxyListItem extends StatefulWidget {
     this.onTestStatusChanged,
     this.selectedController,
     this.onCredentialsSaved,
+    this.onPeekPassword,
   });
 
   @override
@@ -87,6 +90,8 @@ class _ProxyListItemState extends State<ProxyListItem> {
   bool _usernameDirty = false;
   bool _passwordDirty = false;
   bool _hasStoredPassword = false;
+  bool _effectivePasswordLocked = false;
+  String _effectivePasswordMode = 'persistent';
   bool _detailLoaded = false;
   bool _credentialsExpanded = false;
 
@@ -108,6 +113,11 @@ class _ProxyListItemState extends State<ProxyListItem> {
 
   bool get _isLockedView => _hasStoredPassword && !_retyping;
 
+  bool get _isPasswordNonRevealable =>
+      _effectivePasswordLocked ||
+      _effectivePasswordMode == 'one-time' ||
+      _effectivePasswordMode == 'timed';
+
   ProxyTestStatus get _currentStatus => ProxyTestStatus(
         state: _state,
         latencyMs: _latencyMs,
@@ -118,7 +128,8 @@ class _ProxyListItemState extends State<ProxyListItem> {
   @override
   void initState() {
     super.initState();
-    _credentialsExpanded = widget.selected && _supportsCredentials;
+    // All cards (including selected) start collapsed by default.
+    _credentialsExpanded = false;
     _syncInitialCredentials();
     if (widget.selected) {
       _attachSelectedController();
@@ -134,7 +145,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
       _passwordDirty = false;
       _obscurePassword = true;
       _detailLoaded = false;
-      _credentialsExpanded = widget.selected && _supportsCredentials;
+      _credentialsExpanded = false;
       _state = TestState.untested;
       _latencyMs = 0;
       _pacReachable = false;
@@ -146,6 +157,12 @@ class _ProxyListItemState extends State<ProxyListItem> {
           _usernameCtrl.text != widget.item.username) {
         _usernameCtrl.text = widget.item.username!;
       }
+      if (!_retyping) {
+        _effectivePasswordLocked = widget.item.passwordLocked;
+        if (widget.item.passwordMode != null) {
+          _effectivePasswordMode = widget.item.passwordMode!;
+        }
+      }
       final itemHasStored =
           widget.item.passwordLocked || (widget.item.password ?? '').isNotEmpty;
       if (!_passwordDirty && !_retyping && itemHasStored) {
@@ -154,7 +171,6 @@ class _ProxyListItemState extends State<ProxyListItem> {
     }
 
     if (widget.selected && !oldWidget.selected) {
-      _credentialsExpanded = _supportsCredentials;
       _attachSelectedController();
       _loadProxyDetail();
       if (_state != TestState.untested) {
@@ -183,8 +199,10 @@ class _ProxyListItemState extends State<ProxyListItem> {
   }
 
   void _syncInitialCredentials() {
+    _effectivePasswordLocked = widget.item.passwordLocked;
+    _effectivePasswordMode = widget.item.passwordMode ?? 'persistent';
     _hasStoredPassword =
-        widget.item.passwordLocked || (widget.item.password ?? '').isNotEmpty;
+        _effectivePasswordLocked || (widget.item.password ?? '').isNotEmpty;
     _retyping = !_hasStoredPassword;
     _obscurePassword = true;
     _usernameCtrl.text = widget.item.username ?? '';
@@ -208,10 +226,15 @@ class _ProxyListItemState extends State<ProxyListItem> {
     if (!mounted || detail == null) return;
     final locked =
         (detail.raw['passwordLocked'] as bool?) ?? widget.item.passwordLocked;
+    final mode = (detail.raw['passwordMode'] as String?) ??
+        widget.item.passwordMode ??
+        'persistent';
     final remoteUser = (detail.raw['username'] as String?) ?? '';
     final remotePass = detail.password ?? '';
     final hasStored = locked || remotePass.isNotEmpty;
     setState(() {
+      _effectivePasswordLocked = locked;
+      _effectivePasswordMode = mode;
       _hasStoredPassword = hasStored;
       if (!_passwordDirty) {
         _retyping = !hasStored;
@@ -298,8 +321,9 @@ class _ProxyListItemState extends State<ProxyListItem> {
         _usernameDirty = false;
         _passwordDirty = false;
         if (savedNewPassword) {
-          // Immediately lock after saving so the stored password can never be revealed.
+          // Immediately lock after saving so the stored password is never left in the controller.
           _hasStoredPassword = true;
+          _effectivePasswordLocked = false;
           _retyping = false;
           _obscurePassword = true;
           _passwordCtrl.clear();
@@ -773,18 +797,56 @@ class _ProxyListItemState extends State<ProxyListItem> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            trailing: TextButton(
-              key: Key('inline-retype-${item.id}'),
-              onPressed: _startRetype,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 34),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                tl(context, 'Retype'),
-                style: const TextStyle(fontSize: 11),
-              ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!_isPasswordNonRevealable)
+                  Tooltip(
+                    message: tl(context, 'Show'),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: InkWell(
+                        key: Key('inline-password-peek-${item.id}'),
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () {
+                          if (widget.onPeekPassword != null) {
+                            widget.onPeekPassword!(widget.item);
+                          } else if (widget.coreManager != null) {
+                            showPasswordPeekDialog(
+                              context: context,
+                              coreManager: widget.coreManager!,
+                              proxyItem: widget.item,
+                            );
+                          }
+                        },
+                        child: SizedBox(
+                          width: 28,
+                          height: 34,
+                          child: Center(
+                            child: Icon(
+                              Icons.visibility_outlined,
+                              size: 15,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                TextButton(
+                  key: Key('inline-retype-${item.id}'),
+                  onPressed: _startRetype,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 34),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    tl(context, 'Retype'),
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
             ),
           )
         : _inlineFieldShell(
@@ -1043,11 +1105,6 @@ class _ProxyListItemState extends State<ProxyListItem> {
                       subtitleUsername.isNotEmpty &&
                       !_credentialsExpanded) ...[
                     const SizedBox(width: 6),
-                    Text(
-                      '·',
-                      style: TextStyle(fontSize: 11.5, color: mutedSubtitleColor),
-                    ),
-                    const SizedBox(width: 6),
                     Flexible(
                       child: MouseRegion(
                         cursor: SystemMouseCursors.click,
@@ -1058,23 +1115,40 @@ class _ProxyListItemState extends State<ProxyListItem> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 2, vertical: 1),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.person_outline,
-                                    size: 12, color: mutedSubtitleColor),
-                                const SizedBox(width: 3),
-                                Flexible(
-                                  child: Text(
-                                    subtitleUsername,
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  if (item.server != null &&
+                                      item.server!.isNotEmpty)
+                                    TextSpan(
+                                      text: '·  ',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: mutedSubtitleColor,
+                                      ),
+                                    ),
+                                  WidgetSpan(
+                                    alignment: PlaceholderAlignment.middle,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(right: 3),
+                                      child: Icon(
+                                        Icons.person_outline,
+                                        size: 12,
+                                        color: mutedSubtitleColor,
+                                      ),
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: subtitleUsername,
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       color: mutedSubtitleColor,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),

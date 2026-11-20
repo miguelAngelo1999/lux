@@ -410,6 +410,7 @@ class ProxyItem {
   final String? username;
   final String? password;
   final bool passwordLocked;
+  final String? passwordMode;
   final String? pacUrl;
 
   ProxyItem(
@@ -417,6 +418,7 @@ class ProxyItem {
       {this.username,
       this.password,
       this.passwordLocked = false,
+      this.passwordMode,
       this.pacUrl});
 
   ProxyItem.fromJson(Map<String, dynamic> json)
@@ -432,6 +434,7 @@ class ProxyItem {
             (json['username'] is String ? json['username'] as String : null),
         password = (json['password'] is String ? json['password'] : null),
         passwordLocked = (json['passwordLocked'] is bool ? json['passwordLocked'] : false),
+        passwordMode = (json['passwordMode'] is String ? json['passwordMode'] as String : null),
         pacUrl = (json['pacUrl'] is String ? json['pacUrl'] as String : null);
 
   Map<String, dynamic> toJson() => {

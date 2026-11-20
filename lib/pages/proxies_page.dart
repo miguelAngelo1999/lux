@@ -24,12 +24,14 @@ class ProxiesPage extends StatefulWidget {
   final String curProxyInfo;
   final String dashboardUrl;
   final void Function(String) onCurProxyInfoChange;
+  final Future<void> Function(ProxyItem item)? onPeekPassword;
   const ProxiesPage(
       {super.key,
       required this.coreManager,
       required this.curProxyInfo,
       required this.onCurProxyInfoChange,
-      required this.dashboardUrl});
+      required this.dashboardUrl,
+      this.onPeekPassword});
 
   @override
   State<ProxiesPage> createState() => _ProxiesPageState();
@@ -302,6 +304,10 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   }
 
   void _handlePeekPassword(ProxyItem item) async {
+    if (widget.onPeekPassword != null) {
+      await widget.onPeekPassword!(item);
+      return;
+    }
     await showPasswordPeekDialog(
       context: context,
       coreManager: widget.coreManager,
@@ -702,6 +708,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                         },
                         selectedController: _selectedItemController,
                         onCredentialsSaved: refreshData,
+                        onPeekPassword: widget.onPeekPassword,
                       );
                     },
                   ),

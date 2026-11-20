@@ -21,6 +21,7 @@ class ProxyListCard extends StatefulWidget {
   final void Function(String id, ProxyTestStatus status)? onTestStatusChanged;
   final ProxyItemController? selectedController;
   final VoidCallback? onCredentialsSaved;
+  final Future<void> Function(ProxyItem item)? onPeekPassword;
 
   const ProxyListCard({
     super.key,
@@ -35,6 +36,7 @@ class ProxyListCard extends StatefulWidget {
     this.onTestStatusChanged,
     this.selectedController,
     this.onCredentialsSaved,
+    this.onPeekPassword,
   });
 
   @override
@@ -130,6 +132,7 @@ class _ProxyListCardState extends State<ProxyListCard> {
                       selectedController:
                           isSelected ? widget.selectedController : null,
                       onCredentialsSaved: widget.onCredentialsSaved,
+                      onPeekPassword: widget.onPeekPassword,
                       onChange: (action) => widget.onItemChange(action, item),
                     );
                   },
