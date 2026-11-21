@@ -1,17 +1,17 @@
 {
-  "version": "1.50.63",
+  "version": "1.50.119",
   "channel": "stable",
-  "notes": "release (beta): Windows 1.50.63 \u2014 hidden updater window",
+  "notes": "release (beta): 1.50.118",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1o6CAVZ3syI-_RYxYnDgOkzD1byWTAVM-&export=download&confirm=t",
-    "sha256": "467244493d78e618e28c73be314149f78e9a241a3510df0b46179b284a63ce11",
-    "size": 37968865,
-    "version": "1.50.56"
+    "sha256": "df8ed2a153d5f0eaa364044930f9f040af8a96ead233839550d3a558f358b0fc",
+    "size": 42811257,
+    "version": "1.50.119"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1lfAXXY2i85dAo9MJ736XWtBdGNQqd2OG&export=download&confirm=t",
-    "sha256": "d20ebfb5291d9e5257ec22a27dc6f5e8994f95e3117f65454595ecfa2fd9a284",
-    "size": 37696620,
-    "version": "1.50.63"
+    "sha256": "db2a955ed25ad17a7ba7b299d63af07a8dd640b73ce8d86b6c799238ecabbb53",
+    "size": 32727317,
+    "version": "1.50.119"
   }
 }
