@@ -256,5 +256,43 @@ void main() {
       expect(startedWith!.latestVersion, '1.50.114');
       expect(startedWith!.sha256, 'fresh-hash');
     });
+
+    test('pickNewestUpdate picks newer stable release when beta is behind stable', () {
+      const betaInfo = UpdateInfo(
+        latestVersion: '1.50.118',
+        currentVersion: '1.50.118',
+        notes: 'beta',
+        macOSUrl: 'https://example.com/beta.dmg',
+        windowsUrl: 'https://example.com/beta.exe',
+        hasUpdate: false,
+      );
+      const stableInfo = UpdateInfo(
+        latestVersion: '1.50.119',
+        currentVersion: '1.50.118',
+        notes: 'stable',
+        macOSUrl: 'https://example.com/stable.dmg',
+        windowsUrl: 'https://example.com/stable.exe',
+        hasUpdate: true,
+      );
+
+      final picked = pickNewestUpdate([betaInfo, stableInfo]);
+      expect(picked, isNotNull);
+      expect(picked!.latestVersion, '1.50.119');
+      expect(picked.hasUpdate, isTrue);
+
+      final pickedReverse = pickNewestUpdate([stableInfo, betaInfo]);
+      expect(pickedReverse!.latestVersion, '1.50.119');
+
+      // When beta is newer than stable, beta wins.
+      const newerBeta = UpdateInfo(
+        latestVersion: '1.50.120',
+        currentVersion: '1.50.119',
+        notes: 'newer beta',
+        macOSUrl: 'https://example.com/beta120.dmg',
+        windowsUrl: 'https://example.com/beta120.exe',
+        hasUpdate: true,
+      );
+      expect(pickNewestUpdate([newerBeta, stableInfo])!.latestVersion, '1.50.120');
+    });
   });
 }

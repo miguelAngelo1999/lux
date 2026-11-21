@@ -1,17 +1,17 @@
 {
-  "version": "1.50.118",
+  "version": "1.50.119",
   "channel": "beta",
-  "notes": "feat(ui,security): collapse proxy cards by default and require admin auth to peek non-locked inline passwords",
+  "notes": "release (beta): 1.50.118",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "43514ca3279092f37a5abd4dc07955157ae071c3fee217f48bd672c628313463",
-    "size": 42866908,
-    "version": "1.50.118"
+    "sha256": "df8ed2a153d5f0eaa364044930f9f040af8a96ead233839550d3a558f358b0fc",
+    "size": 42811257,
+    "version": "1.50.119"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "92687749eb34ea263f1e0032be01b1ca9270ef369b726131e2bb5986f8b50563",
-    "size": 38343079,
-    "version": "1.50.118"
+    "sha256": "db2a955ed25ad17a7ba7b299d63af07a8dd640b73ce8d86b6c799238ecabbb53",
+    "size": 32727317,
+    "version": "1.50.119"
   }
 }

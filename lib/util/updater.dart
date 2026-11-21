@@ -92,23 +92,40 @@ void _reportBadDownload(BuildContext context, String message) {
   );
 }
 
-/// Fetches the appcast.json from Google Drive and compares versions.
-/// [proxyPort] is the local Lux proxy port (default 1090) — needed because
-/// Dart's HttpClient doesn't pick up the system proxy in TUN/Mixed mode.
-Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
+/// Picks the newest [UpdateInfo] across multiple appcast channels (e.g. beta +
+/// stable when beta updates are enabled, so beta users still receive a newer
+/// stable release whenever stable > beta).
+UpdateInfo? pickNewestUpdate(Iterable<UpdateInfo?> candidates) {
+  UpdateInfo? best;
+  Version? bestVersion;
+  for (final c in candidates) {
+    if (c == null || c.latestVersion.isEmpty) continue;
+    Version? parsed;
+    try {
+      parsed = Version.parse(c.latestVersion.split('+').first);
+    } catch (_) {
+      continue;
+    }
+    if (best == null || bestVersion == null) {
+      best = c;
+      bestVersion = parsed;
+      continue;
+    }
+    final cmp = parsed.compareTo(bestVersion);
+    if (cmp > 0 || (cmp == 0 && c.hasUpdate && !best.hasUpdate)) {
+      best = c;
+      bestVersion = parsed;
+    }
+  }
+  return best;
+}
+
+Future<UpdateInfo?> _fetchSingleAppcast(
+  String baseUrl,
+  String current, {
+  int proxyPort = 1090,
+}) async {
   try {
-    final pkg = await PackageInfo.fromPlatform();
-    final current = pkg.version;
-
-    // Use custom appcast URL if set in prefs; beta URL if beta enabled; else default
-    final customUrl = await readCustomAppcastUrl();
-    final betaEnabled = await readBetaUpdatesEnabled();
-    final baseUrl = (customUrl != null && customUrl.isNotEmpty)
-        ? customUrl
-        : betaEnabled
-            ? betaAppcastUrl
-            : appcastUrl;
-
     // Use Dart's HttpClient directly with proxy + SSL bypass
     final client = HttpClient();
     client.badCertificateCallback = (_, __, ___) => true;
@@ -135,26 +152,17 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
       final req2 = await client.getUrl(Uri.parse(baseUrl));
       req2.followRedirects = true;
       final resp2 = await req2.close().timeout(const Duration(seconds: 10));
-      if (resp2.statusCode != 200) return null;
-      final body2 = await resp2.transform(const SystemEncoding().decoder).join();
-      final retryResult = _parseAppcast(body2, current);
-      if (retryResult != null && !updateStateNotifier.value.isDownloading) {
-        updateStateNotifier.value = UpdateState(
-          stage: retryResult.hasUpdate ? UpdateStage.available : UpdateStage.idle,
-          updateInfo: retryResult,
-        );
+      if (resp2.statusCode != 200) {
+        client.close();
+        return null;
       }
-      return retryResult;
+      final body2 = await resp2.transform(const SystemEncoding().decoder).join();
+      client.close();
+      return _parseAppcast(body2, current);
     }
     client.close();
     appLog('UPDATE', 'appcast fetched status=${response.statusCode} body=${body.substring(0, body.length.clamp(0, 200))}');
     final result = _parseAppcast(body, current);
-    if (result != null && !updateStateNotifier.value.isDownloading) {
-      updateStateNotifier.value = UpdateState(
-        stage: result.hasUpdate ? UpdateStage.available : UpdateStage.idle,
-        updateInfo: result,
-      );
-    }
 
     // GDrive CDN sometimes serves a stale cached revision for ~30s after a new
     // upload, returning the previous version.  When the manual "Check" button
@@ -176,14 +184,48 @@ Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
       final body2 = await resp2.transform(const SystemEncoding().decoder).join();
       client2.close();
       appLog('UPDATE', 'retry appcast fetched status=${resp2.statusCode} body=${body2.substring(0, body2.length.clamp(0, 200))}');
-      final retryResult = _parseAppcast(body2, current);
-      if (retryResult != null && !updateStateNotifier.value.isDownloading) {
-        updateStateNotifier.value = UpdateState(
-          stage: retryResult.hasUpdate ? UpdateStage.available : UpdateStage.idle,
-          updateInfo: retryResult,
-        );
-      }
-      return retryResult;
+      return _parseAppcast(body2, current) ?? result;
+    }
+
+    return result;
+  } catch (e) {
+    debugPrint('[Updater] fetch $baseUrl failed: $e');
+    return null;
+  }
+}
+
+/// Fetches the appcast.json from Google Drive and compares versions.
+/// [proxyPort] is the local Lux proxy port (default 1090) — needed because
+/// Dart's HttpClient doesn't pick up the system proxy in TUN/Mixed mode.
+Future<UpdateInfo?> checkForUpdate({int proxyPort = 1090}) async {
+  try {
+    final pkg = await PackageInfo.fromPlatform();
+    final current = pkg.version;
+
+    // Use custom appcast URL if set in prefs; when beta updates are enabled,
+    // check BOTH beta and stable appcasts and pick the newer version so beta
+    // users automatically receive a newer stable release too.
+    final customUrl = await readCustomAppcastUrl();
+    final betaEnabled = await readBetaUpdatesEnabled();
+
+    UpdateInfo? result;
+    if (customUrl != null && customUrl.isNotEmpty) {
+      result = await _fetchSingleAppcast(customUrl, current, proxyPort: proxyPort);
+    } else if (betaEnabled) {
+      final results = await Future.wait([
+        _fetchSingleAppcast(betaAppcastUrl, current, proxyPort: proxyPort),
+        _fetchSingleAppcast(appcastUrl, current, proxyPort: proxyPort),
+      ]);
+      result = pickNewestUpdate(results);
+    } else {
+      result = await _fetchSingleAppcast(appcastUrl, current, proxyPort: proxyPort);
+    }
+
+    if (result != null && !updateStateNotifier.value.isDownloading) {
+      updateStateNotifier.value = UpdateState(
+        stage: result.hasUpdate ? UpdateStage.available : UpdateStage.idle,
+        updateInfo: result,
+      );
     }
 
     return result;

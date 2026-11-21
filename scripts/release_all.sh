@@ -708,6 +708,14 @@ $UPLOAD_PY "$REPO/scripts/publish_appcast.py" "$VERSION" "dist/$DMG_NAME" --chan
 # Upload Windows installer
 $UPLOAD_PY "$REPO/scripts/publish_appcast_windows.py" "$VERSION" "$WIN_INSTALLER" --channel "$CHANNEL"
 
+# When publishing stable, also advance the beta channel so older beta clients
+# (that only poll appcast-beta.json) receive the newer stable release too.
+if [ "$CHANNEL" == "stable" ]; then
+  echo "==> Advancing beta appcast to match stable $VERSION..."
+  $UPLOAD_PY "$REPO/scripts/publish_appcast.py" "$VERSION" "dist/$DMG_NAME" --channel beta
+  $UPLOAD_PY "$REPO/scripts/publish_appcast_windows.py" "$VERSION" "$WIN_INSTALLER" --channel beta
+fi
+
 # ── Step 6: Commit and push ────────────────────────────────────────────────
 # Remove temporary OAuth token symlink before staging git files
 if [ -n "$OAUTH_TEMP_LINK" ] && [ -e "$OAUTH_TEMP_LINK" ]; then
@@ -720,7 +728,7 @@ if [ "$CHANNEL" == "beta" ]; then
   git add appcast-beta.json 2>/dev/null || true
   git commit -m "release (beta): $VERSION"
 else
-  git add appcast.json 2>/dev/null || true
+  git add appcast.json appcast-beta.json 2>/dev/null || true
   git commit -m "release: $VERSION"
 fi
 
