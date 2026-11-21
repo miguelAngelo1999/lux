@@ -33,6 +33,9 @@ class UpdateInfo {
   /// detectable.
   final String sha256;
   final int size;
+  final String channel;
+
+  bool get isStable => channel.toLowerCase() == 'stable';
 
   const UpdateInfo({
     required this.latestVersion,
@@ -43,6 +46,7 @@ class UpdateInfo {
     required this.hasUpdate,
     this.sha256 = '',
     this.size = 0,
+    this.channel = 'stable',
   });
 }
 
@@ -112,7 +116,9 @@ UpdateInfo? pickNewestUpdate(Iterable<UpdateInfo?> candidates) {
       continue;
     }
     final cmp = parsed.compareTo(bestVersion);
-    if (cmp > 0 || (cmp == 0 && c.hasUpdate && !best.hasUpdate)) {
+    if (cmp > 0 ||
+        (cmp == 0 && c.hasUpdate && !best.hasUpdate) ||
+        (cmp == 0 && c.hasUpdate == best.hasUpdate && c.isStable && !best.isStable)) {
       best = c;
       bestVersion = parsed;
     }
@@ -273,6 +279,7 @@ UpdateInfo? _parseAppcast(String body, String current) {
       hasUpdate:      hasUpdate,
       sha256:         ((platform['sha256'] as String?) ?? '').toLowerCase(),
       size:           (platform['size'] as num?)?.toInt() ?? 0,
+      channel:        ((data['channel'] as String?) ?? 'stable').toLowerCase(),
     );
   } catch (e) {
     debugPrint('[Updater] parse failed: $e');
@@ -367,9 +374,32 @@ Future<void> showUpdateConfirmDialog(BuildContext context, UpdateInfo info) asyn
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${info.currentVersion}  →  ${info.latestVersion}',
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          Row(
+            children: [
+              Text(
+                '${info.currentVersion}  →  ${info.latestVersion}',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (info.isStable ? Colors.green : Colors.orange).withAlpha(35),
+                  border: Border.all(
+                    color: (info.isStable ? Colors.green : Colors.orange).withAlpha(140),
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  info.isStable ? 'Stable' : 'Latest',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: info.isStable ? Colors.green : Colors.orange,
+                  ),
+                ),
+              ),
+            ],
           ),
           if (info.notes.isNotEmpty) ...[
             const SizedBox(height: 12),

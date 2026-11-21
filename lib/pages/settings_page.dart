@@ -628,24 +628,22 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             ),
           ),
           SettingRow(
-            title: 'Beta updates',
-            keywords: ['beta', 'early', 'pre-release', 'test'],
+            title: 'Latest updates',
+            keywords: ['latest', 'insider', 'beta', 'early', 'pre-release', 'test'],
             build: (ctx) => FutureBuilder<bool>(
               future: readBetaUpdatesEnabled(),
               builder: (ctx, snap) {
-                final isBeta = snap.data ?? false;
+                final isLatest = snap.data ?? false;
                 return switchTile(
-                  title: 'Beta updates',
-                  subtitle: isBeta
-                      ? 'Beta channel active. Early builds before they reach everyone.'
-                      : 'Get early builds before they reach everyone else. '
-                          'Off by default — turn on only if you want to help test '
-                          'pre-release versions.',
-                  value: isBeta,
+                  title: 'Latest updates',
+                  subtitle: isLatest
+                      ? 'Latest updates active. You receive the newest builds early, plus all stable releases.'
+                      : 'Get the latest builds as soon as they are ready, before the regular stable release.',
+                  value: isLatest,
                   onChanged: (v) async {
                     final statusMsg = v
-                        ? tl(context, 'Beta updates enabled')
-                        : tl(context, 'Beta updates disabled');
+                        ? tl(context, 'Latest updates enabled')
+                        : tl(context, 'Latest updates disabled');
                     setState(() => _checkingUpdate = true);
                     try {
                       await writeBetaUpdatesEnabled(v);

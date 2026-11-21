@@ -173,7 +173,7 @@ def release_notes():
     ).stdout.splitlines()
     for subject in log:
         s = subject.strip()
-        if s and not s.startswith(("release:", "chore: bump")):
+        if s and not s.startswith(("release:", "release (", "chore: bump")):
             return s
     return log[0].strip() if log else ""
 
