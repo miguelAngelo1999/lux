@@ -228,30 +228,18 @@ mkdir -p "$WIN_CORE_CACHE_DIR"
 
 ITUN_HEAD=$(git -C "$ITUN_DIR" rev-parse HEAD 2>/dev/null || echo "no-git")
 ITUN_DIFF_HASH=$(git -C "$ITUN_DIR" diff 2>/dev/null | shasum -a 256 | awk '{print $1}')
-WIN_CORE_KEY="${ITUN_HEAD}:${ITUN_DIFF_HASH}"
+WIN_CORE_KEY="${ITUN_HEAD}:${ITUN_DIFF_HASH}:with_gvisor"
 
 if [ -s "$WIN_CORE_CACHED_EXE" ] && [ -f "$WIN_CORE_CACHE_KEY_FILE" ] && [ "$(cat "$WIN_CORE_CACHE_KEY_FILE")" = "$WIN_CORE_KEY" ]; then
   echo "==> Windows lux_core.exe cache HIT ($WIN_CORE_KEY)"
 else
-  echo "==> Windows lux_core.exe cache MISS — cross-compiling on Mac..."
+  echo "==> Windows lux_core.exe cache MISS — cross-compiling on Mac (with_gvisor)..."
   CORE_T0=$(date +%s)
-  ITUN_TMP=$(mktemp -d /tmp/lux-itun-build.XXXXXX)
-  rsync -a --exclude='.git' --exclude='lux_core' --exclude='lux_core_*.zip' "$ITUN_DIR/" "$ITUN_TMP/"
-  python3 -c "
-import pathlib
-p = pathlib.Path('$ITUN_TMP/internal/executor/executor.go')
-if p.exists():
-    c = p.read_text()
-    c2 = c.replace('NewStack(\"mixed\"', 'NewStack(\"system\"')
-    if c2 != c:
-        p.write_text(c2)
-"
   WIN_CORE_TMP_OUT="$WIN_CORE_CACHE_DIR/lux_core.exe.tmp.$$"
   (
-    cd "$ITUN_TMP"
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o "$WIN_CORE_TMP_OUT" .
+    cd "$ITUN_DIR"
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags with_gvisor -ldflags="-s -w" -trimpath -o "$WIN_CORE_TMP_OUT" .
   )
-  rm -rf "$ITUN_TMP"
   [ -s "$WIN_CORE_TMP_OUT" ] || { echo "ERROR: Mac Go cross-compile of lux_core.exe failed"; exit 1; }
   mv -f "$WIN_CORE_TMP_OUT" "$WIN_CORE_CACHED_EXE"
   printf '%s' "$WIN_CORE_KEY" > "$WIN_CORE_CACHE_KEY_FILE"
