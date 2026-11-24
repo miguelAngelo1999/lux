@@ -1,17 +1,17 @@
 {
-  "version": "1.50.123",
+  "version": "1.50.124",
   "channel": "beta",
-  "notes": "feat(windows): one-time LuxCoreService install for zero-UAC Mixed/TUN restarts",
+  "notes": "feat(windows): elevate once via LuxCoreService for all modes with graceful UAC fallback & banner",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "89a7f4c40805fee93edde0a864d30717ac51a68ada18d4d380f52f80bc0cf528",
-    "size": 45776533,
-    "version": "1.50.123"
+    "sha256": "c7295abb59fb552be57e06506a5fb5481ec6191542cb48d633fcba7d9141e447",
+    "size": 45783057,
+    "version": "1.50.124"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "f7a2c194569ae1b05171f7e7369133acb71fc1142261c69d0ef84f6002806515",
-    "size": 41684531,
-    "version": "1.50.123"
+    "sha256": "2ada6e8885b715e597b5f2f39ff8237beec495d94970443a9179e9747787b5f4",
+    "size": 41695552,
+    "version": "1.50.124"
   }
 }
