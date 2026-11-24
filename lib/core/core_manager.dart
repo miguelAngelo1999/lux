@@ -1005,6 +1005,9 @@ class CoreManager {
       } catch (e) {
         debugPrint(e.toString());
       }
+      try {
+        await coreProcess?.stopManagedServiceCore();
+      } catch (_) {}
     }
     try {
       coreProcess?.exit();
@@ -1022,6 +1025,9 @@ class CoreManager {
           receiveTimeout: const Duration(seconds: 5),
         ),
       );
+      if (_isWindows) {
+        await coreProcess?.stopManagedServiceCore();
+      }
       coreProcess?.exit();
     } catch (e) {
       debugPrint(e.toString());
@@ -1075,6 +1081,11 @@ class CoreManager {
         if (!await isAlive()) break;
         await Future.delayed(const Duration(milliseconds: 150));
       }
+    }
+    if (_isWindows) {
+      try {
+        await coreProcess?.stopManagedServiceCore();
+      } catch (_) {}
     }
     try {
       coreProcess?.exit();

@@ -10,6 +10,7 @@ import 'package:lux/util/utils.dart';
 
 import '../error.dart';
 import 'elevate.dart';
+import 'windows_service.dart';
 
 typedef ProcessRunFn = Future<ProcessResult> Function(
   String executable,
@@ -29,6 +30,8 @@ class ProcessManager {
 
   final ProcessRunFn _runProcess;
   final bool _isWindows;
+  final WindowsServiceClient? _serviceClient;
+  final bool _useWindowsService;
 
   ProcessManager(
     this.path,
@@ -36,8 +39,49 @@ class ProcessManager {
     this.needElevate, {
     ProcessRunFn? runProcess,
     bool? isWindowsOverride,
+    WindowsServiceClient? serviceClient,
+    bool useWindowsService = true,
   })  : _runProcess = runProcess ?? _defaultRunProcess,
-        _isWindows = isWindowsOverride ?? Platform.isWindows;
+        _isWindows = isWindowsOverride ?? Platform.isWindows,
+        _serviceClient = serviceClient,
+        _useWindowsService = useWindowsService;
+
+  WindowsServiceClient get _windowsService =>
+      _serviceClient ?? WindowsServiceClient(runProcess: _runProcess);
+
+  @visibleForTesting
+  static ({String homeDir, int port, String secret})? parseCoreArgs(
+    List<String> args,
+  ) {
+    String homeDir = '';
+    int port = 0;
+    String secret = '';
+    for (final raw in args) {
+      final a = raw.trim();
+      if (a.startsWith('-home_dir=')) {
+        var v = a.substring('-home_dir='.length).replaceAll('`"', '"');
+        if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) {
+          v = v.substring(1, v.length - 1);
+        }
+        homeDir = v;
+      } else if (a.startsWith('-port=')) {
+        port = int.tryParse(a.substring('-port='.length).trim()) ?? 0;
+      } else if (a.startsWith('-secret=')) {
+        secret = a.substring('-secret='.length).trim();
+      }
+    }
+    if (homeDir.isEmpty || port < 1024 || secret.isEmpty) {
+      return null;
+    }
+    return (homeDir: homeDir, port: port, secret: secret);
+  }
+
+  /// Best-effort stop of any elevated worker currently managed by
+  /// `LuxCoreService` on Windows. Safe to call even from non-elevated `lux.exe`.
+  Future<void> stopManagedServiceCore() async {
+    if (!_isWindows || !_useWindowsService) return;
+    await _windowsService.stopCore();
+  }
 
   static Future<ProcessResult> _defaultRunProcess(
     String executable,
@@ -124,19 +168,85 @@ class ProcessManager {
 
   Future<void> run() async {
     if (_isWindows) {
+      final parsed = parseCoreArgs(args);
+
+      // Prefer the persistent LuxCoreService for elevated launches so UAC is
+      // prompted only ONCE (on initial install / core binary update) and never
+      // again on restarts, reboots, or System -> Mixed/TUN mode switches.
+      if (needElevate && _useWindowsService && parsed != null) {
+        final svc = _windowsService;
+        final userSid = await svc.getCurrentUserSid();
+
+        // Fast path: service already installed, running, and matches our core hash.
+        final ready = await svc.getReadyUpToDateService(path);
+        if (ready != null) {
+          try {
+            appLog('CORE',
+                'starting elevated lux_core.exe via LuxCoreService (zero-UAC)');
+            await svc.startCore(
+              health: ready,
+              homeDir: parsed.homeDir,
+              port: parsed.port,
+              secret: parsed.secret,
+              userSid: userSid,
+            );
+            return;
+          } catch (e) {
+            appLog('CORE',
+                'LuxCoreService /start-core failed ($e) — will reinstall/fallback');
+          }
+        }
+
+        // First-time / binary-update path: install or update LuxCoreService via
+        // ONE UAC prompt, then start core through it.
+        try {
+          final installed = await svc.installOrUpdateService(path);
+          await svc.startCore(
+            health: installed,
+            homeDir: parsed.homeDir,
+            port: parsed.port,
+            secret: parsed.secret,
+            userSid: userSid,
+          );
+          return;
+        } on CoreElevationCancelledError {
+          // User explicitly declined UAC — surface immediately without a second prompt.
+          rethrow;
+        } catch (e) {
+          appLog('CORE',
+              'LuxCoreService setup failed ($e) — falling back to direct RunAs elevation');
+        }
+      } else if (!needElevate && _useWindowsService) {
+        // Switching down from Mixed/TUN -> System: cleanly stop any elevated
+        // worker supervised by LuxCoreService before launching non-elevated.
+        await _windowsService.stopCore();
+      }
+
       // Best-effort cleanup of any orphaned non-elevated lux_core.exe before
       // spawning a new session. (Elevated cores are stopped gracefully via
-      // POST /manager/exit by CoreManager before calling run().)
+      // POST /manager/exit or LuxCoreService /stop-core.)
       try {
         await _runProcess('taskkill', ['/F', '/IM', 'lux_core.exe'],
             runInShell: false);
         await Future.delayed(const Duration(milliseconds: 200));
       } catch (_) {}
 
+      // If falling back to direct RunAs elevation, still pass -user_sid so
+      // over-the-shoulder UAC updates the desktop user's HKCU proxy hive.
+      var launchArgs = List<String>.from(args);
+      if (needElevate &&
+          parsed != null &&
+          !launchArgs.any((a) => a.startsWith('-user_sid='))) {
+        final sid = await _windowsService.getCurrentUserSid();
+        if (sid.isNotEmpty) {
+          launchArgs.add('-user_sid=$sid');
+        }
+      }
+
       // Checksum check is skipped on Windows — the Inno Setup installer already
       // verifies file integrity before installation.
       final processArgs =
-          buildWindowsPowerShellArgs(path, args, needElevate: needElevate);
+          buildWindowsPowerShellArgs(path, launchArgs, needElevate: needElevate);
 
       appLog('CORE', 'launching lux_core.exe on Windows (needElevate=$needElevate)');
       final result = await _runProcess(

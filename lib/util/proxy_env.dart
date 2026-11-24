@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -98,9 +99,40 @@ Future<void> _clearMacOS() async {
   }
 }
 
-// ── Windows: persistent User-scope environment variables ─────────────────────
+// ── Windows: persistent User-scope environment variables & WinINET refresh ───
+
+typedef _InternetSetOptionNative = Int32 Function(
+  Pointer<Void> hInternet,
+  Uint32 dwOption,
+  Pointer<Void> lpBuffer,
+  Uint32 dwBufferLength,
+);
+typedef _InternetSetOptionDart = int Function(
+  Pointer<Void> hInternet,
+  int dwOption,
+  Pointer<Void> lpBuffer,
+  int dwBufferLength,
+);
+
+/// Notifies WinINET in the interactive user session (Session 1) that registry
+/// proxy settings changed. Necessary when `lux_core.exe` runs inside Session 0
+/// (`LuxCoreService` / LocalSystem) and writes to `HKEY_USERS\<SID>`, since
+/// Session 0's `InternetSetOptionW` broadcast does not reach Session 1 browsers.
+void notifyWindowsWinInetProxyChanged() {
+  if (!Platform.isWindows) return;
+  try {
+    final wininet = DynamicLibrary.open('wininet.dll');
+    final setOption = wininet.lookupFunction<_InternetSetOptionNative,
+        _InternetSetOptionDart>('InternetSetOptionW');
+    const internetOptionSettingsChanged = 39;
+    const internetOptionRefresh = 37;
+    setOption(nullptr, internetOptionSettingsChanged, nullptr, 0);
+    setOption(nullptr, internetOptionRefresh, nullptr, 0);
+  } catch (_) {}
+}
 
 Future<void> _applyWindows() async {
+  notifyWindowsWinInetProxyChanged();
   final ca = await _caBundlePath();
   final vars = <String, String>{
     'HTTP_PROXY': _proxyUrl,
@@ -120,6 +152,7 @@ Future<void> _applyWindows() async {
 }
 
 Future<void> _clearWindows() async {
+  notifyWindowsWinInetProxyChanged();
   for (final k in [..._envKeys, 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_OPTIONS']) {
     await Process.run('powershell.exe', [
       '-noprofile', '-NonInteractive', '-WindowStyle', 'Hidden', '-command',
