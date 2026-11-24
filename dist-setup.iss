@@ -1,6 +1,6 @@
 ﻿[Setup]
 AppId={{80DF132E-434A-4DAB-9BC8-48A79C8383B9}
-AppVersion=1.50.122
+AppVersion=1.50.123
 AppName=Lux
 AppPublisher=igoogolx
 AppPublisherURL=https://github.com/leanflutter/flutter_distributor
@@ -9,7 +9,7 @@ AppUpdatesURL=https://github.com/leanflutter/flutter_distributor
 DefaultDirName={autopf}\lux
 DisableProgramGroupPage=yes
 OutputDir=.
-OutputBaseFilename=Lux-1.50.122-Windows-x64-Setup
+OutputBaseFilename=Lux-1.50.123-Windows-x64-Setup
 Compression=lzma2/fast
 SolidCompression=no
 SetupIconFile=assets\app_icon.ico
@@ -208,7 +208,9 @@ var
   I: Integer;
   StillRunning: Boolean;
 begin
-  // Step 1: Stop scheduled tasks to prevent auto-restart
+  // Step 1: Stop LuxCoreService (if installed) and scheduled tasks to prevent auto-restart
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(500);
   Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn LuxApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn LuxCore', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\schtasks.exe'), '/end /tn LuxInstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -325,6 +327,32 @@ begin
     Exec(ExpandConstant('{sys}\schtasks.exe'), '/delete /tn LuxInstall /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     DeleteFile(ExpandConstant('{app}') + '\lux_core_launcher.ps1');
 
+    // If LuxCoreService is already installed and we are running elevated (e.g.
+    // via the in-app updater), update the protected service binaries in-place
+    // and restart LuxCoreService so the updated Lux never prompts UAC again.
+    Exec(ExpandConstant('{sys}\sc.exe'), 'query LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if (ResultCode = 0) and IsAdmin() then
+    begin
+      Exec(ExpandConstant('{sys}\sc.exe'), 'stop LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(800);
+      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_service.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(300);
+      ForceUnlockFile('C:\Program Files\LuxService\lux_service.exe');
+      ForceUnlockFile('C:\Program Files\LuxService\lux_core.exe');
+      FileCopy(
+        ExpandConstant('{app}') + '\data\flutter_assets\assets\bin\lux_core.exe',
+        'C:\Program Files\LuxService\lux_service.exe',
+        False
+      );
+      FileCopy(
+        ExpandConstant('{app}') + '\data\flutter_assets\assets\bin\lux_core.exe',
+        'C:\Program Files\LuxService\lux_core.exe',
+        False
+      );
+      Exec(ExpandConstant('{sys}\sc.exe'), 'start LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
+
     // Relaunch Lux in the interactive user session via the LuxApp scheduled task.
     // Trigger the task as long as not running in SYSTEM context (which would launch into Session 0),
     // ensuring both interactive and silent updates (including updates from legacy versions
@@ -339,9 +367,20 @@ begin
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
     KillLux(False);
+    if IsAdmin() then
+    begin
+      Exec(ExpandConstant('{sys}\sc.exe'), 'stop LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(500);
+      Exec(ExpandConstant('{sys}\sc.exe'), 'delete LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_service.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      DelTree('C:\Program Files\LuxService', True, True, True);
+      DelTree('C:\ProgramData\LuxService', True, True, True);
+    end;
   end;
 end;
