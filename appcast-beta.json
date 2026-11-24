@@ -1,17 +1,17 @@
 {
-  "version": "1.50.121",
+  "version": "1.50.122",
   "channel": "beta",
-  "notes": "fix(updater): skip 'release (beta):' in release notes, show Stable/Latest badge, rename Beta updates to Latest updates",
+  "notes": "fix(windows): live UAC elevation on mode switch and wait for UAC before ping",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "21c4c52a5f456b49a699856f54677f041eb99c0093078509ff7511e5e4db780c",
-    "size": 45761678,
-    "version": "1.50.121"
+    "sha256": "55de00352f39365d2dd18c6480b550ef6d915b75f218a8e43ffb41351869bfe9",
+    "size": 45773876,
+    "version": "1.50.122"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "c646c554d505465901eca5667041585c47cd802316cdf2e688041e55f5631d30",
-    "size": 41645144,
-    "version": "1.50.121"
+    "sha256": "03ef399a46dc681218425a5327ba1e8013aa2189c4e77108b95abac77ef221d7",
+    "size": 41654530,
+    "version": "1.50.122"
   }
 }
