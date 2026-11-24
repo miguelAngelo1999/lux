@@ -108,6 +108,24 @@ Future<bool> readAutoSwitchEnabled() async {
   return prefs['autoSwitchEnabled'] == true;
 }
 
+/// Windows only: persisted when the user cancels the one-time `LuxCoreService`
+/// UAC setup (or lacks admin rights), so Lux falls back cleanly to non-elevated
+/// System mode without nagging with a UAC dialog on every subsequent launch.
+Future<bool> readWindowsServiceDeclined() async {
+  final prefs = await _readPrefs();
+  return prefs['windowsServiceDeclined'] == true;
+}
+
+Future<void> writeWindowsServiceDeclined(bool declined) async {
+  final prefs = await _readPrefs();
+  if (declined) {
+    prefs['windowsServiceDeclined'] = true;
+  } else {
+    prefs.remove('windowsServiceDeclined');
+  }
+  await _writePrefs(prefs);
+}
+
 Future<void> writeAutoSwitchEnabled(bool enabled) async {
   final prefs = await _readPrefs();
   prefs['autoSwitchEnabled'] = enabled;

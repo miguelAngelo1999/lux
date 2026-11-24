@@ -19,6 +19,17 @@ class AppStateModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Windows only: true when one-time LuxCoreService admin setup was declined or
+  // unavailable and lux_core is running non-elevated in System mode. Drives the
+  // non-blocking Dashboard warning banner and Settings status row.
+  bool _windowsLimitedMode = false;
+  bool get windowsLimitedMode => _windowsLimitedMode;
+  void updateWindowsLimitedMode(bool value) {
+    if (_windowsLimitedMode == value) return;
+    _windowsLimitedMode = value;
+    notifyListeners();
+  }
+
   Locale get locale => _locale;
   ThemeMode get theme => _theme;
   String get selectedProxyId => _selectedProxyId;

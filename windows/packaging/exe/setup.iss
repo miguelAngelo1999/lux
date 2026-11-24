@@ -303,6 +303,79 @@ begin
   Result := True;
 end;
 
+// Installs or updates LuxCoreService in admin-only C:\Program Files\LuxService
+// with locale-independent well-known SID ACLs (*S-1-5-18 SYSTEM, *S-1-5-32-544
+// Administrators, *S-1-5-32-545 Users) and starts it so the very first launch
+// of Lux after installation/upgrade requires ZERO UAC prompts.
+procedure InstallOrUpdateLuxCoreService();
+var
+  ResultCode: Integer;
+  SvcDir: string;
+  MetaDir: string;
+  SrcCore: string;
+  SvcBinArgs: string;
+begin
+  if not IsAdmin() then
+    Exit;
+
+  SrcCore := ExpandConstant('{app}') + '\data\flutter_assets\assets\bin\lux_core.exe';
+  if not FileExists(SrcCore) then
+    Exit;
+
+  SvcDir := 'C:\Program Files\LuxService';
+  MetaDir := 'C:\ProgramData\LuxService';
+
+  // Stop any running service and workers before replacing binaries
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(800);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_service.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(300);
+
+  ForceDirectories(SvcDir);
+  ForceDirectories(MetaDir);
+
+  // Lock directories: SYSTEM + Administrators = Full Control, Users = Read & Execute
+  Exec(
+    ExpandConstant('{sys}\icacls.exe'),
+    '"' + SvcDir + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode
+  );
+  Exec(
+    ExpandConstant('{sys}\icacls.exe'),
+    '"' + MetaDir + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode
+  );
+
+  ForceUnlockFile(SvcDir + '\lux_service.exe');
+  ForceUnlockFile(SvcDir + '\lux_core.exe');
+  FileCopy(SrcCore, SvcDir + '\lux_service.exe', False);
+  FileCopy(SrcCore, SvcDir + '\lux_core.exe', False);
+
+  SvcBinArgs := 'binPath= "\"' + SvcDir + '\lux_service.exe\" -service" start= auto DisplayName= "Lux Core Service"';
+  Exec(ExpandConstant('{sys}\sc.exe'), 'query LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if ResultCode <> 0 then
+  begin
+    Exec(ExpandConstant('{sys}\sc.exe'), 'create LuxCoreService ' + SvcBinArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end
+  else
+  begin
+    Exec(ExpandConstant('{sys}\sc.exe'), 'config LuxCoreService ' + SvcBinArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+
+  Exec(
+    ExpandConstant('{sys}\sc.exe'),
+    'description LuxCoreService "Provides privileged network tunnel management for Lux proxy"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode
+  );
+  Exec(
+    ExpandConstant('{sys}\sc.exe'),
+    'failure LuxCoreService reset= 86400 actions= restart/3000/restart/5000/restart/10000',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode
+  );
+  Exec(ExpandConstant('{sys}\sc.exe'), 'start LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
@@ -353,31 +426,10 @@ begin
     Exec(ExpandConstant('{sys}\schtasks.exe'), '/delete /tn LuxInstall /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     DeleteFile(ExpandConstant('{app}') + '\lux_core_launcher.ps1');
 
-    // If LuxCoreService is already installed and we are running elevated (e.g.
-    // via the in-app updater), update the protected service binaries in-place
-    // and restart LuxCoreService so the updated Lux never prompts UAC again.
-    Exec(ExpandConstant('{sys}\sc.exe'), 'query LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    if (ResultCode = 0) and IsAdmin() then
-    begin
-      Exec(ExpandConstant('{sys}\sc.exe'), 'stop LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      Sleep(800);
-      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_service.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM lux_core.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      Sleep(300);
-      ForceUnlockFile('C:\Program Files\LuxService\lux_service.exe');
-      ForceUnlockFile('C:\Program Files\LuxService\lux_core.exe');
-      FileCopy(
-        ExpandConstant('{app}') + '\data\flutter_assets\assets\bin\lux_core.exe',
-        'C:\Program Files\LuxService\lux_service.exe',
-        False
-      );
-      FileCopy(
-        ExpandConstant('{app}') + '\data\flutter_assets\assets\bin\lux_core.exe',
-        'C:\Program Files\LuxService\lux_core.exe',
-        False
-      );
-      Exec(ExpandConstant('{sys}\sc.exe'), 'start LuxCoreService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end;
+    // Whenever the installer runs elevated (fresh elevated install or in-app
+    // updater via RunAs), install/update and start LuxCoreService so the first
+    // launch after install requires zero UAC prompts.
+    InstallOrUpdateLuxCoreService();
 
     // Relaunch Lux in the interactive user session via the LuxApp scheduled task.
     // Trigger the task as long as not running in SYSTEM context (which would launch into Session 0),

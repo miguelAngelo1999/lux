@@ -55,7 +55,10 @@ class CoreManager {
   final Duration _pingTimeout;
   final Duration _pingRetryDelay;
   final bool _isWindows;
+  bool get isWindows => _isWindows;
   final Future<ProxyMode> Function() _readProxyMode;
+  final Future<bool> Function() _readServiceDeclined;
+  final Future<void> Function(bool) _writeServiceDeclined;
   final VoidCallback? onConnectionStateChanged;
   final void Function(String msg)? _showNotification;
 
@@ -63,6 +66,10 @@ class CoreManager {
   var needRestart = false;
   bool _isRestartingCore = false;
   bool get isRestartingCore => _isRestartingCore;
+
+  /// True only while an interactive Windows UAC prompt is actively expected
+  /// during startup (never set on the zero-UAC `LuxCoreService` fast path).
+  final ValueNotifier<bool> waitingForWindowsUac = ValueNotifier<bool>(false);
 
   /// Incremented whenever the core daemon restarts or proxy mode changes so
   /// widgets like AppBottomBar can refresh mode badges and reconnect sockets.
@@ -116,6 +123,8 @@ class CoreManager {
     Duration pingRetryDelay = const Duration(milliseconds: 150),
     bool? isWindowsOverride,
     Future<ProxyMode> Function()? readProxyModeFn,
+    Future<bool> Function()? readServiceDeclinedFn,
+    Future<void> Function(bool)? writeServiceDeclinedFn,
     this.onConnectionStateChanged,
     void Function(String msg)? showNotification,
   })  : appState = appState ?? AppStateModel(ThemeMode.light, const Locale('en')),
@@ -128,6 +137,9 @@ class CoreManager {
         _pingRetryDelay = pingRetryDelay,
         _isWindows = isWindowsOverride ?? Platform.isWindows,
         _readProxyMode = readProxyModeFn ?? readProxyMode,
+        _readServiceDeclined = readServiceDeclinedFn ?? readWindowsServiceDeclined,
+        _writeServiceDeclined =
+            writeServiceDeclinedFn ?? writeWindowsServiceDeclined,
         _showNotification = showNotification {
     baseHttpUrl = "http://$baseUrl";
     baseWsUrl = "ws://$baseUrl";
@@ -461,13 +473,146 @@ class CoreManager {
     }
   }
 
-  /// On Windows, ensures the running `lux_core.exe` has the privilege level
-  /// required by [targetMode] (elevated for TUN/Mixed, non-elevated for System).
+  /// Initial core launch used on app startup.
   ///
-  /// If UAC is cancelled while elevating, respawns a non-elevated core so Lux
-  /// stays alive, optionally reverts `setting.mode` back to [revertModeOnCancel]
-  /// (and restarts the previous system tunnel if [restartTunnelOnRevert] is
-  /// true), then rethrows [CoreElevationCancelledError].
+  /// On Windows, Lux elevates ONCE via `LuxCoreService` regardless of proxy
+  /// mode (including `System` mode) so UWP/Store apps (e.g. iCloud, Microsoft
+  /// Store) can be exempted from network isolation and switching to Mixed/TUN
+  /// later needs zero UAC prompts:
+  /// - If `LuxCoreService` is already installed and up to date: launches core
+  ///   elevated via the service with ZERO UAC (and clears any prior declined
+  ///   flag / limited-mode banner).
+  /// - If the user previously cancelled UAC (`windowsServiceDeclined == true`):
+  ///   starts non-elevated in `System` mode silently (no repeat UAC nag) with
+  ///   `appState.windowsLimitedMode = true`.
+  /// - Otherwise (first launch / portable / older upgrade): prompts ONCE for
+  ///   UAC to install `LuxCoreService`. If the user cancels UAC, does NOT fail
+  ///   to an error screen — persists `windowsServiceDeclined = true`, sets
+  ///   `appState.windowsLimitedMode = true`, and starts non-elevated in `System`
+  ///   mode automatically so browsing works immediately.
+  Future<void> startInitialCore() async {
+    if (!_isWindows || coreProcess == null) {
+      await run();
+      return;
+    }
+
+    final serviceReady = await coreProcess!.isWindowsServiceReady();
+    if (serviceReady) {
+      coreProcess!.needElevate = true;
+      await _writeServiceDeclined(false);
+      appState.updateWindowsLimitedMode(false);
+      await run();
+      return;
+    }
+
+    final declined = await _readServiceDeclined();
+    if (declined) {
+      appLog('CORE',
+          'LuxCoreService previously declined — starting non-elevated System mode (no UAC nag)');
+      coreProcess!.needElevate = false;
+      appState.updateWindowsLimitedMode(true);
+      await run();
+      await _ensureSystemModeWithoutElevation();
+      return;
+    }
+
+    // First-time / upgrade path: elevate once regardless of saved proxy mode.
+    coreProcess!.needElevate = true;
+    waitingForWindowsUac.value = true;
+    try {
+      await run();
+      await _writeServiceDeclined(false);
+      appState.updateWindowsLimitedMode(false);
+    } on CoreElevationCancelledError {
+      appLog('CORE',
+          'Windows service UAC cancelled on startup — falling back to non-elevated System mode (limited)');
+      await _writeServiceDeclined(true);
+      appState.updateWindowsLimitedMode(true);
+      coreProcess!.needElevate = false;
+      waitingForWindowsUac.value = false;
+      await run();
+      await _ensureSystemModeWithoutElevation();
+    } finally {
+      waitingForWindowsUac.value = false;
+    }
+  }
+
+  /// Ensures `setting.mode` is `system` when running non-elevated on Windows
+  /// (so browsing and Connect work immediately without hitting 403 NotElevated).
+  Future<void> _ensureSystemModeWithoutElevation() async {
+    try {
+      final current = await dio.get('$baseHttpUrl/setting');
+      final raw = Map<String, dynamic>.from(current.data['setting'] as Map);
+      if (raw['mode'] != 'system') {
+        appLog('CORE',
+            'reverting saved mode=${raw['mode']} -> system for non-elevated limited mode');
+        raw['mode'] = 'system';
+        await dio.put('$baseHttpUrl/setting', data: raw);
+        coreGeneration.value++;
+      }
+    } catch (e) {
+      appLog('CORE', 'failed to enforce system mode in limited mode: $e');
+    }
+  }
+
+  /// Windows only: re-triggers the one-time `LuxCoreService` UAC setup from
+  /// limited mode (Dashboard warning banner or Settings "Enable now").
+  ///
+  /// Returns `true` when `LuxCoreService` is active and the limited-mode flag
+  /// + banner have been cleared; returns `false` if the user cancels UAC again
+  /// (keeping Lux alive and connected in non-elevated System mode).
+  Future<bool> enableWindowsService() async {
+    if (!_isWindows || coreProcess == null) return true;
+    if (await isCoreAdmin()) {
+      coreProcess!.needElevate = true;
+      await _writeServiceDeclined(false);
+      appState.updateWindowsLimitedMode(false);
+      return true;
+    }
+
+    final wasRunning = await getIsStarted().catchError((_) => false);
+    if (wasRunning) {
+      try {
+        await stop();
+        await Future.delayed(const Duration(milliseconds: 400));
+      } catch (_) {}
+    }
+
+    try {
+      await _restartCoreElevatedWithRecovery(
+        revertModeOnCancel: ProxyMode.system,
+        restartTunnelOnRevert: wasRunning,
+      );
+    } on CoreElevationCancelledError {
+      return false;
+    }
+
+    await _writeServiceDeclined(false);
+    appState.updateWindowsLimitedMode(false);
+
+    if (wasRunning) {
+      try {
+        await start();
+        appState.updateIsStarted(true);
+        onConnectionStateChanged?.call();
+      } catch (e) {
+        appLog('CORE', 'enableWindowsService reconnect failed: $e');
+      }
+    }
+    return true;
+  }
+
+  /// On Windows, ensures the running `lux_core.exe` has the privilege level
+  /// required by [targetMode].
+  ///
+  /// - For TUN/Mixed: elevates via `LuxCoreService` (zero-UAC if installed, or
+  ///   one-time UAC setup). On success clears `windowsServiceDeclined` and
+  ///   `windowsLimitedMode`. If UAC is cancelled, respawns a non-elevated core,
+  ///   reverts `setting.mode` back to [revertModeOnCancel], persists
+  ///   `windowsServiceDeclined = true`, and rethrows [CoreElevationCancelledError].
+  /// - For System: keeps an already-elevated `LuxCoreService` core running
+  ///   (zero-UAC, zero restart, preserves UWP loopback exemptions and `-user_sid`
+  ///   per-user registry writes) instead of downgrading.
   Future<void> _ensureWindowsCoreElevation({
     required ProxyMode targetMode,
     ProxyMode? revertModeOnCancel,
@@ -480,6 +625,8 @@ class CoreManager {
       final alreadyAdmin = await isCoreAdmin();
       if (alreadyAdmin) {
         coreProcess!.needElevate = true;
+        await _writeServiceDeclined(false);
+        appState.updateWindowsLimitedMode(false);
         return;
       }
 
@@ -489,16 +636,18 @@ class CoreManager {
         revertModeOnCancel: revertModeOnCancel,
         restartTunnelOnRevert: restartTunnelOnRevert,
       );
+      await _writeServiceDeclined(false);
+      appState.updateWindowsLimitedMode(false);
       return;
     }
 
-    // Downgrade back to non-elevated when switching from TUN/Mixed -> System
-    // so HKCU system proxy changes apply to the logged-in standard user.
-    if (coreProcess!.needElevate) {
-      appLog('CORE',
-          'mode=system does not require elevation — restarting lux_core non-elevated');
-      coreProcess!.needElevate = false;
-      await restartCore();
+    // System mode: keep an already-elevated LuxCoreService core running rather
+    // than downgrading (LuxCoreService writes HKCU via -user_sid and keeps UWP
+    // CheckNetIsolation exemptions working in System mode too).
+    if (await isCoreAdmin()) {
+      coreProcess!.needElevate = true;
+      await _writeServiceDeclined(false);
+      appState.updateWindowsLimitedMode(false);
     }
   }
 
@@ -512,6 +661,8 @@ class CoreManager {
     } on CoreElevationCancelledError {
       appLog('CORE',
           'Windows UAC cancelled — respawning non-elevated lux_core so app stays usable');
+      await _writeServiceDeclined(true);
+      appState.updateWindowsLimitedMode(true);
       coreProcess!.needElevate = false;
       _isRestartingCore = true;
       try {
@@ -605,6 +756,8 @@ class CoreManager {
           appLog('CORE',
               'start() received 403 NotElevated — elevating lux_core and retrying');
           await _restartCoreElevatedWithRecovery();
+          await _writeServiceDeclined(false);
+          appState.updateWindowsLimitedMode(false);
           continue;
         }
         if (status == 500 && attempt < 3) {
@@ -1388,6 +1541,17 @@ class CoreManager {
           );
         }
         await start();
+      } else if (_isWindows &&
+          coreProcess != null &&
+          setting.mode != ProxyMode.system) {
+        // Even while disconnected, switching to Mixed/TUN in Settings
+        // immediately re-triggers one-time LuxCoreService UAC setup and clears
+        // the limited-mode banner on success (or reverts to System on cancel).
+        await _ensureWindowsCoreElevation(
+          targetMode: setting.mode,
+          revertModeOnCancel: _wireToProxyMode(prevMode),
+          restartTunnelOnRevert: false,
+        );
       }
       coreGeneration.value++;
     }

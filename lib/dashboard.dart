@@ -13,6 +13,7 @@ import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
 import 'package:lux/core/core_config.dart' show shouldSkipUpdateCheck, writeLastUpdateCheckAt, writePendingUpdateVersion;
 import 'package:lux/widget/app_bottom_bar.dart';
 import 'package:lux/widget/app_header_bar.dart';
+import 'package:lux/widget/windows_service_banner.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/core_manager.dart';
@@ -166,7 +167,14 @@ class _DashboardState extends State<Dashboard> with WindowListener {
           ),
           const VerticalDivider(width: 1, thickness: 1),
           // Main content
-          Expanded(child: _buildPage()),
+          Expanded(
+            child: Column(
+              children: [
+                WindowsServiceBanner(coreManager: widget.coreManager),
+                Expanded(child: _buildPage()),
+              ],
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: AppBottomBar(widget.coreManager),

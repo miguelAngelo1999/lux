@@ -336,6 +336,8 @@ void main() {
       ProcessManager pm, {
       VoidCallback? onReady,
       Duration pingTimeout = const Duration(seconds: 5),
+      Future<bool> Function()? readServiceDeclinedFn,
+      Future<void> Function(bool)? writeServiceDeclinedFn,
     }) {
       return CoreManager(
         server.baseUrl,
@@ -353,6 +355,8 @@ void main() {
             : server.mode == 'tun'
                 ? ProxyMode.tun
                 : ProxyMode.mixed,
+        readServiceDeclinedFn: readServiceDeclinedFn ?? () async => false,
+        writeServiceDeclinedFn: writeServiceDeclinedFn ?? (_) async {},
       );
     }
 
@@ -548,26 +552,20 @@ void main() {
       expect(server.isStarted, isTrue);
     });
 
-    test('switching mixed -> system downgrades elevated core to non-elevated',
+    test('switching mixed -> system keeps elevated LuxCoreService core running without downgrading',
         () async {
       server.mode = 'mixed';
       server.isAdmin = true;
       server.isStarted = true;
 
-      final launchElevatedFlags = <bool>[];
+      final launchCalls = <String>[];
       final pm = ProcessManager(
         r'C:\Lux\lux_core.exe',
         ['-port=8000'],
         true,
         isWindowsOverride: true,
         runProcess: (exe, args, {bool runInShell = false}) async {
-          if (exe == 'taskkill') return ProcessResult(0, 0, '', '');
-          final encodedIdx = args.indexOf('-EncodedCommand') + 1;
-          final script = _decodePowerShellEncodedCommand(args[encodedIdx]);
-          final elevated = script.contains('-Verb RunAs');
-          launchElevatedFlags.add(elevated);
-          server.isAdmin = elevated;
-          server.alive = true;
+          launchCalls.add(exe);
           return ProcessResult(0, 0, '', '');
         },
       );
@@ -576,11 +574,14 @@ void main() {
       addTearDown(core.dispose);
 
       await core.saveSetting(Setting(mode: ProxyMode.system));
-      expect(launchElevatedFlags, [false]);
-      expect(pm.needElevate, isFalse);
-      expect(server.isAdmin, isFalse);
+      expect(launchCalls, isEmpty,
+          reason:
+              'Must keep elevated core running in System mode so UWP loopback works with zero UAC');
+      expect(pm.needElevate, isTrue);
+      expect(server.isAdmin, isTrue);
       expect(server.mode, 'system');
       expect(server.isStarted, isTrue);
+      expect(appState.windowsLimitedMode, isFalse);
     });
 
     test('makeRequestUntilSuccess times out cleanly on non-200 without recursing',

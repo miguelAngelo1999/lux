@@ -60,6 +60,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   bool _uuidCopied = false;
 
   bool _checkingUpdate = false;
+  bool _enablingWindowsService = false;
   String _appVersion = '';
   String _pendingUpdateVersion = ''; // non-empty when an update was found but not yet installed
   UpdateInfo? _cachedUpdateInfo;
@@ -289,6 +290,24 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             keywords: ['dark', 'light', 'appearance'],
             build: (ctx) => _themeTile(ctx),
           ),
+          if (widget.coreManager.isWindows)
+            SettingRow(
+              title: 'Background Service',
+              keywords: [
+                'windows',
+                'service',
+                'admin',
+                'uac',
+                'uwp',
+                'store',
+                'icloud',
+                'limited',
+                'mixed',
+                'tun',
+                'elevation',
+              ],
+              build: (ctx) => _windowsServiceTile(ctx),
+            ),
         ];
 
       case 'network':
@@ -891,6 +910,97 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   // ── Individual complex rows ────────────────────────────────────────────────
+
+  Widget _windowsServiceTile(BuildContext context) {
+    final limited =
+        context.select<AppStateModel, bool>((m) => m.windowsLimitedMode);
+    final statusColor = limited ? Colors.amber.shade800 : Colors.green.shade700;
+
+    return ListTile(
+      key: const Key('settings_windows_service_tile'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      title: Row(
+        children: [
+          const TText('Background Service',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withAlpha(30),
+              border: Border.all(color: statusColor.withAlpha(130)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: TText(
+              limited ? 'Limited' : 'Active',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: TText(
+          limited
+              ? 'Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.'
+              : 'Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.',
+          style: const TextStyle(fontSize: 11.5),
+        ),
+      ),
+      trailing: limited
+          ? FilledButton(
+              key: const Key('settings_windows_service_enable_btn'),
+              onPressed: _enablingWindowsService
+                  ? null
+                  : () async {
+                      setState(() => _enablingWindowsService = true);
+                      try {
+                        final ok =
+                            await widget.coreManager.enableWindowsService();
+                        if (!mounted) return;
+                        _notify(
+                          tl(
+                            this.context,
+                            ok
+                                ? 'Background service enabled. Full functionality is now active.'
+                                : 'Admin setup cancelled. Continuing in limited System mode.',
+                          ),
+                          isError: !ok,
+                        );
+                        if (ok) await _load();
+                      } catch (e) {
+                        if (!mounted) return;
+                        _notify('$e', isError: true);
+                      } finally {
+                        if (mounted) {
+                          setState(() => _enablingWindowsService = false);
+                        }
+                      }
+                    },
+              style: FilledButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              child: _enablingWindowsService
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const TText('Enable now'),
+            )
+          : Icon(Icons.check_circle_outline,
+              size: 18, color: Colors.green.shade600),
+    );
+  }
 
   Widget _bypassCidrsTile(BuildContext context, Setting s) {
     final cidrs = s.bypassCidrs;

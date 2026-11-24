@@ -76,6 +76,15 @@ class ProcessManager {
     return (homeDir: homeDir, port: port, secret: secret);
   }
 
+  /// Returns true when `LuxCoreService` is installed, running, and matches
+  /// the bundled `lux_core.exe` binary (meaning launching elevated requires
+  /// ZERO UAC prompts).
+  Future<bool> isWindowsServiceReady() async {
+    if (!_isWindows || !_useWindowsService) return false;
+    final ready = await _windowsService.getReadyUpToDateService(path);
+    return ready != null;
+  }
+
   /// Best-effort stop of any elevated worker currently managed by
   /// `LuxCoreService` on Windows. Safe to call even from non-elevated `lux.exe`.
   Future<void> stopManagedServiceCore() async {

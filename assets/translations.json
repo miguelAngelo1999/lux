@@ -231,7 +231,19 @@
       "Proxy unreachable on this network": "Proxy inacessível nesta rede",
       "Connected via {name}": "Conectado via {name}",
       "Connect": "Conectar",
-      "Could not connect. Check your proxy and try again.": "Não foi possível conectar. Verifique seu proxy e tente novamente."
+      "Could not connect. Check your proxy and try again.": "Não foi possível conectar. Verifique seu proxy e tente novamente.",
+      "Running in limited mode (admin setup skipped)": "Executando em modo limitado (configuração de administrador ignorada)",
+      "Working normally: web browsers and standard desktop apps.": "Funcionando normalmente: navegadores e aplicativos de desktop padrão.",
+      "Limited without one-time admin setup: Microsoft Store / UWP apps (such as iCloud for Windows and Microsoft Store) may fail to connect or sign in, and Mixed / TUN modes cannot be enabled.": "Limitado sem a configuração única de administrador: aplicativos da Microsoft Store / UWP (como iCloud para Windows e Microsoft Store) podem falhar ao conectar ou entrar, e os modos Misto / TUN não podem ser ativados.",
+      "Enable now": "Ativar agora",
+      "Dismiss": "Dispensar",
+      "Background Service": "Serviço em segundo plano",
+      "Active": "Ativo",
+      "Limited": "Limitado",
+      "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "Ativo — aplicativos da Microsoft Store / UWP e modos Misto / TUN estão ativados sem novos avisos de UAC.",
+      "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "Modo limitado: navegadores e aplicativos de desktop padrão funcionam normalmente, mas aplicativos da Microsoft Store / UWP (como iCloud e Microsoft Store) e os modos Misto / TUN exigem configuração única de administrador.",
+      "Background service enabled. Full functionality is now active.": "Serviço em segundo plano ativado. Todas as funcionalidades estão ativas.",
+      "Admin setup cancelled. Continuing in limited System mode.": "Configuração de administrador cancelada. Continuando no modo Sistema limitado."
     },
     "es": {
       "Proxies": "Proxies",
@@ -463,7 +475,19 @@
       "Proxy unreachable on this network": "Proxy inaccesible en esta red",
       "Connected via {name}": "Conectado vía {name}",
       "Connect": "Conectar",
-      "Could not connect. Check your proxy and try again.": "No se pudo conectar. Revisa tu proxy e inténtalo de nuevo."
+      "Could not connect. Check your proxy and try again.": "No se pudo conectar. Revisa tu proxy e inténtalo de nuevo.",
+      "Running in limited mode (admin setup skipped)": "Ejecutando en modo limitado (configuración de administrador omitida)",
+      "Working normally: web browsers and standard desktop apps.": "Funcionando con normalidad: navegadores web y aplicaciones de escritorio estándar.",
+      "Limited without one-time admin setup: Microsoft Store / UWP apps (such as iCloud for Windows and Microsoft Store) may fail to connect or sign in, and Mixed / TUN modes cannot be enabled.": "Limitado sin la configuración única de administrador: las aplicaciones de Microsoft Store / UWP (como iCloud para Windows y Microsoft Store) pueden fallar al conectarse o iniciar sesión, y los modos Mixto / TUN no se pueden activar.",
+      "Enable now": "Activar ahora",
+      "Dismiss": "Descartar",
+      "Background Service": "Servicio en segundo plano",
+      "Active": "Activo",
+      "Limited": "Limitado",
+      "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "Activo — las aplicaciones de Microsoft Store / UWP y los modos Mixto / TUN están activados sin nuevos avisos de UAC.",
+      "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "Modo limitado: los navegadores y aplicaciones de escritorio estándar funcionan normalmente, pero las aplicaciones de Microsoft Store / UWP (como iCloud y Microsoft Store) y los modos Mixto / TUN requieren configuración única de administrador.",
+      "Background service enabled. Full functionality is now active.": "Servicio en segundo plano activado. Todas las funciones están activas.",
+      "Admin setup cancelled. Continuing in limited System mode.": "Configuración de administrador cancelada. Continuando en modo Sistema limitado."
     },
     "it": {
       "Proxies": "Proxy",
@@ -695,7 +719,19 @@
       "Proxy unreachable on this network": "Proxy non raggiungibile su questa rete",
       "Connected via {name}": "Connesso tramite {name}",
       "Connect": "Connetti",
-      "Could not connect. Check your proxy and try again.": "Impossibile connettersi. Controlla il proxy e riprova."
+      "Could not connect. Check your proxy and try again.": "Impossibile connettersi. Controlla il proxy e riprova.",
+      "Running in limited mode (admin setup skipped)": "In esecuzione in modalità limitata (configurazione amministratore saltata)",
+      "Working normally: web browsers and standard desktop apps.": "Funzionano normalmente: browser web e app desktop standard.",
+      "Limited without one-time admin setup: Microsoft Store / UWP apps (such as iCloud for Windows and Microsoft Store) may fail to connect or sign in, and Mixed / TUN modes cannot be enabled.": "Limitato senza la configurazione amministratore una tantum: le app Microsoft Store / UWP (come iCloud per Windows e Microsoft Store) potrebbero non connettersi o accedere e le modalità Misto / TUN non possono essere attivate.",
+      "Enable now": "Attiva ora",
+      "Dismiss": "Chiudi",
+      "Background Service": "Servizio in background",
+      "Active": "Attivo",
+      "Limited": "Limitato",
+      "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "Attivo — le app Microsoft Store / UWP e le modalità Misto / TUN sono attive senza ulteriori richieste UAC.",
+      "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "Modalità limitata: browser e app desktop standard funzionano normalmente, ma le app Microsoft Store / UWP (come iCloud e Microsoft Store) e le modalità Misto / TUN richiedono una configurazione amministratore una tantum.",
+      "Background service enabled. Full functionality is now active.": "Servizio in background attivato. Tutte le funzionalità sono ora attive.",
+      "Admin setup cancelled. Continuing in limited System mode.": "Configurazione amministratore annullata. Si continua in modalità Sistema limitata."
     },
     "fil": {
       "Proxies": "Mga Proxy",
@@ -927,7 +963,19 @@
       "Proxy unreachable on this network": "Hindi maabot ang proxy sa network na ito",
       "Connected via {name}": "Nakakonekta gamit ang {name}",
       "Connect": "Kumonekta",
-      "Could not connect. Check your proxy and try again.": "Hindi makakonekta. Suriin ang iyong proxy at subukan muli."
+      "Could not connect. Check your proxy and try again.": "Hindi makakonekta. Suriin ang iyong proxy at subukan muli.",
+      "Running in limited mode (admin setup skipped)": "Tumatakbo sa limitadong mode (nilaktawan ang setup ng admin)",
+      "Working normally: web browsers and standard desktop apps.": "Normal na gumagana: mga web browser at karaniwang desktop app.",
+      "Limited without one-time admin setup: Microsoft Store / UWP apps (such as iCloud for Windows and Microsoft Store) may fail to connect or sign in, and Mixed / TUN modes cannot be enabled.": "Limitado nang walang minsang admin setup: maaaring mabigo sa pagkonekta o pag-sign in ang mga Microsoft Store / UWP app (tulad ng iCloud para sa Windows at Microsoft Store), at hindi maaaring i-enable ang Mixed / TUN mode.",
+      "Enable now": "I-enable ngayon",
+      "Dismiss": "Isara",
+      "Background Service": "Background Service",
+      "Active": "Aktibo",
+      "Limited": "Limitado",
+      "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "Aktibo — naka-enable ang mga Microsoft Store / UWP app at Mixed / TUN mode nang walang paulit-ulit na UAC prompt.",
+      "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "Limitadong mode: normal na gumagana ang mga browser at karaniwang desktop app, ngunit nangangailangan ng minsang admin setup ang mga Microsoft Store / UWP app (tulad ng iCloud at Microsoft Store) at mga Mixed / TUN mode.",
+      "Background service enabled. Full functionality is now active.": "Na-enable ang background service. Aktibo na ngayon ang buong functionality.",
+      "Admin setup cancelled. Continuing in limited System mode.": "Kinansela ang admin setup. Magpapatuloy sa limitadong System mode."
     },
     "zh": {
       "Proxies": "代理",
@@ -1159,7 +1207,19 @@
       "Proxy unreachable on this network": "当前网络无法访问此代理",
       "Connected via {name}": "已通过 {name} 连接",
       "Connect": "连接",
-      "Could not connect. Check your proxy and try again.": "无法连接。请检查代理设置后重试。"
+      "Could not connect. Check your proxy and try again.": "无法连接。请检查代理设置后重试。",
+      "Running in limited mode (admin setup skipped)": "正在受限模式下运行（已跳过管理员设置）",
+      "Working normally: web browsers and standard desktop apps.": "正常工作：网页浏览器和标准桌面应用。",
+      "Limited without one-time admin setup: Microsoft Store / UWP apps (such as iCloud for Windows and Microsoft Store) may fail to connect or sign in, and Mixed / TUN modes cannot be enabled.": "未完成一次性管理员设置时的限制：Microsoft Store / UWP 应用（如 iCloud for Windows 和 Microsoft Store）可能无法连接或登录，且无法启用混合 / TUN 模式。",
+      "Enable now": "立即启用",
+      "Dismiss": "忽略",
+      "Background Service": "后台服务",
+      "Active": "已启用",
+      "Limited": "受限",
+      "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "已启用 — Microsoft Store / UWP 应用以及混合 / TUN 模式已就绪，无需重复 UAC 提示。",
+      "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "受限模式：浏览器和标准桌面应用可正常工作，但 Microsoft Store / UWP 应用（如 iCloud 和 Microsoft Store）以及混合 / TUN 模式需要一次性管理员设置。",
+      "Background service enabled. Full functionality is now active.": "后台服务已启用，全部功能现已激活。",
+      "Admin setup cancelled. Continuing in limited System mode.": "已取消管理员设置，继续以受限系统模式运行。"
     }
   }
 }

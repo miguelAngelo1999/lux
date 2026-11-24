@@ -382,12 +382,11 @@ class _HomeState extends State<Home>
     var homeDirArg = '-home_dir=$curHomeDir';
     if (Platform.isWindows) {
       homeDirArg = '-home_dir="$curHomeDir"';
-      final proxyMode = await readProxyMode();
-      needElevate = proxyMode != ProxyMode.system;
-      // Silently exempt all UWP/Store apps (including the Store itself) from
-      // Windows network isolation so they can reach lux on 127.0.0.1. Runs in
-      // the background a few seconds after startup; no dialog.
-      Future.delayed(const Duration(seconds: 5), _ensureUwpLoopback);
+      // Elevate once via LuxCoreService regardless of saved proxyMode
+      // (including System mode) so UWP/Store apps and Mixed/TUN work cleanly;
+      // CoreManager.startInitialCore() handles zero-UAC fast path and graceful
+      // non-elevated System fallback if UAC is cancelled or previously declined.
+      needElevate = true;
     }
     final process = ProcessManager(
         corePath, [homeDirArg, '-port=$port', '-secret=$secret'], needElevate);
@@ -443,6 +442,9 @@ class _HomeState extends State<Home>
         _refreshTray();
         // Sync auto-switch config to lux_core on startup
         _syncAutoSwitchOnReady();
+        if (Platform.isWindows) {
+          _ensureUwpLoopback();
+        }
       }
     });
     _launchCore();
@@ -452,7 +454,7 @@ class _HomeState extends State<Home>
     setState(() {
       coreError = null;
     });
-    coreManager?.run().catchError((e) {
+    coreManager?.startInitialCore().catchError((e) {
       if (!mounted) return;
       setState(() {
         coreError = e;
@@ -464,6 +466,8 @@ class _HomeState extends State<Home>
     final mgr = coreManager;
     if (mgr == null || mgr.coreProcess == null) return;
     mgr.coreProcess!.needElevate = false;
+    await writeWindowsServiceDeclined(true);
+    mgr.appState.updateWindowsLimitedMode(true);
     setState(() {
       coreError = null;
     });
@@ -481,42 +485,31 @@ class _HomeState extends State<Home>
     }
   }
 
-  /// Windows only: exempt every installed UWP/Store app — including the
-  /// Microsoft Store app itself — from network isolation (AppContainer
-  /// loopback block) so they can reach lux's proxy on 127.0.0.1.
+  /// Windows only: UWP loopback exemptions (`CheckNetIsolation.exe`) require
+  /// administrator / `LocalSystem` privileges.
   ///
-  /// UWP apps run in an AppContainer that blocks loopback by default, so
-  /// without this they cannot talk to a local proxy and appear to have no
-  /// internet while lux is the system proxy. `CheckNetIsolation LoopbackExempt`
-  /// whitelists each app's package family.
-  ///
-  /// Runs once in the background — no dialog. Uses `-AllUsers` and
-  /// `-PackageTypeFilter All` so provisioned/system packages (the Store,
-  /// frameworks) are covered, not just the current user's apps. Batched into a
-  /// single PowerShell call rather than spawning CheckNetIsolation hundreds of
-  /// times.
+  /// When `lux_core.exe` is running elevated via `LuxCoreService`, `lux_core`
+  /// itself owns UWP loopback exemption (`pkg/sysproxy/loopback_windows.go`)
+  /// and runs `CheckNetIsolation` as `LocalSystem`, so non-elevated `lux.exe`
+  /// must NOT spawn a redundant failing PowerShell pass that swallows stderr.
   Future<void> _ensureUwpLoopback() async {
     if (!Platform.isWindows) return;
+    final mgr = coreManager;
+    if (mgr == null) return;
     try {
-      appLog('UWP', 'applying loopback exemption for Store apps...');
-      final result = await Process.run('powershell.exe', [
-        '-noprofile', '-NonInteractive', '-WindowStyle', 'Hidden', '-command',
-        // Collect package family names from both the current user and all
-        // users (covers the Store itself + provisioned apps), de-duplicate,
-        // then exempt each one. Errors per-package are swallowed so one bad
-        // package can't abort the batch.
-        r'$fams = @(); '
-        r'try { $fams += Get-AppxPackage -PackageTypeFilter All | '
-        r'Select-Object -ExpandProperty PackageFamilyName } catch {} '
-        r'try { $fams += Get-AppxPackage -AllUsers -PackageTypeFilter All | '
-        r'Select-Object -ExpandProperty PackageFamilyName } catch {} '
-        r'$fams = $fams | Sort-Object -Unique; '
-        r'foreach ($f in $fams) { CheckNetIsolation.exe LoopbackExempt -a "-n=$f" 2>$null }',
-      ]).timeout(const Duration(seconds: 90));
-      appLog('UWP', 'loopback exemption done exit=${result.exitCode}');
+      final coreElevated = await mgr.isCoreAdmin();
+      if (coreElevated) {
+        appLog('UWP',
+            'lux_core is running elevated (LuxCoreService) — UWP loopback exemptions are managed by lux_core');
+        return;
+      }
+      // Core is running non-elevated (limited mode). Running CheckNetIsolation
+      // without elevation always fails with Access Denied, so skip cleanly and
+      // log the real state rather than hiding errors with 2>$null.
+      appLog('UWP',
+          'skipping UWP loopback exemption: lux_core is non-elevated (limited mode); enable background service in Settings for Store/iCloud apps');
     } catch (e) {
-      // Non-fatal: the app still works for non-UWP traffic.
-      appLog('UWP', 'loopback exemption failed: $e');
+      appLog('UWP', 'failed to verify core elevation for UWP loopback: $e');
     }
   }
 
@@ -988,21 +981,27 @@ class _HomeState extends State<Home>
       throw coreError;
     }
     if (coreManager == null || !isCoreReady.value) {
-      final waitingForUac =
-          Platform.isWindows && coreManager?.coreProcess?.needElevate == true;
+      final mgr = coreManager;
       return Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               AppProgressIndicator(),
-              if (waitingForUac) ...[
-                const SizedBox(height: 16),
-                const TText(
-                  'Waiting for administrator permission...',
-                  style: TextStyle(fontSize: 13),
+              if (Platform.isWindows && mgr != null)
+                ValueListenableBuilder<bool>(
+                  valueListenable: mgr.waitingForWindowsUac,
+                  builder: (_, waitingForUac, __) {
+                    if (!waitingForUac) return const SizedBox.shrink();
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: TText(
+                        'Waiting for administrator permission...',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    );
+                  },
                 ),
-              ],
             ],
           ),
         ),
