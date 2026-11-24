@@ -9,6 +9,7 @@ import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/dashboard.dart';
+import 'package:lux/error.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/tray.dart';
@@ -18,6 +19,7 @@ import 'package:lux/util/t_text.dart';
 import 'package:lux/util/telemetry.dart' as telem;
 import 'package:flutter/services.dart';
 import 'package:lux/util/process_manager.dart';
+import 'package:lux/widget/error/core_run_error_handler.dart';
 import 'package:lux/widget/quick_edit_window.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/util/utils.dart';
@@ -72,6 +74,10 @@ class WatchdogController {
 
   Future<void> tick(CoreManager coreManager, AppStateModel appState) async {
     if (!appState.userWantsRunning) return;
+    if (coreManager.isRestartingCore) {
+      appLog('WATCHDOG', 'core restart/elevation in progress — skipping tick');
+      return;
+    }
 
     final connectivityResult = await _checkConnectivity();
     if (!CoreManager.isOnlineConnectivity(connectivityResult)) {
@@ -141,6 +147,16 @@ class WatchdogController {
           return;
         }
       } catch (err) {
+        if (err is CoreElevationCancelledError ||
+            CoreManager.isNotElevatedError(err)) {
+          appLog('WATCHDOG',
+              'elevation required or cancelled ($err) — stopping retries');
+          appState.userWantsRunning = false;
+          restartFails = 0;
+          _showNotification?.call(
+              'Administrator permission is required for Mixed/TUN mode.');
+          return;
+        }
         appLog('WATCHDOG', 'restart attempt $attempt failed: $err');
         if (attempt < 3) {
           await Future.delayed(_retryDelayBase * attempt);
@@ -194,6 +210,7 @@ class _HomeState extends State<Home>
   ValueNotifier<bool> isCoreReady = ValueNotifier<bool>(false);
   Widget? dashboardWidget;
   WebSocketChannel? eventChannel;
+  StreamSubscription? _eventChannelSub;
   late final AppLifecycleListener _listener;
   var needRestart = false;
   dynamic coreError;
@@ -364,7 +381,7 @@ class _HomeState extends State<Home>
     var needElevate = true;
     var homeDirArg = '-home_dir=$curHomeDir';
     if (Platform.isWindows) {
-      homeDirArg = "-home_dir=`\"$curHomeDir`\"";
+      homeDirArg = '-home_dir="$curHomeDir"';
       final proxyMode = await readProxyMode();
       needElevate = proxyMode != ProxyMode.system;
       // Silently exempt all UWP/Store apps (including the Store itself) from
@@ -428,11 +445,40 @@ class _HomeState extends State<Home>
         _syncAutoSwitchOnReady();
       }
     });
+    _launchCore();
+  }
+
+  void _launchCore() {
+    setState(() {
+      coreError = null;
+    });
     coreManager?.run().catchError((e) {
+      if (!mounted) return;
       setState(() {
         coreError = e;
       });
     });
+  }
+
+  Future<void> _fallbackToSystemMode() async {
+    final mgr = coreManager;
+    if (mgr == null || mgr.coreProcess == null) return;
+    mgr.coreProcess!.needElevate = false;
+    setState(() {
+      coreError = null;
+    });
+    try {
+      await mgr.run();
+      final current = await mgr.getSetting();
+      if (current.mode != ProxyMode.system) {
+        await mgr.saveSetting(current.copyWith(mode: ProxyMode.system));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        coreError = e;
+      });
+    }
   }
 
   /// Windows only: exempt every installed UWP/Store app — including the
@@ -478,15 +524,17 @@ class _HomeState extends State<Home>
     setState(() {
       isCoreReady.value = true;
     });
-    if (eventChannel == null) {
-      coreManager?.getEventChannel().then((channel) async {
-        if (channel == null) return;
-        // Required by web_socket_channel 3.x: core events would otherwise be
-        // dropped before the socket is open, with no error surfaced.
-        await channel.ready;
-        if (!mounted) return;
-        eventChannel = channel;
-        eventChannel?.stream.listen((rawData) async {
+    _eventChannelSub?.cancel();
+    _eventChannelSub = null;
+    eventChannel = null;
+    coreManager?.getEventChannel().then((channel) async {
+      if (channel == null) return;
+      // Required by web_socket_channel 3.x: core events would otherwise be
+      // dropped before the socket is open, with no error surfaced.
+      await channel.ready;
+      if (!mounted) return;
+      eventChannel = channel;
+      _eventChannelSub = eventChannel?.stream.listen((rawData) async {
           if (rawData is! String) {
             return;
           }
@@ -605,19 +653,32 @@ class _HomeState extends State<Home>
           onError: (Object e) {
             appLog('EVENT', 'event channel error (core restart?): $e');
             eventChannel = null;
+            coreManager?.clearEventChannel();
           },
           onDone: () {
             appLog('EVENT', 'event channel closed');
             eventChannel = null;
-            if (mounted && Provider.of<AppStateModel>(context, listen: false).userWantsRunning) {
-              appLog('EVENT', 'core event channel closed while running — triggering watchdog recovery');
+            coreManager?.clearEventChannel();
+            if (coreManager?.isRestartingCore == true) {
+              appLog('EVENT',
+                  'event channel closed during controlled core restart — skipping watchdog');
+              return;
+            }
+            if (mounted &&
+                Provider.of<AppStateModel>(context, listen: false)
+                    .userWantsRunning) {
+              appLog('EVENT',
+                  'core event channel closed while running — triggering watchdog recovery');
               _watchdog();
             }
           },
           cancelOnError: true,
         );
+      }).catchError((Object e) {
+        appLog('EVENT', 'event channel connect failed: $e');
+        eventChannel = null;
+        coreManager?.clearEventChannel();
       });
-    }
   }
 
   @override
@@ -737,7 +798,7 @@ class _HomeState extends State<Home>
   }
 
   Future<AppExitResponse> _handleExitRequest() async {
-    if (Platform.isMacOS) {
+    if (Platform.isMacOS || Platform.isWindows) {
       await coreManager?.safeExit();
     }
     return AppExitResponse.exit;
@@ -748,6 +809,7 @@ class _HomeState extends State<Home>
     _watchdogTimer?.cancel();
     _connectivitySub?.cancel();
     _autoSwitchDebounce?.cancel();
+    _eventChannelSub?.cancel();
     coreManager?.certPrompt.removeListener(_onCertPrompt);
     coreManager?.dispose();
     _appStateForTray?.removeListener(_onAppStateChanged);
@@ -788,9 +850,17 @@ class _HomeState extends State<Home>
       coreManager?.cancelNetworkTimers();
       appState.pausedForNoNetwork = false;
       appState.userWantsRunning = true;
-      await coreManager?.start();
-      if (mounted) {
-        appState.updateIsStarted(true);
+      try {
+        await coreManager?.start();
+        if (mounted) {
+          appState.updateIsStarted(true);
+        }
+      } on CoreElevationCancelledError catch (e) {
+        appState.userWantsRunning = false;
+        notifier.show(e.message);
+      } catch (e) {
+        appLog('CORE', 'tray connect failed: $e');
+        notifier.show(extractErrorMessage(e));
       }
       _refreshTray();
     } else if (key == 'disconnect') {
@@ -904,10 +974,39 @@ class _HomeState extends State<Home>
   @override
   Widget build(BuildContext context) {
     if (coreError != null && !isCoreReady.value) {
+      if (coreError is CoreRunError) {
+        final canFallbackToSystem = Platform.isWindows &&
+            (coreManager?.coreProcess?.needElevate == true ||
+                coreError is CoreElevationCancelledError);
+        return CoreRunErrorHandler(
+          errorDetail: coreError as CoreRunError,
+          onRetry: _launchCore,
+          onFallbackToSystemMode:
+              canFallbackToSystem ? _fallbackToSystemMode : null,
+        );
+      }
       throw coreError;
     }
     if (coreManager == null || !isCoreReady.value) {
-      return Scaffold(body: AppProgressIndicator());
+      final waitingForUac =
+          Platform.isWindows && coreManager?.coreProcess?.needElevate == true;
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppProgressIndicator(),
+              if (waitingForUac) ...[
+                const SizedBox(height: 16),
+                const TText(
+                  'Waiting for administrator permission...',
+                  style: TextStyle(fontSize: 13),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
     }
     if (_quickEditMode) {
       return QuickEditWindow(

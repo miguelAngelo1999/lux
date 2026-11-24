@@ -16,6 +16,7 @@ import 'package:lux/util/app_log.dart';
 
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
+import '../error.dart';
 import '../tr.dart';
 
 class AppHeaderBar extends StatefulWidget {
@@ -103,10 +104,13 @@ class _State extends State<AppHeaderBar> with WindowListener {
     } catch (e) {
       appLog('CORE', 'toggle ${value ? "start" : "stop"} failed: $e');
       if (mounted) {
+        final msg = e is CoreElevationCancelledError
+            ? e.message
+            : (value
+                ? 'Could not connect. Check your proxy and try again.'
+                : 'Could not disconnect cleanly.');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: TText(value
-              ? 'Could not connect. Check your proxy and try again.'
-              : 'Could not disconnect cleanly.')),
+          SnackBar(content: TText(msg)),
         );
       }
     } finally {

@@ -13,10 +13,14 @@ const corePathVar = "LUX_CORE_PATH";
 
 class CoreRunErrorHandler extends StatefulWidget {
   final CoreRunError errorDetail;
+  final VoidCallback? onRetry;
+  final VoidCallback? onFallbackToSystemMode;
 
   const CoreRunErrorHandler({
     super.key,
     required this.errorDetail,
+    this.onRetry,
+    this.onFallbackToSystemMode,
   });
 
   @override
@@ -64,7 +68,10 @@ class _CoreRunErrorHandlerState extends State<CoreRunErrorHandler> {
 
   @override
   Widget build(BuildContext context) {
-    final needsElevation = Platform.isMacOS && !isElevated;
+    final needsMacElevation = Platform.isMacOS && !isElevated;
+    final needsWinElevation =
+        Platform.isWindows && widget.errorDetail is CoreElevationCancelledError;
+    final isElevationScreen = needsMacElevation || needsWinElevation;
 
     return Scaffold(
       body: Center(
@@ -76,36 +83,44 @@ class _CoreRunErrorHandlerState extends State<CoreRunErrorHandler> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(
-                needsElevation ? Icons.admin_panel_settings : Icons.warning_amber,
+                isElevationScreen
+                    ? Icons.admin_panel_settings
+                    : Icons.warning_amber,
                 size: 56,
-                color: needsElevation
+                color: isElevationScreen
                     ? Theme.of(context).primaryColor
                     : Theme.of(context).colorScheme.error,
               ),
               const SizedBox(height: 20),
               Text(
-                needsElevation
+                isElevationScreen
                     ? tl(context, 'Administrator Access Required')
                     : tr().somethingWrong,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Text(
-                needsElevation
-                    ? tl(context, 'Lux needs administrator privileges to create the network adapter. Click below and enter your Mac password when prompted.')
-                    : '${tr().coreRunError}: ${widget.errorDetail.message}',
+                needsMacElevation
+                    ? tl(context,
+                        'Lux needs administrator privileges to create the network adapter. Click below and enter your Mac password when prompted.')
+                    : needsWinElevation
+                        ? tl(context,
+                            'Mixed and TUN modes require administrator privileges on Windows. Approve the Windows UAC prompt to continue, or start in System Proxy mode without admin rights.')
+                        : '${tr().coreRunError}: ${widget.errorDetail.message}',
                 style: const TextStyle(fontSize: 14),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 28),
-              if (needsElevation) ...[
+              if (needsMacElevation) ...[
                 if (isGranting)
                   const Column(
                     children: [
                       CircularProgressIndicator(),
                       SizedBox(height: 12),
-                      TText('Waiting for password...', style: TextStyle(fontSize: 12)),
+                      TText('Waiting for password...',
+                          style: TextStyle(fontSize: 12)),
                     ],
                   )
                 else
@@ -114,13 +129,15 @@ class _CoreRunErrorHandlerState extends State<CoreRunErrorHandler> {
                     icon: const Icon(Icons.lock_open),
                     label: const TText('Grant Access'),
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 14),
                     ),
                   ),
                 if (grantFailed) ...[
                   const SizedBox(height: 16),
                   Text(
-                    tl(context, 'Setup was cancelled or failed. Try again, or if this keeps happening, open Terminal and paste:'),
+                    tl(context,
+                        'Setup was cancelled or failed. Try again, or if this keeps happening, open Terminal and paste:'),
                     style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),
@@ -143,10 +160,43 @@ class _CoreRunErrorHandlerState extends State<CoreRunErrorHandler> {
                       r'''echo "$(whoami) ALL=(root) NOPASSWD: $REAL *" | '''
                       r'sudo tee /etc/sudoers.d/lux_core > /dev/null && '
                       'sudo chmod 0440 /etc/sudoers.d/lux_core',
-                      style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
+                      style: const TextStyle(
+                          fontSize: 10, fontFamily: 'monospace'),
                     ),
                   ),
                 ],
+              ] else if (widget.onRetry != null ||
+                  widget.onFallbackToSystemMode != null) ...[
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    if (widget.onRetry != null)
+                      FilledButton.icon(
+                        onPressed: widget.onRetry,
+                        icon: Icon(needsWinElevation
+                            ? Icons.lock_open
+                            : Icons.refresh),
+                        label: TText(
+                            needsWinElevation ? 'Grant Access' : 'Retry'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 14),
+                        ),
+                      ),
+                    if (widget.onFallbackToSystemMode != null)
+                      OutlinedButton.icon(
+                        onPressed: widget.onFallbackToSystemMode,
+                        icon: const Icon(Icons.swap_horiz),
+                        label: const TText('Use System Proxy Mode'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 14),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ],
           ),

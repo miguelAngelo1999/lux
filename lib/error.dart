@@ -18,4 +18,14 @@ const coreHttpErrorNotElevatedCode = 10000;
 class CoreRunError extends Error {
   final String message;
   CoreRunError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class CoreElevationCancelledError extends CoreRunError {
+  CoreElevationCancelledError([
+    super.message =
+        'Administrator permission is required for Mixed/TUN mode.',
+  ]);
 }

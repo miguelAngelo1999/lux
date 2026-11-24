@@ -52,11 +52,22 @@ class CoreManager {
   final Duration _disconnectDebounce;
   final Duration _resumeDebounce;
   final Duration _resumeRetryDelay;
+  final Duration _pingTimeout;
+  final Duration _pingRetryDelay;
+  final bool _isWindows;
+  final Future<ProxyMode> Function() _readProxyMode;
   final VoidCallback? onConnectionStateChanged;
   final void Function(String msg)? _showNotification;
 
   final dio = Dio();
   var needRestart = false;
+  bool _isRestartingCore = false;
+  bool get isRestartingCore => _isRestartingCore;
+
+  /// Incremented whenever the core daemon restarts or proxy mode changes so
+  /// widgets like AppBottomBar can refresh mode badges and reconnect sockets.
+  final ValueNotifier<int> coreGeneration = ValueNotifier<int>(0);
+
   late String baseHttpUrl;
   late String baseWsUrl;
   WebSocketChannel? _trafficChannel;
@@ -79,6 +90,17 @@ class CoreManager {
     return result.isNotEmpty && !result.contains(ConnectivityResult.none);
   }
 
+  /// Returns true when [e] is the Go core's 403 NotElevated response.
+  static bool isNotElevatedError(Object e) {
+    if (e is! DioException) return false;
+    if (e.response?.statusCode != 403) return false;
+    final data = e.response?.data;
+    if (data is Map) {
+      return data['code'] == coreHttpErrorNotElevatedCode;
+    }
+    return true;
+  }
+
   CoreManager(
     this.baseUrl,
     this.coreProcess,
@@ -90,6 +112,10 @@ class CoreManager {
     Duration disconnectDebounce = const Duration(seconds: 2),
     Duration resumeDebounce = const Duration(seconds: 2),
     Duration resumeRetryDelay = const Duration(seconds: 3),
+    Duration pingTimeout = const Duration(seconds: 30),
+    Duration pingRetryDelay = const Duration(milliseconds: 150),
+    bool? isWindowsOverride,
+    Future<ProxyMode> Function()? readProxyModeFn,
     this.onConnectionStateChanged,
     void Function(String msg)? showNotification,
   })  : appState = appState ?? AppStateModel(ThemeMode.light, const Locale('en')),
@@ -98,6 +124,10 @@ class CoreManager {
         _disconnectDebounce = disconnectDebounce,
         _resumeDebounce = resumeDebounce,
         _resumeRetryDelay = resumeRetryDelay,
+        _pingTimeout = pingTimeout,
+        _pingRetryDelay = pingRetryDelay,
+        _isWindows = isWindowsOverride ?? Platform.isWindows,
+        _readProxyMode = readProxyModeFn ?? readProxyMode,
         _showNotification = showNotification {
     baseHttpUrl = "http://$baseUrl";
     baseWsUrl = "ws://$baseUrl";
@@ -315,11 +345,21 @@ class CoreManager {
     bool succeeded = false;
     try {
       if (shouldStart) {
-        await start().timeout(const Duration(seconds: 60));
+        // Do not wrap start() in a fixed outer timeout: on Windows, switching
+        // into Mixed/TUN mode may display an interactive UAC prompt that takes
+        // longer than 60s (e.g. corporate admin credentials). Every
+        // non-interactive network/process step inside start() has its own
+        // bounded timeout.
+        await start();
       } else {
         await manualStop().timeout(const Duration(seconds: 30));
       }
       succeeded = true;
+    } catch (e) {
+      if (e is CoreElevationCancelledError) {
+        appState.userWantsRunning = false;
+      }
+      rethrow;
     } finally {
       bool real = succeeded ? shouldStart : false;
       try {
@@ -332,23 +372,28 @@ class CoreManager {
   }
 
   Future<void> makeRequestUntilSuccess(String url) async {
-    final stopwatch = Stopwatch();
-    stopwatch.start(); // Start the stopwatch
+    final stopwatch = Stopwatch()..start();
 
-    while (stopwatch.elapsedMilliseconds < 30000) {
+    while (stopwatch.elapsed < _pingTimeout) {
       try {
-        final response = await dio.get(url);
+        final response = await dio.get(
+          url,
+          options: Options(
+            sendTimeout: const Duration(seconds: 2),
+            receiveTimeout: const Duration(seconds: 2),
+          ),
+        );
 
-        // Check if the request was successful
         if (response.statusCode == 200) {
-          return; // Exit the function if the request succeeds
-        } else {
-          await makeRequestUntilSuccess(url);
+          return;
         }
-      } catch (e) {
-        await Future.delayed(const Duration(milliseconds: 150));
+      } catch (_) {
         debugPrint("fail to connect to core, retry...");
       }
+      if (stopwatch.elapsed >= _pingTimeout) {
+        break;
+      }
+      await Future.delayed(_pingRetryDelay);
     }
 
     throw Exception('timeout');
@@ -359,6 +404,26 @@ class CoreManager {
       await makeRequestUntilSuccess('$baseHttpUrl/ping');
     } catch (e) {
       throw CoreRunError("fail to ping core: ${e.toString()}");
+    }
+  }
+
+  /// Queries lux_core's `/is-admin` endpoint to check whether the running
+  /// core daemon currently has elevated/administrator privileges.
+  Future<bool> isCoreAdmin() async {
+    try {
+      final res = await dio.get(
+        '$baseHttpUrl/is-admin',
+        options: Options(
+          sendTimeout: const Duration(seconds: 2),
+          receiveTimeout: const Duration(seconds: 2),
+        ),
+      );
+      if (res.data is Map) {
+        return res.data['isAdmin'] == true;
+      }
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -373,26 +438,140 @@ class CoreManager {
     unawaited(clearProxyEnv());
   }
 
+  static String _proxyModeToWire(ProxyMode mode) {
+    switch (mode) {
+      case ProxyMode.tun:
+        return 'tun';
+      case ProxyMode.system:
+        return 'system';
+      case ProxyMode.mixed:
+        return 'mixed';
+    }
+  }
+
+  static ProxyMode _wireToProxyMode(String? mode) {
+    switch (mode) {
+      case 'tun':
+        return ProxyMode.tun;
+      case 'system':
+        return ProxyMode.system;
+      case 'mixed':
+      default:
+        return ProxyMode.mixed;
+    }
+  }
+
+  /// On Windows, ensures the running `lux_core.exe` has the privilege level
+  /// required by [targetMode] (elevated for TUN/Mixed, non-elevated for System).
+  ///
+  /// If UAC is cancelled while elevating, respawns a non-elevated core so Lux
+  /// stays alive, optionally reverts `setting.mode` back to [revertModeOnCancel]
+  /// (and restarts the previous system tunnel if [restartTunnelOnRevert] is
+  /// true), then rethrows [CoreElevationCancelledError].
+  Future<void> _ensureWindowsCoreElevation({
+    required ProxyMode targetMode,
+    ProxyMode? revertModeOnCancel,
+    bool restartTunnelOnRevert = false,
+  }) async {
+    if (!_isWindows || coreProcess == null) return;
+
+    final needElevate = targetMode != ProxyMode.system;
+    if (needElevate) {
+      final alreadyAdmin = await isCoreAdmin();
+      if (alreadyAdmin) {
+        coreProcess!.needElevate = true;
+        return;
+      }
+
+      appLog('CORE',
+          'mode=$targetMode requires administrator privileges on Windows — restarting lux_core elevated');
+      await _restartCoreElevatedWithRecovery(
+        revertModeOnCancel: revertModeOnCancel,
+        restartTunnelOnRevert: restartTunnelOnRevert,
+      );
+      return;
+    }
+
+    // Downgrade back to non-elevated when switching from TUN/Mixed -> System
+    // so HKCU system proxy changes apply to the logged-in standard user.
+    if (coreProcess!.needElevate) {
+      appLog('CORE',
+          'mode=system does not require elevation — restarting lux_core non-elevated');
+      coreProcess!.needElevate = false;
+      await restartCore();
+    }
+  }
+
+  Future<void> _restartCoreElevatedWithRecovery({
+    ProxyMode? revertModeOnCancel,
+    bool restartTunnelOnRevert = false,
+  }) async {
+    coreProcess!.needElevate = true;
+    try {
+      await restartCore();
+    } on CoreElevationCancelledError {
+      appLog('CORE',
+          'Windows UAC cancelled — respawning non-elevated lux_core so app stays usable');
+      coreProcess!.needElevate = false;
+      _isRestartingCore = true;
+      try {
+        _resetChannels();
+        await coreProcess!.run();
+        await ping();
+        coreGeneration.value++;
+        onReady();
+      } catch (recoveryErr) {
+        appLog('CORE', 'non-elevated recovery spawn failed: $recoveryErr');
+      } finally {
+        _isRestartingCore = false;
+      }
+
+      if (revertModeOnCancel != null) {
+        try {
+          final current = await dio.get('$baseHttpUrl/setting');
+          final raw = Map<String, dynamic>.from(current.data['setting'] as Map);
+          raw['mode'] = _proxyModeToWire(revertModeOnCancel);
+          await dio.put('$baseHttpUrl/setting', data: raw);
+          coreGeneration.value++;
+          if (restartTunnelOnRevert && revertModeOnCancel == ProxyMode.system) {
+            await dio.post(
+              '$baseHttpUrl/manager/start',
+              options: Options(
+                sendTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 15),
+              ),
+            );
+            appState.updateIsStarted(true);
+            onConnectionStateChanged?.call();
+          }
+        } catch (revertErr) {
+          appLog('CORE', 'failed to revert mode after UAC cancel: $revertErr');
+        }
+      }
+      rethrow;
+    }
+  }
+
   /// Start the proxy. Retries up to 3 times on 500 (lux_core still initialising)
   /// with exponential backoff: 1s, 2s, 4s.
   ///
-  /// On Windows, re-reads the current proxy mode to determine if elevation
-  /// is needed — TUN/Mixed require UAC, System mode does not.
+  /// On Windows, checks the current proxy mode and elevates `lux_core.exe`
+  /// live when TUN/Mixed mode is selected while the core is not elevated.
   Future<void> start() async {
-    // On Windows, update the elevation flag based on current mode before starting.
-    // The ProcessManager is created at app launch with the mode at that time,
-    // but the user may have changed mode since then.
-    if (Platform.isWindows && coreProcess != null) {
-      final proxyMode = await readProxyMode();
-      final needElevate = proxyMode != ProxyMode.system;
-      if (coreProcess!.needElevate != needElevate) {
-        coreProcess!.needElevate = needElevate;
-        appLog('CORE', 'start() — updated needElevate=$needElevate for mode=$proxyMode');
+    if (_isWindows && coreProcess != null) {
+      ProxyMode proxyMode;
+      try {
+        final setting = await getSetting();
+        proxyMode = setting.mode;
+      } catch (_) {
+        proxyMode = await _readProxyMode();
       }
+      await _ensureWindowsCoreElevation(targetMode: proxyMode);
     }
 
     // Checksum of the CA bundle before the core rebuilds it on start.
     final caBefore = await caBundleChecksum();
+    bool retriedElevation = false;
 
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -418,6 +597,16 @@ class CoreManager {
         return; // success
       } on DioException catch (e) {
         final status = e.response?.statusCode;
+        if (_isWindows &&
+            coreProcess != null &&
+            !retriedElevation &&
+            isNotElevatedError(e)) {
+          retriedElevation = true;
+          appLog('CORE',
+              'start() received 403 NotElevated — elevating lux_core and retrying');
+          await _restartCoreElevatedWithRecovery();
+          continue;
+        }
         if (status == 500 && attempt < 3) {
           // lux_core may still be initialising — wait and retry
           appLog('CORE', 'start() got 500, retrying in ${attempt}s (attempt $attempt/3)');
@@ -804,9 +993,15 @@ class CoreManager {
   }
 
   Future<void> exitCore() async {
-    if (Platform.isWindows) {
+    if (_isWindows) {
       try {
-        await dio.post('$baseHttpUrl/manager/exit');
+        await dio.post(
+          '$baseHttpUrl/manager/exit',
+          options: Options(
+            sendTimeout: const Duration(seconds: 3),
+            receiveTimeout: const Duration(seconds: 5),
+          ),
+        );
       } catch (e) {
         debugPrint(e.toString());
       }
@@ -820,20 +1015,86 @@ class CoreManager {
 
   Future<void> safeExit() async {
     try {
-      await dio.post('$baseHttpUrl/manager/exit');
+      await dio.post(
+        '$baseHttpUrl/manager/exit',
+        options: Options(
+          sendTimeout: const Duration(seconds: 3),
+          receiveTimeout: const Duration(seconds: 5),
+        ),
+      );
       coreProcess?.exit();
     } catch (e) {
       debugPrint(e.toString());
     }
   }
 
+  void _resetChannels() {
+    try {
+      _trafficChannel?.sink.close();
+    } catch (_) {}
+    _trafficChannel = null;
+    try {
+      _runtimeStatusChannel?.sink.close();
+    } catch (_) {}
+    _runtimeStatusChannel = null;
+    try {
+      _eventChannel?.sink.close();
+    } catch (_) {}
+    _eventChannel = null;
+  }
+
+  void clearTrafficChannel() {
+    _trafficChannel = null;
+  }
+
+  void clearEventChannel() {
+    _eventChannel = null;
+  }
+
+  /// Gracefully shuts down the currently running core so that even an elevated
+  /// `lux_core.exe` on Windows releases its HTTP port and single-instance mutex
+  /// before a replacement process is spawned.
+  Future<void> _stopAndExitRunningCore() async {
+    if (await isAlive()) {
+      try {
+        await dio.post(
+          '$baseHttpUrl/manager/exit',
+          options: Options(
+            sendTimeout: const Duration(seconds: 3),
+            receiveTimeout: const Duration(seconds: 5),
+          ),
+        );
+      } catch (_) {
+        // Expected: /manager/exit calls os.Exit(0) without writing a response.
+      }
+
+      // Wait briefly for the old core to finish closing and release the port
+      // and Global\LuxCoreSingleInstanceMutex before spawning the replacement.
+      final deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (DateTime.now().isBefore(deadline)) {
+        if (!await isAlive()) break;
+        await Future.delayed(const Duration(milliseconds: 150));
+      }
+    }
+    try {
+      coreProcess?.exit();
+    } catch (_) {}
+  }
+
   /// Fully restarts the lux_core OS daemon, waits for it to respond to /ping,
   /// and fires onReady() to reconnect WebSockets and app state.
   Future<void> restartCore() async {
-    coreProcess?.exit();
-    await coreProcess?.run();
-    await ping();
-    onReady();
+    _isRestartingCore = true;
+    try {
+      _resetChannels();
+      await _stopAndExitRunningCore();
+      await coreProcess?.run();
+      await ping();
+      coreGeneration.value++;
+      onReady();
+    } finally {
+      _isRestartingCore = false;
+    }
   }
 
   Future<void> restart() async {
@@ -864,6 +1125,7 @@ class CoreManager {
   Future<void> run() async {
     await coreProcess?.run();
     await ping();
+    coreGeneration.value++;
     onReady();
   }
 
@@ -1095,20 +1357,28 @@ class CoreManager {
 
     // Apply a mode change live: if the core is running, restart the tunnel so
     // the old mode tears down (TUN device / system-proxy restored) and the new
-    // mode is built by executor.New(). If it's not running, the next start
-    // picks up the new mode — no need to connect just because a dropdown
-    // changed. lux_core runs elevated via the sudoers wrapper, so no re-spawn
-    // or elevation prompt is needed for System↔TUN↔Mixed.
+    // mode is built by executor.New(). On Windows, switching System -> TUN/Mixed
+    // also restarts lux_core.exe elevated (triggering UAC) before starting the
+    // new mode, and reverts cleanly to the previous mode if UAC is cancelled.
     if (modeChanged) {
       final running = await getIsStarted();
       if (running) {
         appLog('CORE', 'mode changed $prevMode→$newMode — restarting tunnel');
         await stop();
-        // Brief gap so the old mode's teardown (utun remove / networksetup
-        // restore) completes before the new mode sets up.
+        // Brief gap so the old mode's teardown (utun remove / networksetup /
+        // Windows system-proxy restore) completes under the previous privilege
+        // context before elevating or starting the new mode.
         await Future.delayed(const Duration(milliseconds: 500));
+        if (_isWindows && coreProcess != null) {
+          await _ensureWindowsCoreElevation(
+            targetMode: setting.mode,
+            revertModeOnCancel: _wireToProxyMode(prevMode),
+            restartTunnelOnRevert: true,
+          );
+        }
         await start();
       }
+      coreGeneration.value++;
     }
   }
 

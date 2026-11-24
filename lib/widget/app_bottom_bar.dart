@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -22,12 +23,71 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
   ProxyMode proxyMode = ProxyMode.tun;
   TrafficState? trafficData;
   WebSocketChannel? trafficChannel;
+  StreamSubscription? _trafficSub;
   bool isWindowHidden = false;
 
   Future<void> refreshMode() async {
-    final value = await widget.coreManager.getSetting();
-    setState(() {
-      proxyMode = value.mode;
+    try {
+      final value = await widget.coreManager.getSetting();
+      if (!mounted) return;
+      setState(() {
+        proxyMode = value.mode;
+      });
+    } catch (_) {}
+  }
+
+  void _onCoreGenerationChanged() {
+    if (!mounted) return;
+    refreshMode();
+    if (trafficChannel == null) {
+      _connectTrafficChannel();
+    }
+  }
+
+  void _connectTrafficChannel() {
+    _trafficSub?.cancel();
+    _trafficSub = null;
+    widget.coreManager.getTrafficChannel().then((channel) async {
+      if (channel == null || !mounted) return;
+      try {
+        // Required by web_socket_channel 3.x: without awaiting ready the
+        // subscription can attach before the socket is open and traffic frames
+        // are dropped silently, so the speed readout stays at zero.
+        await channel.ready;
+      } catch (_) {
+        trafficChannel = null;
+        widget.coreManager.clearTrafficChannel();
+        return;
+      }
+      if (!mounted) return;
+      trafficChannel = channel;
+      _trafficSub = trafficChannel?.stream.listen(
+        (message) {
+          if (isWindowHidden || !mounted) {
+            return;
+          }
+          try {
+            TrafficData value = TrafficData.fromJson(json.decode(message));
+            setState(() {
+              trafficData = TrafficState(rawData: value);
+            });
+          } catch (_) {}
+        },
+        onError: (_) {
+          _trafficSub = null;
+          trafficChannel = null;
+          widget.coreManager.clearTrafficChannel();
+        },
+        onDone: () {
+          _trafficSub = null;
+          trafficChannel = null;
+          widget.coreManager.clearTrafficChannel();
+        },
+        cancelOnError: true,
+      );
+    }).catchError((_) {
+      trafficChannel = null;
+      widget.coreManager.clearTrafficChannel();
     });
   }
 
@@ -36,32 +96,17 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
     super.initState();
     refreshMode();
     windowManager.addListener(this);
-    if (trafficChannel == null) {
-      widget.coreManager.getTrafficChannel().then((channel) async {
-        if (channel == null) return;
-        // Required by web_socket_channel 3.x: without awaiting ready the
-        // subscription can attach before the socket is open and traffic frames
-        // are dropped silently, so the speed readout stays at zero.
-        await channel.ready;
-        if (!mounted) return;
-        trafficChannel = channel;
-        trafficChannel?.stream.listen((message) {
-          if (isWindowHidden) {
-            return;
-          }
-          TrafficData value = TrafficData.fromJson(json.decode(message));
-          setState(() {
-            trafficData = TrafficState(rawData: value);
-          });
-        });
-      });
-    }
+    widget.coreManager.coreGeneration.addListener(_onCoreGenerationChanged);
+    _connectTrafficChannel();
   }
 
   @override
   void onWindowFocus() {
     isWindowHidden = false;
     refreshMode();
+    if (trafficChannel == null) {
+      _connectTrafficChannel();
+    }
   }
 
   @override
@@ -71,9 +116,11 @@ class _AppBottomBarState extends State<AppBottomBar> with WindowListener {
 
   @override
   void dispose() {
+    widget.coreManager.coreGeneration.removeListener(_onCoreGenerationChanged);
     windowManager.removeListener(this);
-    super.dispose();
+    _trafficSub?.cancel();
     trafficChannel?.sink.close();
+    super.dispose();
   }
 
   @override

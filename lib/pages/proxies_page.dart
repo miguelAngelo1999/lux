@@ -17,6 +17,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../core/core_config.dart';
 import '../core/core_manager.dart';
+import '../error.dart';
 import '../util/cert_trust.dart';
 
 class ProxiesPage extends StatefulWidget {
@@ -363,10 +364,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       await widget.coreManager.toggleConnection(true);
     } catch (e) {
       if (mounted) {
+        final msg = e is CoreElevationCancelledError
+            ? e.message
+            : 'Could not connect. Check your proxy and try again.';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: TText('Could not connect. Check your proxy and try again.'),
-          ),
+          SnackBar(content: TText(msg)),
         );
       }
     } finally {

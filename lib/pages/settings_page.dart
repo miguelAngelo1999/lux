@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
+import 'package:lux/error.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/util/telemetry.dart' as telem;
@@ -206,7 +207,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       await widget.coreManager.saveSetting(updated);
       if (mounted) setState(() => _setting = updated);
     } catch (e) {
-      if (_isConnectionError(e)) {
+      if (!mounted) return;
+      if (e is CoreElevationCancelledError) {
+        _notify(tl(context, e.message), isError: true);
+        // Re-read so the dropdown reflects the reverted mode (e.g. System).
+        await _load();
+      } else if (_isConnectionError(e)) {
         _notify(tl(context, 'Reconnecting to Lux core...'), isError: false);
         _attemptCoreRecoveryAndReload();
       } else {
