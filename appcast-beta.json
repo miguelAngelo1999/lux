@@ -1,17 +1,17 @@
 {
-  "version": "1.50.125",
+  "version": "1.50.126",
   "channel": "beta",
-  "notes": "feat(windows): elevate once via LuxCoreService for all modes with graceful UAC fallback & banner",
+  "notes": "fix(macos): mount update DMG at private temp mountpoint to avoid removable-volume TCC prompt",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "f1a83dead55c42dbe68b2931090422aea8a5ba6c25d7f4f6e9e9efb1e2fe838f",
-    "size": 45783514,
-    "version": "1.50.125"
+    "sha256": "401686bff85710d2b0b7cd8ba793a3ba30e407ae6e75cb91f323097cd9436526",
+    "size": 45796600,
+    "version": "1.50.126"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "8bb27df41e68910ea6f2e45c16b745aa461dcbc19210f62cc9070e3459c20522",
-    "size": 41738073,
-    "version": "1.50.125"
+    "sha256": "bf4a8e7bccffa8b92ce9b3eeba5f8d20f00e428bb750c5b0cea9b78a91fbd1d7",
+    "size": 41738069,
+    "version": "1.50.126"
   }
 }
