@@ -900,6 +900,41 @@ Future<UpdateInfo?> verifyDownloadedFileHash(
   return null;
 }
 
+/// Builds `hdiutil attach` arguments that mount [dmgPath] onto a private
+/// [mountPoint] inside the app's temp directory instead of `/Volumes`.
+///
+/// Mounting under `/Volumes` and running `find /Volumes` traverses every
+/// connected external/USB drive, which triggers macOS TCC's
+/// `"Lux" would like to access files on a removable volume` prompt on every
+/// update.
+@visibleForTesting
+List<String> buildMacOsDmgAttachArgs(String dmgPath, String mountPoint) => [
+      'attach',
+      dmgPath,
+      '-nobrowse',
+      '-noverify',
+      '-noautoopen',
+      '-mountpoint',
+      mountPoint,
+    ];
+
+/// Finds `Lux.app` inside a private DMG [mountPoint] without touching `/Volumes`.
+@visibleForTesting
+Future<String?> findMacOsAppInMountPoint(String mountPoint) async {
+  final direct = Directory('$mountPoint/Lux.app');
+  if (await direct.exists()) return direct.path;
+  final root = Directory(mountPoint);
+  if (!await root.exists()) return null;
+  await for (final entity in root.list(followLinks: false)) {
+    if (entity is Directory) {
+      if (entity.path.endsWith('/Lux.app')) return entity.path;
+      final nested = Directory('${entity.path}/Lux.app');
+      if (await nested.exists()) return nested.path;
+    }
+  }
+  return null;
+}
+
 /// Downloads the DMG/EXE to a temp file and opens it.
 Future<void> downloadAndInstall(
   BuildContext context,
@@ -1157,24 +1192,24 @@ Future<void> downloadAndInstall(
       await Process.run('xattr', ['-d', 'com.apple.quarantine', file.path]);
       appLog('UPDATE', 'quarantine removed, mounting DMG');
 
-      // Detach ALL previously mounted Lux volumes to avoid stale mounts.
-      final volDir = Directory('/Volumes');
-      if (await volDir.exists()) {
-        final luxVols = volDir.listSync().whereType<Directory>().where(
-          (d) => d.path.contains('/Volumes/Lux ')
-        ).toList();
-        for (final vol in luxVols) {
-          appLog('UPDATE', 'detaching stale Lux volume: ${vol.path}');
-          await Process.run('hdiutil', ['detach', vol.path, '-quiet', '-force']);
-        }
-      }
+      // Mount the DMG onto a private temp mountpoint instead of /Volumes.
+      // Never list or `find /Volumes` — traversing /Volumes opens mounted USB
+      // and external disks, triggering macOS TCC's "access files on a removable
+      // volume" prompt on every update.
+      final mountDir = Directory(
+        '${tmp.path}/lux_dmg_mount_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await mountDir.create(recursive: true);
+      final mountPoint = mountDir.path;
 
-      // Mount the DMG
-      final mountResult = await Process.run('hdiutil', [
-        'attach', file.path,
-        '-nobrowse', '-noverify', '-noautoopen',
-      ]);
+      final mountResult = await Process.run(
+        'hdiutil',
+        buildMacOsDmgAttachArgs(file.path, mountPoint),
+      );
       if (mountResult.exitCode != 0) {
+        try {
+          await mountDir.delete();
+        } catch (_) {}
         appLog('UPDATE', 'hdiutil attach failed: ${mountResult.stderr}');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1184,70 +1219,63 @@ Future<void> downloadAndInstall(
         return;
       }
 
-      // Find Lux.app in the mounted volume
-      final volumesResult = await Process.run('find', [
-        '/Volumes', '-maxdepth', '2', '-name', 'Lux.app', '-type', 'd'
-      ]);
-      final appPath = volumesResult.stdout.toString().trim().split('\n').firstWhere(
-        (l) => l.endsWith('Lux.app'),
-        orElse: () => '',
-      );
-
-      if (appPath.isEmpty) {
-        appLog('UPDATE', 'Lux.app not found in mounted DMG');
-        await Process.run('hdiutil', ['detach', '-quiet', '-force', '/Volumes']);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Lux.app not found in downloaded DMG')),
-          );
+      try {
+        final appPath = await findMacOsAppInMountPoint(mountPoint);
+        if (appPath == null || appPath.isEmpty) {
+          appLog('UPDATE', 'Lux.app not found in mounted DMG at $mountPoint');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Lux.app not found in downloaded DMG')),
+            );
+          }
+          return;
         }
-        return;
-      }
 
-      final mountPoint = appPath.substring(0, appPath.lastIndexOf('/'));
-      appLog('UPDATE', 'found app at $appPath — installing as user');
+        appLog('UPDATE', 'found app at $appPath — installing as user');
 
-      // ── User-space install ────────────────────────────────────────────────
-      // /Applications/Lux.app is owned by the user — no root needed to replace it.
-      // We install directly from Dart in the user's GUI session, then relaunch
-      // from the same session. This is the key fix for post-update relaunch on Sequoia.
+        // ── User-space install ──────────────────────────────────────────────
+        // /Applications/Lux.app is owned by the user — no root needed to replace it.
+        // We install directly from Dart in the user's GUI session, then relaunch
+        // from the same session. This is the key fix for post-update relaunch on Sequoia.
 
-      onStatusChange?.call('Installing…');
+        onStatusChange?.call('Installing…');
 
-      // Kill lux_core before replacing the bundle (wrapper script would be overwritten)
-      await Process.run('sudo', ['-n', 'pkill', '-9', '-f', 'lux_core_real'],
-          runInShell: false);
-      await Future.delayed(const Duration(seconds: 1));
+        // Kill lux_core before replacing the bundle (wrapper script would be overwritten)
+        await Process.run('sudo', ['-n', 'pkill', '-9', '-f', 'lux_core_real'],
+            runInShell: false);
+        await Future.delayed(const Duration(seconds: 1));
 
-      const dest = '/Applications/Lux.app';
-      final destNew = '$dest.new';
+        const dest = '/Applications/Lux.app';
+        final destNew = '$dest.new';
 
-      // Atomic install: ditto to .new, then mv (with sudo fallback for SIP-enabled Macs)
-      await Process.run('sudo', ['-n', 'rm', '-rf', destNew]);
-      await Process.run('rm', ['-rf', destNew]); // also try without sudo
-      final dittoResult = await Process.run('ditto', [appPath, destNew]);
-      if (dittoResult.exitCode != 0) {
-        appLog('UPDATE', 'ditto failed: ${dittoResult.stderr}');
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Install failed: ${dittoResult.stderr}')),
-          );
+        // Atomic install: ditto to .new, then mv (with sudo fallback for SIP-enabled Macs)
+        await Process.run('sudo', ['-n', 'rm', '-rf', destNew]);
+        await Process.run('rm', ['-rf', destNew]); // also try without sudo
+        final dittoResult = await Process.run('ditto', [appPath, destNew]);
+        if (dittoResult.exitCode != 0) {
+          appLog('UPDATE', 'ditto failed: ${dittoResult.stderr}');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Install failed: ${dittoResult.stderr}')),
+            );
+          }
+          return;
         }
+
+        await Process.run('sudo', ['-n', 'rm', '-rf', dest]);
+        final mvResult = await Process.run('sudo', ['-n', 'mv', destNew, dest]);
+        if (mvResult.exitCode != 0) {
+          // sudo mv failed — try without sudo (SIP disabled or user-owned)
+          await Process.run('rm', ['-rf', dest]);
+          await Process.run('mv', [destNew, dest]);
+        }
+        appLog('UPDATE', 'app installed to $dest');
+      } finally {
         await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
-        return;
+        try {
+          if (await mountDir.exists()) await mountDir.delete();
+        } catch (_) {}
       }
-
-      await Process.run('sudo', ['-n', 'rm', '-rf', dest]);
-      final mvResult = await Process.run('sudo', ['-n', 'mv', destNew, dest]);
-      if (mvResult.exitCode != 0) {
-        // sudo mv failed — try without sudo (SIP disabled or user-owned)
-        await Process.run('rm', ['-rf', dest]);
-        await Process.run('mv', [destNew, dest]);
-      }
-      appLog('UPDATE', 'app installed to $dest');
-
-      // Detach DMG
-      await Process.run('hdiutil', ['detach', mountPoint, '-quiet', '-force']);
 
       // ── Elevation setup (root needed, uses existing NOPASSWD) ────────────
       // Set up lux_core_real setuid + sudoers — uses the existing helper script

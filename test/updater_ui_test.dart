@@ -294,5 +294,27 @@ void main() {
       );
       expect(pickNewestUpdate([newerBeta, stableInfo])!.latestVersion, '1.50.120');
     });
+
+    test('macOS DMG mount uses private mountpoint without touching /Volumes',
+        () async {
+      final tmp = await Directory.systemTemp.createTemp('lux_dmg_mount_test_');
+      addTearDown(() async {
+        if (await tmp.exists()) await tmp.delete(recursive: true);
+      });
+
+      final args = buildMacOsDmgAttachArgs('/tmp/Lux-1.50.126.dmg', tmp.path);
+      expect(args, containsAllInOrder(['attach', '/tmp/Lux-1.50.126.dmg']));
+      expect(args, containsAllInOrder(['-mountpoint', tmp.path]));
+      expect(args, contains('-nobrowse'));
+      expect(args.join(' '), isNot(contains('/Volumes')));
+
+      // Missing Lux.app returns null
+      expect(await findMacOsAppInMountPoint(tmp.path), isNull);
+
+      // Direct Lux.app at mount root is found without scanning /Volumes
+      final appDir = Directory('${tmp.path}/Lux.app');
+      await appDir.create();
+      expect(await findMacOsAppInMountPoint(tmp.path), appDir.path);
+    });
   });
 }
