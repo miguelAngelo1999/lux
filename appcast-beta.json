@@ -1,17 +1,17 @@
 {
-  "version": "1.50.124",
+  "version": "1.50.125",
   "channel": "beta",
   "notes": "feat(windows): elevate once via LuxCoreService for all modes with graceful UAC fallback & banner",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "c7295abb59fb552be57e06506a5fb5481ec6191542cb48d633fcba7d9141e447",
-    "size": 45783057,
-    "version": "1.50.124"
+    "sha256": "f1a83dead55c42dbe68b2931090422aea8a5ba6c25d7f4f6e9e9efb1e2fe838f",
+    "size": 45783514,
+    "version": "1.50.125"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "2ada6e8885b715e597b5f2f39ff8237beec495d94970443a9179e9747787b5f4",
-    "size": 41695552,
-    "version": "1.50.124"
+    "sha256": "8bb27df41e68910ea6f2e45c16b745aa461dcbc19210f62cc9070e3459c20522",
+    "size": 41738073,
+    "version": "1.50.125"
   }
 }
