@@ -243,7 +243,13 @@
       "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "Ativo — aplicativos da Microsoft Store / UWP e modos Misto / TUN estão ativados sem novos avisos de UAC.",
       "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "Modo limitado: navegadores e aplicativos de desktop padrão funcionam normalmente, mas aplicativos da Microsoft Store / UWP (como iCloud e Microsoft Store) e os modos Misto / TUN exigem configuração única de administrador.",
       "Background service enabled. Full functionality is now active.": "Serviço em segundo plano ativado. Todas as funcionalidades estão ativas.",
-      "Admin setup cancelled. Continuing in limited System mode.": "Configuração de administrador cancelada. Continuando no modo Sistema limitado."
+      "Admin setup cancelled. Continuing in limited System mode.": "Configuração de administrador cancelada. Continuando no modo Sistema limitado.",
+      "Captive Wi-Fi detected — sign in; Lux will resume automatically": "Wi-Fi cativo detectado — faça login; o Lux voltará automaticamente",
+      "Open login": "Abrir login",
+      "Lux resumed": "Lux retomado",
+      "Lux resumed via {name}": "Lux retomado via {name}",
+      "When the selected proxy stops working, Lux tries other proxies, then direct. Off by default. Captive Wi-Fi sign-in assist always works automatically.": "Quando o proxy selecionado parar de funcionar, o Lux tenta outros proxies e depois conexão direta. Desativado por padrão. A assistência de login em Wi-Fi cativo sempre funciona automaticamente.",
+      "Proxy switched to {name}": "Proxy alterado para {name}"
     },
     "es": {
       "Proxies": "Proxies",
@@ -487,7 +493,13 @@
       "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "Activo — las aplicaciones de Microsoft Store / UWP y los modos Mixto / TUN están activados sin nuevos avisos de UAC.",
       "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "Modo limitado: los navegadores y aplicaciones de escritorio estándar funcionan normalmente, pero las aplicaciones de Microsoft Store / UWP (como iCloud y Microsoft Store) y los modos Mixto / TUN requieren configuración única de administrador.",
       "Background service enabled. Full functionality is now active.": "Servicio en segundo plano activado. Todas las funciones están activas.",
-      "Admin setup cancelled. Continuing in limited System mode.": "Configuración de administrador cancelada. Continuando en modo Sistema limitado."
+      "Admin setup cancelled. Continuing in limited System mode.": "Configuración de administrador cancelada. Continuando en modo Sistema limitado.",
+      "Captive Wi-Fi detected — sign in; Lux will resume automatically": "Wi-Fi cautivo detectado — inicia sesión; Lux se reanudará automáticamente",
+      "Open login": "Abrir inicio de sesión",
+      "Lux resumed": "Lux reanudado",
+      "Lux resumed via {name}": "Lux reanudado mediante {name}",
+      "When the selected proxy stops working, Lux tries other proxies, then direct. Off by default. Captive Wi-Fi sign-in assist always works automatically.": "Cuando el proxy seleccionado deja de funcionar, Lux prueba otros proxies y luego conexión directa. Desactivado por defecto. La asistencia de inicio de sesión en Wi-Fi cautivo siempre funciona automáticamente.",
+      "Proxy switched to {name}": "Proxy cambiado a {name}"
     },
     "it": {
       "Proxies": "Proxy",
@@ -731,7 +743,13 @@
       "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "Attivo — le app Microsoft Store / UWP e le modalità Misto / TUN sono attive senza ulteriori richieste UAC.",
       "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "Modalità limitata: browser e app desktop standard funzionano normalmente, ma le app Microsoft Store / UWP (come iCloud e Microsoft Store) e le modalità Misto / TUN richiedono una configurazione amministratore una tantum.",
       "Background service enabled. Full functionality is now active.": "Servizio in background attivato. Tutte le funzionalità sono ora attive.",
-      "Admin setup cancelled. Continuing in limited System mode.": "Configurazione amministratore annullata. Si continua in modalità Sistema limitata."
+      "Admin setup cancelled. Continuing in limited System mode.": "Configurazione amministratore annullata. Si continua in modalità Sistema limitata.",
+      "Captive Wi-Fi detected — sign in; Lux will resume automatically": "Wi-Fi captive rilevato — accedi; Lux riprenderà automaticamente",
+      "Open login": "Apri accesso",
+      "Lux resumed": "Lux ripreso",
+      "Lux resumed via {name}": "Lux ripreso tramite {name}",
+      "When the selected proxy stops working, Lux tries other proxies, then direct. Off by default. Captive Wi-Fi sign-in assist always works automatically.": "Quando il proxy selezionato smette di funzionare, Lux prova altri proxy e poi la connessione diretta. Disattivato per impostazione predefinita. L’assistenza di accesso Wi-Fi captive funziona sempre automaticamente.",
+      "Proxy switched to {name}": "Proxy cambiato in {name}"
     },
     "fil": {
       "Proxies": "Mga Proxy",
@@ -975,7 +993,13 @@
       "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "Aktibo — naka-enable ang mga Microsoft Store / UWP app at Mixed / TUN mode nang walang paulit-ulit na UAC prompt.",
       "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "Limitadong mode: normal na gumagana ang mga browser at karaniwang desktop app, ngunit nangangailangan ng minsang admin setup ang mga Microsoft Store / UWP app (tulad ng iCloud at Microsoft Store) at mga Mixed / TUN mode.",
       "Background service enabled. Full functionality is now active.": "Na-enable ang background service. Aktibo na ngayon ang buong functionality.",
-      "Admin setup cancelled. Continuing in limited System mode.": "Kinansela ang admin setup. Magpapatuloy sa limitadong System mode."
+      "Admin setup cancelled. Continuing in limited System mode.": "Kinansela ang admin setup. Magpapatuloy sa limitadong System mode.",
+      "Captive Wi-Fi detected — sign in; Lux will resume automatically": "May nakitang captive Wi-Fi — mag-sign in; awtomatikong babalik ang Lux",
+      "Open login": "Buksan ang login",
+      "Lux resumed": "Bumalik na ang Lux",
+      "Lux resumed via {name}": "Bumalik na ang Lux gamit ang {name}",
+      "When the selected proxy stops working, Lux tries other proxies, then direct. Off by default. Captive Wi-Fi sign-in assist always works automatically.": "Kapag huminto sa paggana ang napiling proxy, susubukan ng Lux ang ibang proxy at pagkatapos ay direkta. Naka-off bilang default. Laging awtomatikong gumagana ang tulong sa captive Wi-Fi sign-in.",
+      "Proxy switched to {name}": "Pinalitan ang proxy sa {name}"
     },
     "zh": {
       "Proxies": "代理",
@@ -1219,7 +1243,13 @@
       "Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.": "已启用 — Microsoft Store / UWP 应用以及混合 / TUN 模式已就绪，无需重复 UAC 提示。",
       "Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.": "受限模式：浏览器和标准桌面应用可正常工作，但 Microsoft Store / UWP 应用（如 iCloud 和 Microsoft Store）以及混合 / TUN 模式需要一次性管理员设置。",
       "Background service enabled. Full functionality is now active.": "后台服务已启用，全部功能现已激活。",
-      "Admin setup cancelled. Continuing in limited System mode.": "已取消管理员设置，继续以受限系统模式运行。"
+      "Admin setup cancelled. Continuing in limited System mode.": "已取消管理员设置，继续以受限系统模式运行。",
+      "Captive Wi-Fi detected — sign in; Lux will resume automatically": "检测到强制认证 Wi-Fi — 请登录；Lux 将自动恢复",
+      "Open login": "打开登录页",
+      "Lux resumed": "Lux 已恢复",
+      "Lux resumed via {name}": "Lux 已通过 {name} 恢复",
+      "When the selected proxy stops working, Lux tries other proxies, then direct. Off by default. Captive Wi-Fi sign-in assist always works automatically.": "当所选代理停止工作时，Lux 会尝试其他代理，然后改为直连。默认关闭。强制认证 Wi-Fi 登录辅助始终自动生效。",
+      "Proxy switched to {name}": "已切换代理至 {name}"
     }
   }
 }

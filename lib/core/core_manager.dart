@@ -88,6 +88,10 @@ class CoreManager {
   bool get pausedForNoNetwork => appState.pausedForNoNetwork;
   set pausedForNoNetwork(bool value) => appState.pausedForNoNetwork = value;
 
+  bool get pausedForCaptivePortal => appState.pausedForCaptivePortal;
+  set pausedForCaptivePortal(bool value) =>
+      appState.pausedForCaptivePortal = value;
+
   bool get userWantsRunning => appState.userWantsRunning;
   set userWantsRunning(bool value) => appState.userWantsRunning = value;
 
@@ -324,6 +328,9 @@ class CoreManager {
           onConnectionStateChanged?.call();
           _notify(() => tr().reconnectedMsg, 'Reconnected');
           appLog('NET', 'auto-resumed core on attempt $attempt/$maxAttempts');
+          // Re-probe after resume so captive portals or proxy changes on the
+          // new network (e.g. airport Wi-Fi after wake) are handled promptly.
+          unawaited(triggerNetSwitch(reason: 'resume'));
           return;
         } catch (e) {
           appLog('NET', 'auto-resume attempt $attempt/$maxAttempts failed: $e');
@@ -337,11 +344,13 @@ class CoreManager {
     }
   }
 
-  /// User-initiated stop (UI toggle or tray menu). Clears both
-  /// [pausedForNoNetwork] and [userWantsRunning] so manual OFF is always respected.
+  /// User-initiated stop (UI toggle or tray menu). Clears
+  /// [pausedForNoNetwork], [pausedForCaptivePortal], and [userWantsRunning]
+  /// so manual OFF is always respected.
   Future<void> manualStop() async {
     cancelNetworkTimers();
     pausedForNoNetwork = false;
+    pausedForCaptivePortal = false;
     userWantsRunning = false;
     await stop();
     appState.updateIsStarted(false);
@@ -352,6 +361,7 @@ class CoreManager {
   /// ProxiesPage status banner's Connect button.
   Future<bool> toggleConnection(bool shouldStart) async {
     appState.pausedForNoNetwork = false;
+    appState.pausedForCaptivePortal = false;
     appState.userWantsRunning = shouldStart;
     cancelNetworkTimers();
     bool succeeded = false;
@@ -1087,10 +1097,11 @@ class CoreManager {
     } catch (_) {}
   }
 
-  /// Trigger an immediate auto-switch probe cycle.
-  Future<void> triggerNetSwitch() async {
+  /// Trigger an immediate auto-switch / captive-portal probe cycle.
+  Future<void> triggerNetSwitch({String reason = 'manual'}) async {
     try {
-      await dio.post('$baseHttpUrl/net-switch/trigger');
+      await dio.post('$baseHttpUrl/net-switch/trigger',
+          data: {'reason': reason});
     } catch (_) {}
   }
 

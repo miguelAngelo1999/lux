@@ -407,7 +407,49 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     final Widget? badge;
     final List<Widget> actions;
 
-    if (appState.pausedForNoNetwork) {
+    if (appState.pausedForCaptivePortal) {
+      accent = amber;
+      icon = Icons.wifi_lock;
+      message = tl(context,
+          'Captive Wi-Fi detected — sign in; Lux will resume automatically');
+      badge = null;
+      final portalUrl = appState.captivePortalUrl;
+      final portalUri =
+          (portalUrl != null && portalUrl.isNotEmpty) ? Uri.tryParse(portalUrl) : null;
+      final safePortalUri = (portalUri != null &&
+              (portalUri.scheme == 'http' || portalUri.scheme == 'https') &&
+              portalUri.host.isNotEmpty)
+          ? portalUri
+          : null;
+      actions = [
+        if (safePortalUri != null)
+          _bannerActionButton(
+            key: const Key('banner-action-captive-login'),
+            label: tl(context, 'Open login'),
+            color: accent,
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                final ok = await launchUrl(
+                  safePortalUri,
+                  mode: LaunchMode.externalApplication,
+                );
+                if (!ok && mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(safePortalUri.toString())),
+                  );
+                }
+              } catch (_) {
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(safePortalUri.toString())),
+                  );
+                }
+              }
+            },
+          ),
+      ];
+    } else if (appState.pausedForNoNetwork) {
       accent = amber;
       icon = Icons.wifi_off;
       message = tl(context, 'Paused — waiting for Wi-Fi or Ethernet');
@@ -1248,6 +1290,7 @@ class _AutoSwitchChip extends StatelessWidget {
     final (color, icon, label) = switch (state) {
       'corporate' => (Colors.green, Icons.business, proxyName.isNotEmpty ? proxyName : 'Proxy'),
       'direct'    => (Colors.blue, Icons.home_outlined, 'Direct'),
+      'captive_portal' => (Colors.orange, Icons.wifi_lock, 'Captive Wi-Fi'),
       'no_internet' => (Colors.red, Icons.signal_wifi_off, 'No internet'),
       _ => (Colors.grey, Icons.swap_horiz, state),
     };

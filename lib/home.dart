@@ -56,21 +56,55 @@ class WatchdogController {
   WatchdogController({
     Future<List<ConnectivityResult>> Function()? checkConnectivity,
     Duration retryDelayBase = const Duration(milliseconds: 500),
+    Duration captivePortalMaxPause = const Duration(minutes: 4),
+    DateTime Function()? now,
     void Function(String msg)? showNotification,
     VoidCallback? onRecovered,
   })  : _checkConnectivity =
             checkConnectivity ?? (() => Connectivity().checkConnectivity()),
         _retryDelayBase = retryDelayBase,
+        _captivePortalMaxPause = captivePortalMaxPause,
+        _now = now ?? DateTime.now,
         _showNotification = showNotification,
         _onRecovered = onRecovered;
 
   final Future<List<ConnectivityResult>> Function() _checkConnectivity;
   final Duration _retryDelayBase;
+  final Duration _captivePortalMaxPause;
+  final DateTime Function() _now;
   final void Function(String msg)? _showNotification;
   final VoidCallback? _onRecovered;
 
   int restartFails = 0;
   static const int maxRestarts = 3;
+
+  Future<bool> _isCaptivePortalStillActive(
+      CoreManager coreManager, AppStateModel appState) async {
+    if (!appState.pausedForCaptivePortal) return false;
+    final pausedAt = appState.captivePortalPausedAt;
+    if (pausedAt != null &&
+        _now().difference(pausedAt) >= _captivePortalMaxPause) {
+      appLog('WATCHDOG',
+          'pausedForCaptivePortal exceeded ${_captivePortalMaxPause.inMinutes}m ceiling — clearing flag and recovering');
+      appState.pausedForCaptivePortal = false;
+      return false;
+    }
+    try {
+      final status = await coreManager.getNetSwitchStatus();
+      if (status['state'] == 'captive_portal') {
+        appLog('WATCHDOG',
+            'confirmed lux_core still in captive_portal — skipping tick');
+        return true;
+      }
+      appLog('WATCHDOG',
+          'stale pausedForCaptivePortal flag (core state=${status['state']}) — clearing and continuing');
+    } catch (e) {
+      appLog('WATCHDOG',
+          'getNetSwitchStatus failed while pausedForCaptivePortal ($e) — clearing flag to recover');
+    }
+    appState.pausedForCaptivePortal = false;
+    return false;
+  }
 
   Future<void> tick(CoreManager coreManager, AppStateModel appState) async {
     if (!appState.userWantsRunning) return;
@@ -78,8 +112,14 @@ class WatchdogController {
       appLog('WATCHDOG', 'core restart/elevation in progress — skipping tick');
       return;
     }
+    if (await _isCaptivePortalStillActive(coreManager, appState)) {
+      return;
+    }
 
     final connectivityResult = await _checkConnectivity();
+    if (!appState.userWantsRunning || appState.pausedForCaptivePortal) {
+      return;
+    }
     if (!CoreManager.isOnlineConnectivity(connectivityResult)) {
       appLog('WATCHDOG',
           'offline ($connectivityResult) — skipping restart, preserving userWantsRunning');
@@ -163,6 +203,79 @@ class WatchdogController {
         }
       }
     }
+  }
+}
+
+/// Applies a `net_switch` WebSocket event from `lux_core` to [appState] and
+/// returns the optional notification message to display.
+///
+/// Extracted as a top-level helper so captive-portal pause/resume state
+/// transitions can be unit-tested directly without spinning up the full Home UI.
+String? applyNetSwitchEvent(
+  Map<String, dynamic> data,
+  AppStateModel appState, {
+  VoidCallback? onConnectionStateChanged,
+  VoidCallback? onCaptiveResumeFailed,
+}) {
+  // Never let a late/in-flight net_switch event override a deliberate manual OFF.
+  if (!appState.userWantsRunning) {
+    appState.pausedForCaptivePortal = false;
+    return null;
+  }
+
+  final state = data['state'] as String? ?? '';
+  final proxyName = data['proxyName'] as String? ?? '';
+  final portalUrl =
+      (data['portalUrl'] ?? data['captivePortalUrl']) as String? ?? '';
+  final resumed = data['resumed'] == true;
+
+  switch (state) {
+    case 'captive_portal':
+      appState.pausedForCaptivePortal = true;
+      appState.captivePortalUrl = portalUrl;
+      appState.updateIsStarted(false);
+      onConnectionStateChanged?.call();
+      return 'Captive Wi-Fi detected — sign in; Lux will resume automatically';
+    case 'corporate':
+      final wasCaptive = appState.pausedForCaptivePortal;
+      appState.pausedForCaptivePortal = false;
+      if (wasCaptive || resumed) {
+        appState.updateIsStarted(true);
+      }
+      appState.bumpProxyList();
+      onConnectionStateChanged?.call();
+      if (wasCaptive || resumed) {
+        return proxyName.isNotEmpty
+            ? 'Lux resumed via $proxyName'
+            : 'Lux resumed';
+      }
+      return proxyName.isNotEmpty
+          ? 'Proxy switched to $proxyName'
+          : 'Proxy switched';
+    case 'direct':
+      final wasCaptive = appState.pausedForCaptivePortal;
+      appState.pausedForCaptivePortal = false;
+      if (wasCaptive || resumed) {
+        appState.updateIsStarted(true);
+      }
+      appState.bumpProxyList();
+      onConnectionStateChanged?.call();
+      return 'No proxy reachable — using direct connection';
+    case 'no_internet':
+      final wasCaptive = appState.pausedForCaptivePortal;
+      appState.pausedForCaptivePortal = false;
+      if (wasCaptive) {
+        appState.updateIsStarted(resumed);
+        if (!resumed && appState.userWantsRunning) {
+          // Handoff to auto-resume so Lux comes back once Wi-Fi returns.
+          appState.pausedForNoNetwork = true;
+          onCaptiveResumeFailed?.call();
+        }
+        onConnectionStateChanged?.call();
+      }
+      return 'No internet connection';
+    default:
+      return null;
   }
 }
 
@@ -619,20 +732,27 @@ class _HomeState extends State<Home>
               {
                 final data = message['data'] as Map<String, dynamic>?;
                 if (data == null) break;
-                final state     = data['state']     as String? ?? '';
-                final proxyName = data['proxyName'] as String? ?? '';
-                final msg = switch (state) {
-                  'corporate'   => proxyName.isNotEmpty
-                      ? 'Proxy switched to $proxyName'
-                      : 'Proxy switched',
-                  'direct'      => 'No proxy reachable — using direct connection',
-                  'no_internet' => 'No internet connection',
-                  _             => null,
-                };
+                final msg = applyNetSwitchEvent(
+                  data,
+                  appState,
+                  onConnectionStateChanged: _refreshTray,
+                  onCaptiveResumeFailed: () => coreManager?.scheduleAutoResume(),
+                );
                 if (msg != null && mounted) {
-                  notifier.show(msg);
-                  // Refresh proxy list so UI reflects the new selection
-                  // The dashboard re-emits state so the proxies page picks it up
+                  final proxyName = data['proxyName'] as String? ?? '';
+                  final String localized;
+                  if (msg.startsWith('Lux resumed via ') &&
+                      proxyName.isNotEmpty) {
+                    localized = tl(context, 'Lux resumed via {name}')
+                        .replaceAll('{name}', proxyName);
+                  } else if (msg.startsWith('Proxy switched to ') &&
+                      proxyName.isNotEmpty) {
+                    localized = tl(context, 'Proxy switched to {name}')
+                        .replaceAll('{name}', proxyName);
+                  } else {
+                    localized = tl(context, msg);
+                  }
+                  notifier.show(localized);
                 }
               }
           }
@@ -657,12 +777,16 @@ class _HomeState extends State<Home>
                   'event channel closed during controlled core restart — skipping watchdog');
               return;
             }
-            if (mounted &&
-                Provider.of<AppStateModel>(context, listen: false)
-                    .userWantsRunning) {
-              appLog('EVENT',
-                  'core event channel closed while running — triggering watchdog recovery');
-              _watchdog();
+            if (mounted) {
+              final s = Provider.of<AppStateModel>(context, listen: false);
+              // If lux_core exited while paused for captive portal, clear the
+              // captive flag so watchdog recovery is not stuck.
+              s.pausedForCaptivePortal = false;
+              if (s.userWantsRunning) {
+                appLog('EVENT',
+                    'core event channel closed while running — triggering watchdog recovery');
+                _watchdog();
+              }
             }
           },
           cancelOnError: true,
@@ -693,30 +817,57 @@ class _HomeState extends State<Home>
     });
   }
 
-  /// Debounced auto-switch trigger. Waits 3s after the event to let the
-  /// network settle, then asks lux_core to run a probe cycle (if enabled).
+  /// Debounced network probe trigger. Waits 3s after the event to let the
+  /// network settle, then asks lux_core to run a probe cycle.
+  ///
+  /// Fires even when `autoSwitchEnabled` is OFF as long as Lux is running (or
+  /// paused for captive portal) — `lux_core` enforces whether direct fallback
+  /// is permitted vs. captive-portal-only sign-in assist.
   void _scheduleAutoSwitchTrigger(String reason) {
     _autoSwitchDebounce?.cancel();
     _autoSwitchDebounce = Timer(const Duration(seconds: 3), () async {
-      if (coreManager == null) return;
-      final enabled = await readAutoSwitchEnabled();
-      if (!enabled) return;
-      appLog('AUTO-SWITCH', 'trigger: $reason');
-      await coreManager!.triggerNetSwitch();
+      if (coreManager == null || !mounted) return;
+      final appState = Provider.of<AppStateModel>(context, listen: false);
+      final active = appState.isStarted ||
+          appState.userWantsRunning ||
+          appState.pausedForCaptivePortal;
+      // Never probe while Lux is deliberately stopped, even if autoSwitchEnabled is ON.
+      if (!active) return;
+      appLog('AUTO-SWITCH', 'trigger: $reason (active=$active)');
+      await coreManager!.triggerNetSwitch(reason: reason);
     });
   }
 
   /// On core ready: push persisted auto-switch config (enabled flag +
   /// lastUserProxyId) into lux_core so the state machine has the right
-  /// baseline from the first probe cycle.
+  /// baseline from the first probe cycle, sync any active captive-portal state,
+  /// and run an initial startup probe.
   Future<void> _syncAutoSwitchOnReady() async {
     if (coreManager == null) return;
     final enabled = await readAutoSwitchEnabled();
+    final lastId = await readLastUserProxyId();
     await coreManager!.setNetSwitchEnabled(enabled);
-    if (enabled) {
-      final lastId = await readLastUserProxyId();
+    if (lastId != null && lastId.isNotEmpty) {
       await coreManager!.syncNetSwitchConfig(lastId);
     }
+    try {
+      final status = await coreManager!.getNetSwitchStatus();
+      if (mounted) {
+        final appState = Provider.of<AppStateModel>(context, listen: false);
+        final isCaptive = status['state'] == 'captive_portal' &&
+            appState.userWantsRunning;
+        appState.pausedForCaptivePortal = isCaptive;
+        if (isCaptive) {
+          appState.captivePortalUrl =
+              (status['captivePortalUrl'] ?? status['portalUrl']) as String?;
+          appState.updateIsStarted(false);
+          _refreshTray();
+        }
+      }
+    } catch (e) {
+      appLog('AUTO-SWITCH', 'startup status sync failed: $e');
+    }
+    _scheduleAutoSwitchTrigger('startup');
   }
 
   /// Watchdog — restarts the core if it stopped unexpectedly while the user
@@ -842,6 +993,7 @@ class _HomeState extends State<Home>
       final appState = Provider.of<AppStateModel>(context, listen: false);
       coreManager?.cancelNetworkTimers();
       appState.pausedForNoNetwork = false;
+      appState.pausedForCaptivePortal = false;
       appState.userWantsRunning = true;
       try {
         await coreManager?.start();
@@ -858,7 +1010,9 @@ class _HomeState extends State<Home>
       _refreshTray();
     } else if (key == 'disconnect') {
       final appState = Provider.of<AppStateModel>(context, listen: false);
+      _autoSwitchDebounce?.cancel();
       appState.pausedForNoNetwork = false;
+      appState.pausedForCaptivePortal = false;
       appState.userWantsRunning = false;
       await coreManager?.manualStop();
       _refreshTray();

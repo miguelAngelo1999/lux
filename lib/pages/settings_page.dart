@@ -360,14 +360,27 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
           SettingRow(
             title: 'Auto-switch proxy',
-            keywords: ['auto', 'switch', 'home', 'office', 'network', 'detect', 'bypass'],
+            keywords: [
+              'auto',
+              'switch',
+              'home',
+              'office',
+              'network',
+              'detect',
+              'bypass',
+              'captive',
+              'portal',
+              'airport',
+              'hotel',
+            ],
             build: (ctx) => FutureBuilder<bool>(
               future: readAutoSwitchEnabled(),
               builder: (ctx, snap) => switchTile(
                 title: 'Auto-switch proxy',
                 subtitle:
                     'When the selected proxy stops working, Lux tries other '
-                    'proxies, then direct. Off by default.',
+                    'proxies, then direct. Off by default. Captive Wi-Fi '
+                    'sign-in assist always works automatically.',
                 value: snap.data ?? false,
                 onChanged: (v) async {
                   await writeAutoSwitchEnabled(v);

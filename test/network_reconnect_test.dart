@@ -38,12 +38,28 @@ class _TestCoreManager extends CoreManager {
   int startCalls = 0;
   int stopCalls = 0;
   int restartCoreCalls = 0;
+  final List<String> triggerReasons = [];
+  Map<String, dynamic> netSwitchStatusValue = const {'state': 'idle'};
+  bool failNetSwitchStatus = false;
 
   @override
   Future<bool> getIsStarted() async => isStartedValue;
 
   @override
   Future<Setting> getSetting() async => Setting(mode: mode);
+
+  @override
+  Future<void> triggerNetSwitch({String reason = 'manual'}) async {
+    triggerReasons.add(reason);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getNetSwitchStatus() async {
+    if (failNetSwitchStatus) {
+      throw Exception('core unreachable');
+    }
+    return netSwitchStatusValue;
+  }
 
   @override
   Future<void> start() async {
@@ -318,6 +334,198 @@ void main() {
       expect(core.startCalls, 1);
       expect(appState.pausedForNoNetwork, isFalse);
       expect(appState.isStarted, isTrue);
+    });
+  });
+
+  group('Captive portal watchdog safety & manual stop', () {
+    late StreamController<List<ConnectivityResult>> connectivityController;
+    late List<ConnectivityResult> currentConnectivity;
+    late AppStateModel appState;
+    late int trayRefreshCount;
+    late _TestCoreManager core;
+
+    setUp(() {
+      connectivityController =
+          StreamController<List<ConnectivityResult>>.broadcast();
+      currentConnectivity = [ConnectivityResult.wifi];
+      appState = AppStateModel(ThemeMode.light, const Locale('en'));
+      appState.userWantsRunning = true;
+      appState.updateIsStarted(true);
+      trayRefreshCount = 0;
+      core = _TestCoreManager(
+        appState: appState,
+        connectivityStream: connectivityController.stream,
+        checkConnectivity: () async => currentConnectivity,
+        onConnectionStateChanged: () => trayRefreshCount++,
+      );
+    });
+
+    tearDown(() async {
+      core.dispose();
+      await connectivityController.close();
+    });
+
+    test('watchdog does not restart core while lux_core confirms captive_portal',
+        () async {
+      core.isStartedValue = false;
+      core.netSwitchStatusValue = const {
+        'state': 'captive_portal',
+        'captivePortalUrl': 'http://airport.wifi/login',
+      };
+      final msg = applyNetSwitchEvent(
+        {
+          'state': 'captive_portal',
+          'portalUrl': 'http://airport.wifi/login',
+        },
+        appState,
+        onConnectionStateChanged: () => trayRefreshCount++,
+      );
+
+      expect(msg, contains('Captive Wi-Fi detected'));
+      expect(appState.pausedForCaptivePortal, isTrue);
+      expect(appState.captivePortalUrl, 'http://airport.wifi/login');
+      expect(appState.isStarted, isFalse);
+      expect(appState.userWantsRunning, isTrue);
+
+      final watchdog = WatchdogController(
+        checkConnectivity: () async => [ConnectivityResult.wifi],
+        retryDelayBase: const Duration(milliseconds: 5),
+      );
+
+      // Run more ticks than maxRestarts while online and confirmed captive_portal.
+      for (int i = 0; i < 5; i++) {
+        await watchdog.tick(core, appState);
+      }
+
+      expect(core.startCalls, 0);
+      expect(core.restartCoreCalls, 0);
+      expect(watchdog.restartFails, 0);
+      expect(appState.pausedForCaptivePortal, isTrue);
+      expect(appState.userWantsRunning, isTrue);
+    });
+
+    test('watchdog recovers if pausedForCaptivePortal is stuck after core exited captive mode or exceeded ceiling',
+        () async {
+      // Subcase A: missed WS resume event — core is no longer in captive_portal.
+      core.isStartedValue = false;
+      core.netSwitchStatusValue = const {'state': 'corporate'};
+      appState.pausedForCaptivePortal = true;
+      appState.userWantsRunning = true;
+      appState.updateIsStarted(false);
+
+      final watchdog = WatchdogController(
+        checkConnectivity: () async => [ConnectivityResult.wifi],
+        retryDelayBase: const Duration(milliseconds: 5),
+      );
+
+      await watchdog.tick(core, appState);
+
+      expect(appState.pausedForCaptivePortal, isFalse);
+      expect(core.startCalls, 1);
+      expect(appState.isStarted, isTrue);
+
+      // Subcase B: safety ceiling exceeded even if core still claims captive_portal.
+      core.isStartedValue = false;
+      core.netSwitchStatusValue = const {'state': 'captive_portal'};
+      appState.pausedForCaptivePortal = true;
+      appState.captivePortalPausedAt =
+          DateTime.now().subtract(const Duration(minutes: 5));
+      appState.updateIsStarted(false);
+
+      await watchdog.tick(core, appState);
+
+      expect(appState.pausedForCaptivePortal, isFalse);
+      expect(core.startCalls, 2);
+      expect(appState.isStarted, isTrue);
+    });
+
+    test('manualStop clears pausedForCaptivePortal, captivePortalUrl, and userWantsRunning',
+        () async {
+      appState.pausedForCaptivePortal = true;
+      appState.captivePortalUrl = 'http://hotel.local/login';
+      appState.userWantsRunning = true;
+      appState.updateIsStarted(false);
+      core.isStartedValue = false;
+
+      await core.manualStop();
+
+      expect(core.stopCalls, 1);
+      expect(appState.pausedForCaptivePortal, isFalse);
+      expect(appState.captivePortalUrl, isNull);
+      expect(appState.userWantsRunning, isFalse);
+      expect(appState.isStarted, isFalse);
+
+      // Late captive_portal or corporate WS events after manual OFF must be ignored.
+      final lateCaptive = applyNetSwitchEvent(
+        {'state': 'captive_portal', 'portalUrl': 'http://hotel.local/login'},
+        appState,
+      );
+      expect(lateCaptive, isNull);
+      expect(appState.pausedForCaptivePortal, isFalse);
+
+      final lateCorp = applyNetSwitchEvent(
+        {'state': 'corporate', 'proxyName': 'Congregatio Proxy', 'resumed': true},
+        appState,
+      );
+      expect(lateCorp, isNull);
+      expect(appState.isStarted, isFalse);
+
+      // Subsequent watchdog tick must also do nothing.
+      final watchdog = WatchdogController(
+        checkConnectivity: () async => [ConnectivityResult.wifi],
+        retryDelayBase: const Duration(milliseconds: 5),
+      );
+      await watchdog.tick(core, appState);
+      expect(core.startCalls, 0);
+    });
+
+    test('applyNetSwitchEvent resumes state cleanly after captive portal clears',
+        () async {
+      appState.pausedForCaptivePortal = true;
+      appState.captivePortalUrl = 'http://airport.wifi/login';
+      appState.updateIsStarted(false);
+      final revBefore = appState.proxyListRevision;
+
+      final msg = applyNetSwitchEvent(
+        {
+          'state': 'corporate',
+          'proxyId': 'house-1',
+          'proxyName': 'Congregatio Proxy',
+          'resumed': true,
+        },
+        appState,
+        onConnectionStateChanged: () => trayRefreshCount++,
+      );
+
+      expect(msg, 'Lux resumed via Congregatio Proxy');
+      expect(appState.pausedForCaptivePortal, isFalse);
+      expect(appState.captivePortalUrl, isNull);
+      expect(appState.isStarted, isTrue);
+      expect(appState.proxyListRevision, revBefore + 1);
+      expect(trayRefreshCount, greaterThanOrEqualTo(1));
+    });
+
+    test('captive_portal -> no_internet (resumed=false) hands off to pausedForNoNetwork',
+        () async {
+      appState.pausedForCaptivePortal = true;
+      appState.userWantsRunning = true;
+      appState.updateIsStarted(false);
+      bool scheduledAutoResume = false;
+
+      final msg = applyNetSwitchEvent(
+        {
+          'state': 'no_internet',
+          'resumed': false,
+        },
+        appState,
+        onCaptiveResumeFailed: () => scheduledAutoResume = true,
+      );
+
+      expect(msg, 'No internet connection');
+      expect(appState.pausedForCaptivePortal, isFalse);
+      expect(appState.pausedForNoNetwork, isTrue);
+      expect(appState.isStarted, isFalse);
+      expect(scheduledAutoResume, isTrue);
     });
   });
 }

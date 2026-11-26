@@ -19,6 +19,34 @@ class AppStateModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Set when lux_core temporarily paused TUN + system proxy so the user can
+  // complete a captive-portal Wi-Fi login. While true, the 30s watchdog checks
+  // lux_core's live status before skipping so a stuck flag can never disable
+  // recovery; manualStop() clears it immediately.
+  bool _pausedForCaptivePortal = false;
+  DateTime? captivePortalPausedAt;
+  bool get pausedForCaptivePortal => _pausedForCaptivePortal;
+  set pausedForCaptivePortal(bool value) {
+    if (_pausedForCaptivePortal == value) return;
+    _pausedForCaptivePortal = value;
+    if (value) {
+      captivePortalPausedAt ??= DateTime.now();
+    } else {
+      captivePortalPausedAt = null;
+      _captivePortalUrl = null;
+    }
+    notifyListeners();
+  }
+
+  String? _captivePortalUrl;
+  String? get captivePortalUrl => _captivePortalUrl;
+  set captivePortalUrl(String? value) {
+    final normalized = (value != null && value.isNotEmpty) ? value : null;
+    if (_captivePortalUrl == normalized) return;
+    _captivePortalUrl = normalized;
+    notifyListeners();
+  }
+
   // Windows only: true when one-time LuxCoreService admin setup was declined or
   // unavailable and lux_core is running non-elevated in System mode. Drives the
   // non-blocking Dashboard warning banner and Settings status row.
