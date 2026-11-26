@@ -1,17 +1,17 @@
 {
-  "version": "1.50.126",
+  "version": "1.50.127",
   "channel": "beta",
-  "notes": "fix(macos): mount update DMG at private temp mountpoint to avoid removable-volume TCC prompt",
+  "notes": "feat(captive-portal): integrate captive Wi-Fi sign-in assist and hardened watchdog safety",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "401686bff85710d2b0b7cd8ba793a3ba30e407ae6e75cb91f323097cd9436526",
-    "size": 45796600,
-    "version": "1.50.126"
+    "sha256": "bb0fac59282dd255e39336df47a7a89efc117a1cb3e530016617d49c7705daa0",
+    "size": 45814504,
+    "version": "1.50.127"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "bf4a8e7bccffa8b92ce9b3eeba5f8d20f00e428bb750c5b0cea9b78a91fbd1d7",
-    "size": 41738069,
-    "version": "1.50.126"
+    "sha256": "0b78cc0596d23ec0b54b9135a1c92537e4f3311883f556e41c387c9ad007ab84",
+    "size": 41732553,
+    "version": "1.50.127"
   }
 }
