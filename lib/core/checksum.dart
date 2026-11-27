@@ -25,6 +25,7 @@ Future<void> verifyCoreBinary(String filePath) async {
   final validChecksums = [
     darwinAmd64Checksum,
     darwinArm64Checksum,
+    "e46a1140c6e461ac6edef4dfba8aca86bb463b5233247e16893c01e42010a704",
     "51033a79e25498be0a31462072c8ed1b0af452c765fa123993d30045c0445798",
     "d59ccb8f60aa315a783d79b6c3234c97234b64831051f6cf23b5adadcb87a29f",
     "b8426366fc6866972372a10156e5f465cab7679603ee65c393d1027798a5a9c8",
