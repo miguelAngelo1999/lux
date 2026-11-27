@@ -132,6 +132,62 @@ Future<void> writeAutoSwitchEnabled(bool enabled) async {
   await _writePrefs(prefs);
 }
 
+// ── Stay connected (optional failover) ──────────────────────────────────────
+
+/// Whether optional never-give-up backup failover is enabled (default off).
+Future<bool> readStayConnectedEnabled() async {
+  final prefs = await _readPrefs();
+  return prefs['stayConnectedEnabled'] == true;
+}
+
+Future<void> writeStayConnectedEnabled(bool enabled) async {
+  final prefs = await _readPrefs();
+  prefs['stayConnectedEnabled'] = enabled;
+  await _writePrefs(prefs);
+}
+
+/// Backup pool mode for Stay connected: `'all'` (default) or `'selected'`.
+Future<String> readBackupMode() async {
+  final prefs = await _readPrefs();
+  return prefs['backupMode'] == 'selected' ? 'selected' : 'all';
+}
+
+Future<void> writeBackupMode(String mode) async {
+  final prefs = await _readPrefs();
+  prefs['backupMode'] = mode == 'selected' ? 'selected' : 'all';
+  await _writePrefs(prefs);
+}
+
+/// Selected backup proxy IDs when [readBackupMode] == `'selected'`.
+Future<List<String>> readBackupProxyIds() async {
+  final prefs = await _readPrefs();
+  final raw = prefs['backupProxyIds'];
+  if (raw is List) {
+    return raw.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+  }
+  return <String>[];
+}
+
+Future<void> writeBackupProxyIds(List<String> ids) async {
+  final prefs = await _readPrefs();
+  prefs['backupProxyIds'] = ids.where((s) => s.isNotEmpty).toSet().toList();
+  await _writePrefs(prefs);
+}
+
+// ── Interface Mode (Simple vs Advanced) ─────────────────────────────────────
+
+/// Whether power-user Advanced Mode is enabled (default false = Simple Mode).
+Future<bool> readAdvancedMode() async {
+  final prefs = await _readPrefs();
+  return prefs['advancedMode'] == true;
+}
+
+Future<void> writeAdvancedMode(bool enabled) async {
+  final prefs = await _readPrefs();
+  prefs['advancedMode'] = enabled;
+  await _writePrefs(prefs);
+}
+
 /// Last proxy the user manually selected — used by auto-switch as fallback
 /// when no internet and to restore the UI after auto-selection.
 Future<String?> readLastUserProxyId() async {

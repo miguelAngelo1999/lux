@@ -66,7 +66,17 @@ class AppStateModel extends ChangeNotifier {
   String get selectedProxyId => _selectedProxyId;
   bool get isStarted => _isStarted;
 
-  AppStateModel(this._theme, this._locale);
+  bool _advancedMode;
+  bool get advancedMode => _advancedMode;
+
+  AppStateModel(this._theme, this._locale, {bool advancedMode = true})
+      : _advancedMode = advancedMode;
+
+  void updateAdvancedMode(bool value) {
+    if (_advancedMode == value) return;
+    _advancedMode = value;
+    notifyListeners();
+  }
 
   void updateSurfaceTier(WindowSurfaceTier tier) {
     if (tier == _surfaceTier) return;

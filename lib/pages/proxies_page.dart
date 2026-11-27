@@ -7,6 +7,7 @@ import 'package:lux/util/t_text.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
+import 'package:lux/widget/backup_proxies_dialog.dart';
 import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/lux_scroll_edge_fade.dart';
 import 'package:lux/widget/password_peek_dialog.dart';
@@ -55,11 +56,15 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   var isCollapsedMap = <String, bool>{};
 
-  // ── Auto-switch ────────────────────────────────────────────────────────────
+  // ── Auto Home/Office & Stay connected ──────────────────────────────────────
   bool _autoSwitchEnabled = false;
+  bool _stayConnectedEnabled = false;
+  String _backupMode = 'all'; // 'all' | 'selected'
+  List<String> _backupProxyIds = const [];
   bool _autoSwitching = false; // currently running a probe cycle
-  String _autoSwitchState = ''; // 'corporate'|'direct'|'no_internet'|''
+  String _autoSwitchState = ''; // 'corporate'|'failover'|'direct'|'captive_portal'|'no_internet'|''
   String _autoSwitchProxyName = '';
+  String _autoSwitchPreferredName = '';
 
   AppStateModel? _appState;
   int _lastProxyRevision = 0;
@@ -94,14 +99,23 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   Future<void> _loadAutoSwitchState() async {
     final enabled = await readAutoSwitchEnabled();
+    final stayConnected = await readStayConnectedEnabled();
+    final backupMode = await readBackupMode();
+    final backupIds = await readBackupProxyIds();
     if (!mounted) return;
-    setState(() => _autoSwitchEnabled = enabled);
-    if (enabled) {
+    setState(() {
+      _autoSwitchEnabled = enabled;
+      _stayConnectedEnabled = stayConnected;
+      _backupMode = backupMode;
+      _backupProxyIds = backupIds;
+    });
+    if (enabled || stayConnected) {
       final status = await widget.coreManager.getNetSwitchStatus();
       if (!mounted) return;
       setState(() {
         _autoSwitchState = status['state'] as String? ?? '';
         _autoSwitchProxyName = status['activeProxyName'] as String? ?? '';
+        _autoSwitchPreferredName = status['preferredProxyName'] as String? ?? '';
         _autoSwitching = status['probing'] as bool? ?? false;
       });
     }
@@ -117,23 +131,89 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     if (!mounted) return;
     setState(() {
       _autoSwitchEnabled = enabled;
-      if (!enabled) {
+      if (!enabled && !_stayConnectedEnabled) {
         _autoSwitchState = '';
         _autoSwitchProxyName = '';
+        _autoSwitchPreferredName = '';
         _autoSwitching = false;
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(enabled
-            ? tl(context, 'Auto-switch enabled')
-            : tl(context, 'Auto-switch disabled')),
+            ? tl(context, 'Auto Home/Office enabled')
+            : tl(context, 'Auto Home/Office disabled')),
         duration: const Duration(seconds: 2),
       ),
     );
     if (enabled) {
       unawaited(_triggerAutoSwitch());
     }
+  }
+
+  Future<void> _toggleStayConnected(bool enabled) async {
+    await writeStayConnectedEnabled(enabled);
+    await widget.coreManager.setStayConnectedEnabled(enabled);
+    if (enabled) {
+      final lastId = await readLastUserProxyId();
+      await widget.coreManager.syncNetSwitchConfig(
+        lastId,
+        stayConnected: true,
+        backupMode: _backupMode,
+        backupProxyIds: _backupProxyIds,
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      _stayConnectedEnabled = enabled;
+      if (!enabled && !_autoSwitchEnabled) {
+        _autoSwitchState = '';
+        _autoSwitchProxyName = '';
+        _autoSwitchPreferredName = '';
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(enabled
+            ? tl(context, 'Stay connected enabled')
+            : tl(context, 'Stay connected disabled')),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _openBackupProxiesDialog() async {
+    final choice = await showDialog<BackupPoolChoice>(
+      context: context,
+      builder: (_) => BackupProxiesDialog(
+        proxies: proxyListGroup.allProxies,
+        initialMode: _backupMode,
+        initialSelectedIds: _backupProxyIds,
+      ),
+    );
+    if (choice == null) return;
+    await writeBackupMode(choice.mode);
+    await writeBackupProxyIds(choice.proxyIds);
+    await widget.coreManager.setBackupConfig(
+      mode: choice.mode,
+      proxyIds: choice.proxyIds,
+    );
+    if (!mounted) return;
+    setState(() {
+      _backupMode = choice.mode;
+      _backupProxyIds = choice.proxyIds;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          choice.mode == 'selected'
+              ? tl(context, 'Backup proxies updated ({count} selected)')
+                  .replaceAll('{count}', '${choice.proxyIds.length}')
+              : tl(context, 'Backup proxies set to all saved proxies'),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _triggerAutoSwitch() async {
@@ -149,6 +229,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       setState(() {
         _autoSwitchState = status['state'] as String? ?? '';
         _autoSwitchProxyName = status['activeProxyName'] as String? ?? '';
+        _autoSwitchPreferredName = status['preferredProxyName'] as String? ?? '';
         _autoSwitching = probing;
       });
       if (!probing) {
@@ -785,11 +866,13 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 children: [
                   Expanded(child: _buildStatusBanner(context, appState)),
                   const SizedBox(width: 6),
-                  // 1-click Auto-switch quick control (toggle + re-probe)
+                  // 1-click Auto Home/Office & Stay connected control
                   Tooltip(
-                    message: _autoSwitchEnabled
-                        ? tl(context, 'Auto-switch proxy (ON) — click to probe or disable')
-                        : tl(context, 'Auto-switch proxy (OFF) — click to enable'),
+                    message: (_autoSwitchEnabled || _stayConnectedEnabled)
+                        ? tl(context,
+                            'Auto Home/Office — uses your work proxy at the office and direct internet at home. Click to configure or check now.')
+                        : tl(context,
+                            'Auto Home/Office (OFF) — automatically switches between your work proxy at the office and direct internet at home.'),
                     child: _autoSwitching
                         ? SizedBox(
                             width: 34,
@@ -812,6 +895,10 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                             onSelected: (action) {
                               if (action == 'toggle') {
                                 _toggleAutoSwitch(!_autoSwitchEnabled);
+                              } else if (action == 'stay') {
+                                _toggleStayConnected(!_stayConnectedEnabled);
+                              } else if (action == 'backups') {
+                                _openBackupProxiesDialog();
                               } else if (action == 'probe') {
                                 _triggerAutoSwitch();
                               }
@@ -819,32 +906,132 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                             itemBuilder: (ctx) => [
                               PopupMenuItem<String>(
                                 value: 'toggle',
-                                height: 34,
+                                height: 48,
                                 child: Row(
                                   children: [
-                                    LuxIcon(
-                                      LuxGlyph.swap,
-                                      size: 13.5,
+                                    Icon(
+                                      _autoSwitchEnabled
+                                          ? Icons.check_box_rounded
+                                          : Icons.check_box_outline_blank_rounded,
+                                      size: 16,
                                       color: _autoSwitchEnabled
                                           ? tokens.cobalt
-                                          : tokens.textSecondary,
+                                          : tokens.textMuted,
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: TText(
-                                        _autoSwitchEnabled
-                                            ? 'Disable Auto-switch'
-                                            : 'Enable Auto-switch',
-                                        style: const TextStyle(fontSize: 12),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          TText(
+                                            'Auto Home/Office',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w500,
+                                              color: tokens.textPrimary,
+                                            ),
+                                          ),
+                                          TText(
+                                            'Office → proxy · Home → direct',
+                                            style: TextStyle(
+                                              fontSize: 10.5,
+                                              color: tokens.textMuted,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              if (_autoSwitchEnabled)
+                              if (appState.advancedMode)
+                                PopupMenuItem<String>(
+                                  value: 'stay',
+                                  height: 50,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _stayConnectedEnabled
+                                            ? Icons.check_box_rounded
+                                            : Icons.check_box_outline_blank_rounded,
+                                        size: 16,
+                                        color: _stayConnectedEnabled
+                                            ? tokens.cobalt
+                                            : tokens.textMuted,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            TText(
+                                              'Stay connected',
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w500,
+                                                color: tokens.textPrimary,
+                                              ),
+                                            ),
+                                            TText(
+                                              'Fail over to backups & return when yours recovers',
+                                              style: TextStyle(
+                                                fontSize: 10.5,
+                                                color: tokens.textMuted,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (appState.advancedMode && _stayConnectedEnabled)
+                                PopupMenuItem<String>(
+                                  value: 'backups',
+                                  height: 44,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.backup_table_rounded,
+                                        size: 15,
+                                        color: tokens.textSecondary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            TText(
+                                              'Backup proxies…',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: tokens.textPrimary,
+                                              ),
+                                            ),
+                                            Text(
+                                              _backupMode == 'selected'
+                                                  ? tl(ctx, '{count} selected').replaceAll(
+                                                      '{count}',
+                                                      '${_backupProxyIds.length}')
+                                                  : tl(ctx, 'All saved proxies'),
+                                              style: TextStyle(
+                                                fontSize: 10.5,
+                                                color: tokens.textMuted,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (_autoSwitchEnabled || _stayConnectedEnabled)
                                 PopupMenuItem<String>(
                                   value: 'probe',
-                                  height: 34,
+                                  height: 44,
                                   child: Row(
                                     children: [
                                       LuxIcon(
@@ -853,10 +1040,26 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                                         color: tokens.textSecondary,
                                       ),
                                       const SizedBox(width: 8),
-                                      const Expanded(
-                                        child: TText(
-                                          'Check network now',
-                                          style: TextStyle(fontSize: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            TText(
+                                              'Check network now',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: tokens.textPrimary,
+                                              ),
+                                            ),
+                                            TText(
+                                              'Re-test which network you are on',
+                                              style: TextStyle(
+                                                fontSize: 10.5,
+                                                color: tokens.textMuted,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
@@ -867,12 +1070,12 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                               width: 34,
                               height: 34,
                               decoration: BoxDecoration(
-                                color: _autoSwitchEnabled
+                                color: (_autoSwitchEnabled || _stayConnectedEnabled)
                                     ? tokens.cobalt.withValues(alpha: 0.12)
                                     : tokens.cardBg,
                                 borderRadius: BorderRadius.circular(9),
                                 border: Border.all(
-                                  color: _autoSwitchEnabled
+                                  color: (_autoSwitchEnabled || _stayConnectedEnabled)
                                       ? tokens.cobalt.withValues(alpha: 0.4)
                                       : tokens.hairlineStrong,
                                   width: 0.75,
@@ -882,7 +1085,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                                 child: LuxIcon(
                                   LuxGlyph.swap,
                                   size: 14,
-                                  color: _autoSwitchEnabled
+                                  color: (_autoSwitchEnabled || _stayConnectedEnabled)
                                       ? tokens.cobalt
                                       : tokens.textSecondary,
                                 ),
@@ -890,11 +1093,14 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                             ),
                           ),
                   ),
-                  if (_autoSwitchEnabled && _autoSwitchState.isNotEmpty) ...[
+                  if ((_autoSwitchEnabled || _stayConnectedEnabled) &&
+                      _autoSwitchState.isNotEmpty) ...[
                     const SizedBox(width: 4),
                     _AutoSwitchChip(
-                        state: _autoSwitchState,
-                        proxyName: _autoSwitchProxyName),
+                      state: _autoSwitchState,
+                      proxyName: _autoSwitchProxyName,
+                      preferredName: _autoSwitchPreferredName,
+                    ),
                   ],
                   const SizedBox(width: 6),
                   _isDetecting
@@ -2199,37 +2405,91 @@ class _ProxyCredentials {
   });
 }
 
-/// Small status chip shown next to the auto-switch button.
+/// Self-explanatory status chip shown next to the Auto Home/Office button.
 class _AutoSwitchChip extends StatelessWidget {
   final String state;
   final String proxyName;
-  const _AutoSwitchChip({required this.state, required this.proxyName});
+  final String preferredName;
+  const _AutoSwitchChip({
+    required this.state,
+    required this.proxyName,
+    this.preferredName = '',
+  });
 
   @override
   Widget build(BuildContext context) {
-    final (color, icon, label) = switch (state) {
-      'corporate' => (Colors.green, Icons.business, proxyName.isNotEmpty ? proxyName : 'Proxy'),
-      'direct'    => (Colors.blue, Icons.home_outlined, 'Direct'),
-      'captive_portal' => (Colors.orange, Icons.wifi_lock, 'Captive Wi-Fi'),
-      'no_internet' => (Colors.red, Icons.signal_wifi_off, 'No internet'),
-      _ => (Colors.grey, Icons.swap_horiz, state),
+    final (color, icon, label, tip) = switch (state) {
+      'corporate' => (
+          Colors.green,
+          Icons.business_rounded,
+          proxyName.isNotEmpty
+              ? '${tl(context, 'Office')} · $proxyName'
+              : tl(context, 'Office'),
+          tl(context, 'Work proxy reachable — routing through {name}')
+              .replaceAll('{name}', proxyName.isNotEmpty ? proxyName : 'proxy'),
+        ),
+      'failover' => (
+          Colors.amber.shade700,
+          Icons.sync_rounded,
+          proxyName.isNotEmpty
+              ? '${tl(context, 'Backup')} · $proxyName'
+              : tl(context, 'Backup'),
+          preferredName.isNotEmpty
+              ? tl(context,
+                      '{preferred} unavailable — temporarily using {active}; will switch back automatically.')
+                  .replaceAll('{preferred}', preferredName)
+                  .replaceAll('{active}', proxyName)
+              : tl(context, 'Temporarily using backup proxy; will switch back automatically.'),
+        ),
+      'direct' => (
+          Colors.blue,
+          Icons.home_outlined,
+          '${tl(context, 'Home')} · ${tl(context, 'Direct')}',
+          tl(context,
+              'No work proxy reachable — using direct internet. Re-checking every 45s.'),
+        ),
+      'captive_portal' => (
+          Colors.orange,
+          Icons.wifi_lock_rounded,
+          tl(context, 'Wi-Fi login'),
+          tl(context, 'Sign in on the Wi-Fi page; Lux resumes automatically.'),
+        ),
+      'no_internet' => (
+          Colors.red,
+          Icons.signal_wifi_off_rounded,
+          tl(context, 'Offline · retrying'),
+          tl(context, 'No proxy reachable — retrying automatically.'),
+        ),
+      _ => (Colors.grey, Icons.swap_horiz, state, state),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withAlpha(30),
-        border: Border.all(color: color.withAlpha(120)),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: color),
-          const SizedBox(width: 3),
-          Text(label,
-              style: TextStyle(fontSize: 10, color: color),
-              overflow: TextOverflow.ellipsis),
-        ],
+    return Tooltip(
+      message: tip,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withAlpha(30),
+          border: Border.all(color: color.withAlpha(120)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11.5, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

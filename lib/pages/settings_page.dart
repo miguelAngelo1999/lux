@@ -23,6 +23,7 @@ import 'package:lux/util/updater.dart'
         updateStateNotifier,
         UpdateState,
         UpdateInfo;
+import 'package:lux/widget/backup_proxies_dialog.dart';
 import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/lux_scroll_edge_fade.dart';
 import 'package:lux/widget/setting_tiles.dart';
@@ -251,7 +252,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   // ── Rows by category ───────────────────────────────────────────────────────
 
-  List<SettingRow> _rowsFor(String categoryId) {
+  List<SettingRow> _rowsFor(String categoryId, {bool advancedMode = true}) {
     final s = _setting!;
     final saving = _isSaving;
     final isTun = s.mode == ProxyMode.tun || s.mode == ProxyMode.mixed;
@@ -324,6 +325,30 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
       case 'general':
         return [
+          SettingRow(
+            title: 'Interface Mode',
+            keywords: ['simple', 'advanced', 'power', 'mode', 'ui', 'beginner'],
+            build: (ctx) {
+              final isAdv = ctx.select<AppStateModel, bool>((m) => m.advancedMode);
+              return segmentedTile<bool>(
+                context: ctx,
+                title: 'Interface Mode',
+                subtitle: isAdv
+                    ? 'Full controls: routing rules, logs, DNS, and backup proxy failover.'
+                    : 'Clean everyday view: Proxies and essential settings only.',
+                value: isAdv,
+                options: const [false, true],
+                label: (v) => v ? 'Advanced' : 'Simple',
+                onChanged: (v) async {
+                  await writeAdvancedMode(v);
+                  if (!mounted) return;
+                  // ignore: use_build_context_synchronously
+                  Provider.of<AppStateModel>(context, listen: false)
+                      .updateAdvancedMode(v);
+                },
+              );
+            },
+          ),
           SettingRow(
             title: 'Theme',
             keywords: ['dark', 'light', 'appearance', 'obsidian', 'porcelain'],
@@ -403,7 +428,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             ),
           ),
           SettingRow(
-            title: 'Auto-switch proxy',
+            title: 'Auto Home/Office',
             keywords: [
               'auto',
               'switch',
@@ -416,19 +441,20 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               'portal',
               'airport',
               'hotel',
+              'pac',
             ],
             build: (ctx) => FutureBuilder<bool>(
               future: readAutoSwitchEnabled(),
               builder: (ctx, snap) => switchTile(
-                title: 'Auto-switch proxy',
+                title: 'Auto Home/Office',
                 subtitle:
-                    'When the selected proxy stops working, Lux tries other '
-                    'proxies, then direct. Captive Wi-Fi sign-in assist always '
+                    'Uses your work proxy when reachable (including PAC & SOCKS5) '
+                    'and direct internet at home. Captive Wi-Fi login assist always '
                     'works automatically.',
                 value: snap.data ?? false,
                 onChanged: (v) async {
-                  final enabledMsg = tl(context, 'Auto-switch enabled');
-                  final disabledMsg = tl(context, 'Auto-switch disabled');
+                  final enabledMsg = tl(context, 'Auto Home/Office enabled');
+                  final disabledMsg = tl(context, 'Auto Home/Office disabled');
                   await writeAutoSwitchEnabled(v);
                   await widget.coreManager.setNetSwitchEnabled(v);
                   if (v) {
@@ -442,41 +468,139 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               ),
             ),
           ),
-          SettingRow(
-            title: 'Default Interface',
-            keywords: ['en0', 'wifi', 'ethernet', 'adapter'],
-            build: (_) => dropdownTile<String>(
+          if (advancedMode)
+            SettingRow(
+              title: 'Stay connected',
+              keywords: [
+                'stay',
+                'connected',
+                'failover',
+                'backup',
+                'never give up',
+                'retry',
+                'health',
+              ],
+              build: (ctx) => FutureBuilder<bool>(
+                future: readStayConnectedEnabled(),
+                builder: (ctx, snap) => switchTile(
+                  title: 'Stay connected',
+                  subtitle:
+                      'If your proxy stops working, move new connections to a backup '
+                      'proxy while letting active downloads finish, and return once '
+                      'yours is stable.',
+                  value: snap.data ?? false,
+                  onChanged: (v) async {
+                    final enabledMsg = tl(context, 'Stay connected enabled');
+                    final disabledMsg = tl(context, 'Stay connected disabled');
+                    await writeStayConnectedEnabled(v);
+                    await widget.coreManager.setStayConnectedEnabled(v);
+                    if (v) {
+                      final lastId = await readLastUserProxyId();
+                      final mode = await readBackupMode();
+                      final ids = await readBackupProxyIds();
+                      await widget.coreManager.syncNetSwitchConfig(
+                        lastId,
+                        stayConnected: true,
+                        backupMode: mode,
+                        backupProxyIds: ids,
+                      );
+                    }
+                    if (!mounted) return;
+                    _notify(v ? enabledMsg : disabledMsg);
+                    setState(() {});
+                  },
+                ),
+              ),
+            ),
+          if (advancedMode)
+            SettingRow(
+              title: 'Backup proxies',
+              keywords: ['backup', 'failover', 'stay connected', 'pool', 'selected'],
+              build: (ctx) => FutureBuilder<(String, List<String>)>(
+                future: Future.wait([readBackupMode(), readBackupProxyIds()])
+                    .then((r) => (r[0] as String, r[1] as List<String>)),
+                builder: (ctx, snap) {
+                  final mode = snap.data?.$1 ?? 'all';
+                  final ids = snap.data?.$2 ?? const <String>[];
+                  final sub = mode == 'selected'
+                      ? tl(ctx, 'Only selected proxies ({count} selected)')
+                          .replaceAll('{count}', '${ids.length}')
+                      : tl(ctx, 'All saved proxies in list order');
+                  return actionTile(
+                    context: ctx,
+                    title: 'Backup proxies',
+                    subtitle: sub,
+                    buttonLabel: 'Configure',
+                    glyph: LuxGlyph.swap,
+                    onPressed: () async {
+                      final list = await widget.coreManager.getProxyList();
+                      if (!mounted) return;
+                      final choice = await showDialog<BackupPoolChoice>(
+                        context: context,
+                        builder: (_) => BackupProxiesDialog(
+                          proxies: list.proxies,
+                          initialMode: mode,
+                          initialSelectedIds: ids,
+                        ),
+                      );
+                      if (choice == null) return;
+                      await writeBackupMode(choice.mode);
+                      await writeBackupProxyIds(choice.proxyIds);
+                      await widget.coreManager.setBackupConfig(
+                        mode: choice.mode,
+                        proxyIds: choice.proxyIds,
+                      );
+                      if (!mounted) return;
+                      _notify(
+                        choice.mode == 'selected'
+                            ? tl(context, 'Backup proxies updated ({count} selected)')
+                                .replaceAll('{count}', '${choice.proxyIds.length}')
+                            : tl(context, 'Backup proxies set to all saved proxies'),
+                      );
+                      setState(() {});
+                    },
+                  );
+                },
+              ),
+            ),
+          if (advancedMode)
+            SettingRow(
               title: 'Default Interface',
-              value: s.defaultInterface,
-              options: ['', ..._interfaces],
-              label: (v) => v.isEmpty ? 'Auto' : v,
-              onChanged: saving
-                  ? null
-                  : (v) => _save(s.copyWith(defaultInterface: v)),
+              keywords: ['en0', 'wifi', 'ethernet', 'adapter'],
+              build: (_) => dropdownTile<String>(
+                title: 'Default Interface',
+                value: s.defaultInterface,
+                options: ['', ..._interfaces],
+                label: (v) => v.isEmpty ? 'Auto' : v,
+                onChanged: saving
+                    ? null
+                    : (v) => _save(s.copyWith(defaultInterface: v)),
+              ),
             ),
-          ),
-          SettingRow(
-            title: 'Local Server Port',
-            keywords: ['1090', 'listen', 'http proxy'],
-            build: (_) => numberTile(
+          if (advancedMode)
+            SettingRow(
               title: 'Local Server Port',
-              value: s.localServerPort,
-              subtitle: 'Port Lux listens on for proxy traffic',
-              onChanged: saving
-                  ? null
-                  : (v) => _save(s.copyWith(localServerPort: v)),
+              keywords: ['1090', 'listen', 'http proxy'],
+              build: (_) => numberTile(
+                title: 'Local Server Port',
+                value: s.localServerPort,
+                subtitle: 'Port Lux listens on for proxy traffic',
+                onChanged: saving
+                    ? null
+                    : (v) => _save(s.copyWith(localServerPort: v)),
+              ),
             ),
-          ),
-          SettingRow(
-            title: 'Allow LAN',
-            keywords: ['share', 'network', 'other devices'],
-            build: (_) => switchTile(
+          if (advancedMode)
+            SettingRow(
               title: 'Allow LAN',
-              subtitle: 'Allow other devices to connect via LAN',
-              value: s.allowLan,
-              onChanged: saving ? null : (v) => _save(s.copyWith(allowLan: v)),
+              keywords: ['share', 'network', 'other devices'],
+              build: (_) => switchTile(
+                title: 'Allow LAN',
+                subtitle: 'Allow other devices to connect via LAN',
+                value: s.allowLan,
+                onChanged: saving ? null : (v) => _save(s.copyWith(allowLan: v)),
+              ),
             ),
-          ),
         ];
 
       case 'tun':
@@ -607,10 +731,10 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       case 'advanced':
         return [
           SettingRow(
-            title: 'Enable Auto Mode',
-            keywords: ['fallback', 'url-test', 'latency'],
+            title: 'Fastest proxy (latency test)',
+            keywords: ['auto mode', 'fallback', 'url-test', 'latency', 'fastest'],
             build: (_) => switchTile(
-              title: 'Enable Auto Mode',
+              title: 'Fastest proxy (latency test)',
               subtitle:
                   'Core-level latency probing (url-test / fallback) across proxies',
               value: s.autoModeEnabled,
@@ -621,10 +745,10 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
           if (s.autoModeEnabled)
             SettingRow(
-              title: 'Auto Mode Type',
-              keywords: ['fallback', 'url-test'],
+              title: 'Selection strategy',
+              keywords: ['auto mode type', 'fallback', 'url-test'],
               build: (_) => dropdownTile<String>(
-                title: 'Auto Mode Type',
+                title: 'Selection strategy',
                 value: s.autoModeType.isEmpty ? 'fallback' : s.autoModeType,
                 options: const ['fallback', 'url-test'],
                 label: (v) =>
@@ -1884,34 +2008,48 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
           const SizedBox(height: 8),
           // Horizontal category filter pills — replaces the cramped 2nd sidebar.
-          LuxScrollEdgeFade(
-            axis: Axis.horizontal,
-            startFade: 14,
-            endFade: 24,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _filterPill(
-                    tokens: tokens,
-                    id: 'all',
-                    label: 'All',
-                  ),
-                  for (final c in _categories) ...[
-                    const SizedBox(width: 5),
+          Builder(builder: (ctx) {
+            final adv = ctx.select<AppStateModel, bool>((m) => m.advancedMode);
+            final cats = _categoriesForMode(adv);
+            return LuxScrollEdgeFade(
+              axis: Axis.horizontal,
+              startFade: 14,
+              endFade: 24,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
                     _filterPill(
                       tokens: tokens,
-                      id: c.id,
-                      label: c.label,
+                      id: 'all',
+                      label: 'All',
                     ),
+                    for (final c in cats) ...[
+                      const SizedBox(width: 5),
+                      _filterPill(
+                        tokens: tokens,
+                        id: c.id,
+                        label: c.label,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          }),
         ],
       ),
     );
+  }
+
+  static const _simpleCategoryIds = {'updates', 'general', 'network', 'privacy'};
+
+  List<({String id, LuxGlyph glyph, String label})> _categoriesForMode(
+      bool advancedMode) {
+    if (advancedMode) return _categories;
+    return _categories
+        .where((c) => _simpleCategoryIds.contains(c.id))
+        .toList();
   }
 
   Widget _filterPill({
@@ -1960,9 +2098,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Widget _searchResults(LuxTokens tokens) {
     final lang =
         context.select<AppStateModel, String>((m) => m.locale.languageCode);
+    final adv = context.select<AppStateModel, bool>((m) => m.advancedMode);
+    final cats = _categoriesForMode(adv);
     final sections = <Widget>[];
-    for (final c in _categories) {
-      final hits = _rowsFor(c.id)
+    for (final c in cats) {
+      final hits = _rowsFor(c.id, advancedMode: adv)
           .where((r) => r.matches(_query, languageCode: lang))
           .toList();
       if (hits.isEmpty) continue;
@@ -1988,9 +2128,14 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   Widget _groupedSettingsList() {
-    final visibleCats = _selectedCategory == 'all'
-        ? _categories
-        : _categories.where((c) => c.id == _selectedCategory).toList();
+    final adv = context.select<AppStateModel, bool>((m) => m.advancedMode);
+    final cats = _categoriesForMode(adv);
+    final selectedValid =
+        _selectedCategory == 'all' || cats.any((c) => c.id == _selectedCategory);
+    final effectiveSelected = selectedValid ? _selectedCategory : 'all';
+    final visibleCats = effectiveSelected == 'all'
+        ? cats
+        : cats.where((c) => c.id == effectiveSelected).toList();
 
     return LuxScrollEdgeFade(
       child: ListView(
@@ -2000,8 +2145,28 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             sectionHeader(context, c.label, glyph: c.glyph),
             settingCard(
               context,
-              _rowsFor(c.id).map((r) => r.build(context)).toList(),
+              _rowsFor(c.id, advancedMode: adv)
+                  .map((r) => r.build(context))
+                  .toList(),
             ),
+          ],
+          if (!adv) ...[
+            const SizedBox(height: 16),
+            settingCard(context, [
+              actionTile(
+                context: context,
+                title: 'Need routing rules, DNS, logs, or backup proxies?',
+                subtitle: 'Switch to Advanced mode for full power-user controls.',
+                buttonLabel: 'Advanced',
+                glyph: LuxGlyph.bolt,
+                onPressed: () async {
+                  await writeAdvancedMode(true);
+                  if (!mounted) return;
+                  Provider.of<AppStateModel>(context, listen: false)
+                      .updateAdvancedMode(true);
+                },
+              ),
+            ]),
           ],
         ],
       ),

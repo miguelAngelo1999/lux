@@ -726,7 +726,10 @@ void main() {
       expect(find.byKey(const Key('settings_windows_service_enable_btn')),
           findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('settings_windows_service_enable_btn')));
+      final enableBtn = find.byKey(const Key('settings_windows_service_enable_btn'));
+      await tester.ensureVisible(enableBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(enableBtn);
       await tester.pumpAndSettle();
 
       expect(core.enableCalls, 1);

@@ -1162,18 +1162,51 @@ class CoreManager {
     }
   }
 
-  /// Enable or disable the auto-switch feature in lux_core.
+  /// Enable or disable the Auto Home/Office feature in lux_core.
   Future<void> setNetSwitchEnabled(bool enabled) async {
     try {
       await dio.post('$baseHttpUrl/net-switch/config', data: {'enabled': enabled});
     } catch (_) {}
   }
 
-  /// Push the persisted lastUserProxyId into lux_core on startup.
-  Future<void> syncNetSwitchConfig(String? lastUserProxyId) async {
+  /// Enable or disable Stay-Connected backup failover in lux_core.
+  Future<void> setStayConnectedEnabled(bool enabled) async {
     try {
       await dio.post('$baseHttpUrl/net-switch/config',
-          data: {'lastUserProxyId': lastUserProxyId ?? ''});
+          data: {'stayConnected': enabled});
+    } catch (_) {}
+  }
+
+  /// Update the Stay-Connected backup proxy pool (`'all'` or `'selected'`).
+  Future<void> setBackupConfig({
+    required String mode,
+    required List<String> proxyIds,
+  }) async {
+    try {
+      await dio.post('$baseHttpUrl/net-switch/config', data: {
+        'backupMode': mode == 'selected' ? 'selected' : 'all',
+        'backupProxyIds': proxyIds,
+      });
+    } catch (_) {}
+  }
+
+  /// Push persisted Auto-Switch / Stay-Connected config into lux_core on startup.
+  Future<void> syncNetSwitchConfig(
+    String? lastUserProxyId, {
+    bool? stayConnected,
+    String? backupMode,
+    List<String>? backupProxyIds,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        if (lastUserProxyId != null && lastUserProxyId.isNotEmpty)
+          'lastUserProxyId': lastUserProxyId,
+        if (stayConnected != null) 'stayConnected': stayConnected,
+        if (backupMode != null) 'backupMode': backupMode,
+        if (backupProxyIds != null) 'backupProxyIds': backupProxyIds,
+      };
+      if (body.isEmpty) return;
+      await dio.post('$baseHttpUrl/net-switch/config', data: body);
     } catch (_) {}
   }
 

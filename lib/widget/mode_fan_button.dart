@@ -55,10 +55,16 @@ class _ModeFanButtonState extends State<ModeFanButton>
   final LayerLink _link = LayerLink();
   final GlobalKey _buttonKey = GlobalKey();
   OverlayEntry? _overlay;
-  late final AnimationController _fan = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 260),
-  );
+  late final AnimationController _fan;
+
+  @override
+  void initState() {
+    super.initState();
+    _fan = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
+  }
 
   bool get _isOpen => _overlay != null;
 

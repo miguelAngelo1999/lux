@@ -246,6 +246,20 @@ String? applyNetSwitchEvent(
       appState.updateIsStarted(false);
       onConnectionStateChanged?.call();
       return 'Captive Wi-Fi detected — sign in; Lux will resume automatically';
+    case 'failover':
+      appState.pausedForCaptivePortal = false;
+      if (data['resumed'] == true) {
+        appState.updateIsStarted(true);
+      }
+      appState.bumpProxyList();
+      onConnectionStateChanged?.call();
+      final prefName = data['preferredProxyName'] as String? ?? '';
+      if (prefName.isNotEmpty && proxyName.isNotEmpty) {
+        return "$prefName isn't working — switched to $proxyName";
+      }
+      return proxyName.isNotEmpty
+          ? 'Switched to backup proxy $proxyName'
+          : 'Switched to backup proxy';
     case 'corporate':
       final wasCaptive = appState.pausedForCaptivePortal;
       appState.pausedForCaptivePortal = false;
@@ -254,6 +268,9 @@ String? applyNetSwitchEvent(
       }
       appState.bumpProxyList();
       onConnectionStateChanged?.call();
+      if (data['returnedToPreferred'] == true && proxyName.isNotEmpty) {
+        return '$proxyName is back — switched back';
+      }
       if (wasCaptive || resumed) {
         return proxyName.isNotEmpty
             ? 'Lux resumed via $proxyName'
@@ -896,11 +913,17 @@ class _HomeState extends State<Home>
   Future<void> _syncAutoSwitchOnReady() async {
     if (coreManager == null) return;
     final enabled = await readAutoSwitchEnabled();
+    final stayConnected = await readStayConnectedEnabled();
+    final backupMode = await readBackupMode();
+    final backupProxyIds = await readBackupProxyIds();
     final lastId = await readLastUserProxyId();
     await coreManager!.setNetSwitchEnabled(enabled);
-    if (lastId != null && lastId.isNotEmpty) {
-      await coreManager!.syncNetSwitchConfig(lastId);
-    }
+    await coreManager!.syncNetSwitchConfig(
+      lastId,
+      stayConnected: stayConnected,
+      backupMode: backupMode,
+      backupProxyIds: backupProxyIds,
+    );
     try {
       final status = await coreManager!.getNetSwitchStatus();
       if (mounted) {

@@ -108,12 +108,13 @@ void main(List<String> args) async {
     final theme = await readTheme();
     final clientMode = await readClientMode();
     final defaultLocaleValue = await getLocale();
+    final advancedMode = await readAdvancedMode();
 
     ErrorWidget.builder = (FlutterErrorDetails details) {
       return ReleaseModeErrorWidget(details: details);
     };
 
-    runApp(App(theme, defaultLocaleValue, clientMode));
+    runApp(App(theme, defaultLocaleValue, clientMode, advancedMode: advancedMode));
   } catch (e) {
     await notifier.show("$e");
     exitApp();

@@ -45,11 +45,16 @@ class _DashboardState extends State<Dashboard> with WindowListener {
   late final GlobalKey<ScaffoldMessengerState> _contentMessengerKey =
       widget.contentMessengerKey ?? GlobalKey<ScaffoldMessengerState>();
 
-  static const _tabs = [
+  static const _allTabs = [
     AppSidebarTab(glyph: LuxGlyph.proxies, label: 'Proxies'),
     AppSidebarTab(glyph: LuxGlyph.rules, label: 'Rules'),
     AppSidebarTab(glyph: LuxGlyph.connections, label: 'Connections'),
     AppSidebarTab(glyph: LuxGlyph.logs, label: 'Log'),
+    AppSidebarTab(glyph: LuxGlyph.settings, label: 'Settings'),
+  ];
+
+  static const _simpleTabs = [
+    AppSidebarTab(glyph: LuxGlyph.proxies, label: 'Proxies'),
     AppSidebarTab(glyph: LuxGlyph.settings, label: 'Settings'),
   ];
 
@@ -124,41 +129,54 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     });
   }
 
-  Widget _buildPage() {
-    switch (_selectedTab) {
-      case 0:
-        return ProxiesPage(
-          coreManager: widget.coreManager,
-          curProxyInfo: curProxyInfo,
-          onCurProxyInfoChange: onCurProxyInfoChange,
-          dashboardUrl: widget.urlStr,
-        );
-      case 1:
-        return RulesPage(
-          coreManager: widget.coreManager,
-          onOpenBypassCidrs: () => _selectTab(4, settingsFilter: 'tun'),
-        );
-      case 2:
-        return ConnectionsPage(coreManager: widget.coreManager);
-      case 3:
-        return LogPage(coreManager: widget.coreManager);
-      case 4:
-        return SettingsPage(
-          coreManager: widget.coreManager,
-          dashboardUrl: widget.urlStr,
-          initialCategory: _settingsInitialFilter,
-        );
-      default:
-        return const SizedBox();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final tokens = LuxTokens.of(context);
     final tier =
         context.select<AppStateModel, WindowSurfaceTier>((m) => m.surfaceTier);
+    final advancedMode =
+        context.select<AppStateModel, bool>((m) => m.advancedMode);
     final isMac = Platform.isMacOS;
+
+    // In Simple Mode, only Proxies (canonical 0) and Settings (canonical 4)
+    // are visible; if the user toggles Simple Mode while on Rules/Connections/
+    // Log, fall back seamlessly to Proxies.
+    final effectiveTab = (!advancedMode && _selectedTab != 0 && _selectedTab != 4)
+        ? 0
+        : _selectedTab;
+    final visibleTabs = advancedMode ? _allTabs : _simpleTabs;
+    final sidebarSelectedIndex = advancedMode
+        ? effectiveTab
+        : (effectiveTab == 4 ? 1 : 0);
+
+    Widget buildCurrentPage() {
+      switch (effectiveTab) {
+        case 0:
+          return ProxiesPage(
+            coreManager: widget.coreManager,
+            curProxyInfo: curProxyInfo,
+            onCurProxyInfoChange: onCurProxyInfoChange,
+            dashboardUrl: widget.urlStr,
+          );
+        case 1:
+          return RulesPage(
+            coreManager: widget.coreManager,
+            onOpenBypassCidrs: () => _selectTab(4, settingsFilter: 'tun'),
+          );
+        case 2:
+          return ConnectionsPage(coreManager: widget.coreManager);
+        case 3:
+          return LogPage(coreManager: widget.coreManager);
+        case 4:
+          return SettingsPage(
+            coreManager: widget.coreManager,
+            dashboardUrl: widget.urlStr,
+            initialCategory: _settingsInitialFilter,
+          );
+        default:
+          return const SizedBox();
+      }
+    }
 
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
@@ -166,14 +184,19 @@ class _DashboardState extends State<Dashboard> with WindowListener {
             () => _selectTab(4),
         SingleActivator(LogicalKeyboardKey.digit1, meta: isMac, control: !isMac):
             () => _selectTab(0),
-        SingleActivator(LogicalKeyboardKey.digit2, meta: isMac, control: !isMac):
-            () => _selectTab(1),
-        SingleActivator(LogicalKeyboardKey.digit3, meta: isMac, control: !isMac):
-            () => _selectTab(2),
-        SingleActivator(LogicalKeyboardKey.digit4, meta: isMac, control: !isMac):
-            () => _selectTab(3),
-        SingleActivator(LogicalKeyboardKey.digit5, meta: isMac, control: !isMac):
-            () => _selectTab(4),
+        if (advancedMode) ...{
+          SingleActivator(LogicalKeyboardKey.digit2,
+              meta: isMac, control: !isMac): () => _selectTab(1),
+          SingleActivator(LogicalKeyboardKey.digit3,
+              meta: isMac, control: !isMac): () => _selectTab(2),
+          SingleActivator(LogicalKeyboardKey.digit4,
+              meta: isMac, control: !isMac): () => _selectTab(3),
+          SingleActivator(LogicalKeyboardKey.digit5,
+              meta: isMac, control: !isMac): () => _selectTab(4),
+        } else ...{
+          SingleActivator(LogicalKeyboardKey.digit2,
+              meta: isMac, control: !isMac): () => _selectTab(4),
+        },
       },
       child: Focus(
         autofocus: true,
@@ -186,9 +209,15 @@ class _DashboardState extends State<Dashboard> with WindowListener {
               return Row(
                 children: [
                   AppSidebar(
-                    tabs: _tabs,
-                    selectedIndex: _selectedTab,
-                    onSelected: (i) => _selectTab(i),
+                    tabs: visibleTabs,
+                    selectedIndex: sidebarSelectedIndex,
+                    onSelected: (i) {
+                      if (advancedMode) {
+                        _selectTab(i);
+                      } else {
+                        _selectTab(i == 1 ? 4 : 0);
+                      }
+                    },
                     coreManager: widget.coreManager,
                     compact: compactSidebar,
                     messengerKey: _contentMessengerKey,
@@ -210,7 +239,7 @@ class _DashboardState extends State<Dashboard> with WindowListener {
                             ),
                             WindowsServiceBanner(
                                 coreManager: widget.coreManager),
-                            Expanded(child: _buildPage()),
+                            Expanded(child: buildCurrentPage()),
                           ],
                         ),
                       ),

@@ -356,6 +356,94 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
     WindowSurfaceBridge.syncSidebarWidth(width);
   }
 
+  Future<void> _setAdvancedMode(BuildContext context, bool enabled) async {
+    await writeAdvancedMode(enabled);
+    if (!mounted) return;
+    // ignore: use_build_context_synchronously
+    Provider.of<AppStateModel>(context, listen: false)
+        .updateAdvancedMode(enabled);
+  }
+
+  Widget _buildModePill(
+    BuildContext context,
+    LuxTokens tokens,
+    bool advancedMode,
+  ) {
+    Widget seg({
+      required Key key,
+      required String label,
+      required bool active,
+      required VoidCallback onTap,
+    }) {
+      return Expanded(
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            key: key,
+            borderRadius: BorderRadius.circular(6),
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              height: 23,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: active ? tokens.activeNavBg : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: active ? tokens.activeNavBorder : Colors.transparent,
+                  width: 0.75,
+                ),
+              ),
+              child: TText(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+                  color: active ? tokens.textPrimary : tokens.textMuted,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: advancedMode
+          ? tl(context,
+              'Advanced mode — full controls for rules, logs, routing & backup failover')
+          : tl(context,
+              'Simple mode — clean everyday view. Switch to Advanced for rules, logs & backup failover.'),
+      child: Container(
+        key: const Key('sidebar-interface-mode'),
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: tokens.subtlePillBg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: tokens.hairline, width: 0.75),
+        ),
+        child: Row(
+          children: [
+            seg(
+              key: const Key('sidebar-mode-simple'),
+              label: 'Simple',
+              active: !advancedMode,
+              onTap: () => _setAdvancedMode(context, false),
+            ),
+            seg(
+              key: const Key('sidebar-mode-advanced'),
+              label: 'Advanced',
+              active: advancedMode,
+              onTap: () => _setAdvancedMode(context, true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = LuxTokens.of(context);
@@ -363,6 +451,8 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
         context.select<AppStateModel, WindowSurfaceTier>((m) => m.surfaceTier);
     final isStarted =
         context.select<AppStateModel, bool>((m) => m.isStarted);
+    final advancedMode =
+        context.select<AppStateModel, bool>((m) => m.advancedMode);
     final isLiquidGlass = tier == WindowSurfaceTier.liquidGlass;
     final sidebarWidth = widget.compact
         ? 156.0
@@ -412,9 +502,14 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
             ),
           ),
         ),
+        // Simple / Advanced interface mode switcher
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 4, 10, 2),
+          child: _buildModePill(context, tokens, advancedMode),
+        ),
         // Bottom live interactive telemetry & mode capsule
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+          padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
           child: _buildTelemetryCapsule(context, tokens, isStarted),
         ),
         // 1-click footer utility bar: Check for Updates + Theme + Privacy eye

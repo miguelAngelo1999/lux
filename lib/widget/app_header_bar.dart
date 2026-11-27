@@ -328,6 +328,8 @@ class _State extends State<AppHeaderBar> with WindowListener {
     final tokens = LuxTokens.of(context);
     final appStarted =
         context.select<AppStateModel, bool>((model) => model.isStarted);
+    final advancedMode =
+        context.select<AppStateModel, bool>((model) => model.advancedMode);
     final switchValue =
         isLoadingSwitch ? isStarted : (isStarted || appStarted) && appStarted;
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
@@ -354,17 +356,18 @@ class _State extends State<AppHeaderBar> with WindowListener {
 
           return Row(
             children: [
-              ModeFanButton(
-                modes: ruleList.rules,
-                selected: ruleList.selectedId,
-                labelOf: getRuleLabel,
-                descriptionOf: getRuleDescription,
-                iconOf: getRuleIcon,
-                glyphOf: getRuleGlyph,
-                enabled: !isLoadingRuleDropdown,
-                width: modeWidth,
-                onSelected: (id) => handleSelectRule(id),
-              ),
+              if (advancedMode)
+                ModeFanButton(
+                  modes: ruleList.rules,
+                  selected: ruleList.selectedId,
+                  labelOf: getRuleLabel,
+                  descriptionOf: getRuleDescription,
+                  iconOf: getRuleIcon,
+                  glyphOf: getRuleGlyph,
+                  enabled: !isLoadingRuleDropdown,
+                  width: modeWidth,
+                  onSelected: (id) => handleSelectRule(id),
+                ),
               const Spacer(),
               // Quiet hairline "+ Add Proxy" capsule (collapses to "+" icon when narrow).
               Tooltip(

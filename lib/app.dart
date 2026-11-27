@@ -14,16 +14,26 @@ class App extends StatefulWidget {
   final ThemeMode theme;
   final Locale defaultLocal;
   final ClientMode clientMode;
+  final bool advancedMode;
 
-  const App(this.theme, this.defaultLocal, this.clientMode, {super.key});
+  const App(
+    this.theme,
+    this.defaultLocal,
+    this.clientMode, {
+    super.key,
+    this.advancedMode = false,
+  });
 
   @override
   State<App> createState() => _App();
 }
 
 class _App extends State<App> {
-  late AppStateModel appState =
-      AppStateModel(widget.theme, widget.defaultLocal);
+  late AppStateModel appState = AppStateModel(
+    widget.theme,
+    widget.defaultLocal,
+    advancedMode: widget.advancedMode,
+  );
 
   @override
   void initState() {
