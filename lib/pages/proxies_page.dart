@@ -1206,6 +1206,8 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   String _formatDetectionSource(BuildContext ctx, String source) {
     switch (source) {
+      case 'wpad-dns':
+        return tl(ctx, 'WPAD DNS');
       case 'dhcp-252':
         return tl(ctx, 'DHCP Option 252');
       case 'os-pac':
@@ -1248,6 +1250,9 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       }
 
       // Build display candidates: if only a PAC URL was returned, create a PAC-only entry.
+      final pacOptions = result.effectivePacUrls;
+      final defaultPacUrl =
+          pacOptions.isNotEmpty ? pacOptions.first.url : result.pacUrl;
       final candidates = result.proxies.isNotEmpty
           ? List<DetectedProxy>.from(result.proxies)
           : <DetectedProxy>[
@@ -1255,7 +1260,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 host: '',
                 port: '',
                 type: 'http',
-                pacUrl: result.pacUrl,
+                pacUrl: defaultPacUrl,
                 pacOnly: true,
               ),
             ];
@@ -1265,6 +1270,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       // Selection state for the confirmation dialog
       bool attachPac = result.hasPac;
       bool usePacOnly = isPurePacResult;
+      String selectedPacUrl = defaultPacUrl;
       final selectedIndices = <int>{if (fixedCandidates.isNotEmpty) 0};
 
       // Step 1: Show detected proxies / PAC script and let user confirm selection
@@ -1273,9 +1279,40 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setDialogState) {
             final tokens = LuxTokens.of(ctx);
-            final sourceLabel = _formatDetectionSource(ctx, result.source);
+            final activePacOption = pacOptions.cast<DetectedPacOption?>().firstWhere(
+                  (o) => o!.url == selectedPacUrl,
+                  orElse: () => pacOptions.isNotEmpty ? pacOptions.first : null,
+                );
+            final headerSource = activePacOption != null && activePacOption.source.isNotEmpty
+                ? activePacOption.source
+                : result.source;
+            final sourceLabel = _formatDetectionSource(ctx, headerSource);
             final selectedCount = usePacOnly ? 1 : selectedIndices.length;
-            final canAdd = usePacOnly ? result.hasPac : selectedIndices.isNotEmpty;
+            final canAdd = usePacOnly ? selectedPacUrl.isNotEmpty : selectedIndices.isNotEmpty;
+
+            Widget pacKindPill(bool isDynamic) {
+              final accent = isDynamic ? tokens.emerald : tokens.textSecondary;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDynamic
+                      ? tokens.emerald.withValues(alpha: 0.14)
+                      : tokens.subtlePillBg,
+                  borderRadius: BorderRadius.circular(4),
+                  border: isDynamic
+                      ? Border.all(color: tokens.emerald.withValues(alpha: 0.35))
+                      : null,
+                ),
+                child: Text(
+                  isDynamic ? tl(ctx, 'Dynamic DNS') : tl(ctx, 'Static IP'),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: accent,
+                  ),
+                ),
+              );
+            }
 
             return AlertDialog(
               title: Row(
@@ -1305,15 +1342,15 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                 ],
               ),
               content: SizedBox(
-                width: 420,
+                width: 440,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 420),
+                  constraints: const BoxConstraints(maxHeight: 440),
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (result.hasPac) ...[
+                        if (pacOptions.isNotEmpty) ...[
                           Material(
                             color: tokens.cardBg,
                             shape: RoundedRectangleBorder(
@@ -1341,6 +1378,10 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                                           ),
                                         ),
                                       ),
+                                      if (pacOptions.length == 1) ...[
+                                        pacKindPill(pacOptions.first.isDynamic),
+                                        const SizedBox(width: 6),
+                                      ],
                                       if (result.pacRuleCount > 0)
                                         Container(
                                           padding: const EdgeInsets.symmetric(
@@ -1359,17 +1400,92 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                                         ),
                                     ],
                                   ),
-                                  const SizedBox(height: 4),
-                                  SelectableText(
-                                    result.pacUrl,
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontFamily: 'monospace',
-                                      color: tokens.textSecondary,
+                                  const SizedBox(height: 6),
+                                  if (pacOptions.length == 1)
+                                    SelectableText(
+                                      selectedPacUrl,
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontFamily: 'monospace',
+                                        color: tokens.textSecondary,
+                                      ),
+                                    )
+                                  else
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: pacOptions.map((opt) {
+                                        final isSelected = opt.url == selectedPacUrl;
+                                        final optSrc = _formatDetectionSource(ctx, opt.source);
+                                        return InkWell(
+                                          borderRadius: BorderRadius.circular(6),
+                                          onTap: () => setDialogState(
+                                            () => selectedPacUrl = opt.url,
+                                          ),
+                                          child: Container(
+                                            margin: const EdgeInsets.only(bottom: 4),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: isSelected
+                                                  ? tokens.cobalt.withValues(alpha: 0.10)
+                                                  : Colors.transparent,
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? tokens.cobalt.withValues(alpha: 0.45)
+                                                    : tokens.hairline,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  isSelected
+                                                      ? Icons.radio_button_checked
+                                                      : Icons.radio_button_unchecked,
+                                                  size: 16,
+                                                  color: isSelected
+                                                      ? tokens.cobalt
+                                                      : tokens.textMuted,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        opt.url,
+                                                        style: TextStyle(
+                                                          fontSize: 11.5,
+                                                          fontFamily: 'monospace',
+                                                          fontWeight: isSelected
+                                                              ? FontWeight.w600
+                                                              : FontWeight.w400,
+                                                          color: tokens.textPrimary,
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                      if (optSrc.isNotEmpty)
+                                                        Text(
+                                                          optSrc,
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            color: tokens.textMuted,
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                pacKindPill(opt.isDynamic),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
                                     ),
-                                  ),
                                   if (fixedCandidates.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
+                                    const SizedBox(height: 4),
                                     CheckboxListTile(
                                       value: attachPac,
                                       dense: true,
@@ -1510,7 +1626,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                                     host: '',
                                     port: '',
                                     type: 'http',
-                                    pacUrl: result.pacUrl,
+                                    pacUrl: selectedPacUrl,
                                     pacOnly: true,
                                   ),
                                 ]
@@ -1522,7 +1638,7 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                             _DetectedProxySelection(
                               proxies: chosen,
                               attachPac: attachPac || usePacOnly,
-                              pacUrl: result.pacUrl,
+                              pacUrl: selectedPacUrl,
                             ),
                           );
                         }
@@ -1632,9 +1748,9 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         final proxyName = uniqueProxyName(confirmedName, takenLower);
         addedNames.add(proxyName);
         final effectivePacUrl = p.isPacOnly
-            ? (p.pacUrl.isNotEmpty ? p.pacUrl : selection.pacUrl)
+            ? (selection.pacUrl.isNotEmpty ? selection.pacUrl : p.pacUrl)
             : (selection.attachPac
-                ? (p.pacUrl.isNotEmpty ? p.pacUrl : selection.pacUrl)
+                ? (selection.pacUrl.isNotEmpty ? selection.pacUrl : p.pacUrl)
                 : '');
 
         await widget.coreManager.addProxy({

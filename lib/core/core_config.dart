@@ -1141,9 +1141,42 @@ class Setting {
 }
 
 
+/// One valid PAC script URL discovered during auto-detection.
+/// [isDynamic] is true when the host is a DNS hostname (e.g. `http://wpad/wpad.dat`)
+/// that resolves dynamically across a multi-site fleet, rather than a static IP
+/// (e.g. `http://10.60.0.1:80/wpad.dat`).
+class DetectedPacOption {
+  final String url;
+  final String source;
+  final bool isDynamic;
+
+  const DetectedPacOption({
+    required this.url,
+    this.source = '',
+    this.isDynamic = false,
+  });
+
+  static bool isIpHostUrl(String rawUrl) {
+    final uri = Uri.tryParse(rawUrl.trim());
+    if (uri == null || uri.host.isEmpty) return false;
+    final h = uri.host;
+    return RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(h) || h.contains(':');
+  }
+
+  factory DetectedPacOption.fromJson(Map<String, dynamic> json) {
+    final url = (json['url'] as String? ?? '').trim();
+    return DetectedPacOption(
+      url: url,
+      source: (json['source'] as String? ?? '').trim(),
+      isDynamic: json['isDynamic'] as bool? ?? !isIpHostUrl(url),
+    );
+  }
+}
+
 /// Result from POST /proxies/detect — discovered proxy entries and/or PAC script.
 class DetectProxyResult {
   final String pacUrl;
+  final List<DetectedPacOption> pacUrls;
   final int pacRuleCount;
   final String source;
   final List<DetectedProxy> proxies;
@@ -1151,24 +1184,50 @@ class DetectProxyResult {
 
   const DetectProxyResult({
     required this.pacUrl,
+    this.pacUrls = const [],
     this.pacRuleCount = 0,
     this.source = '',
     required this.proxies,
     required this.message,
   });
 
-  bool get hasPac => pacUrl.trim().isNotEmpty;
+  bool get hasPac => pacUrl.trim().isNotEmpty || pacUrls.isNotEmpty;
 
-  factory DetectProxyResult.fromJson(Map<String, dynamic> json) =>
-      DetectProxyResult(
-        pacUrl: (json['pacUrl'] as String? ?? '').trim(),
-        pacRuleCount: (json['pacRuleCount'] as num?)?.toInt() ?? 0,
-        source: (json['source'] as String? ?? '').trim(),
-        proxies: ((json['proxies'] as List?) ?? [])
-            .map((e) => DetectedProxy.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        message: json['message'] as String? ?? '',
-      );
+  /// Effective list of discovered PAC URLs, always falling back to [pacUrl]
+  /// when communicating with an older core that only returns a single `pacUrl`.
+  List<DetectedPacOption> get effectivePacUrls {
+    if (pacUrls.isNotEmpty) return pacUrls;
+    final u = pacUrl.trim();
+    if (u.isEmpty) return const [];
+    return [
+      DetectedPacOption(
+        url: u,
+        source: source,
+        isDynamic: !DetectedPacOption.isIpHostUrl(u),
+      ),
+    ];
+  }
+
+  factory DetectProxyResult.fromJson(Map<String, dynamic> json) {
+    final pacUrl = (json['pacUrl'] as String? ?? '').trim();
+    final source = (json['source'] as String? ?? '').trim();
+    final parsedPacUrls = ((json['pacUrls'] as List?) ?? [])
+        .map((e) => DetectedPacOption.fromJson(e as Map<String, dynamic>))
+        .where((e) => e.url.isNotEmpty)
+        .toList();
+    return DetectProxyResult(
+      pacUrl: pacUrl.isNotEmpty
+          ? pacUrl
+          : (parsedPacUrls.isNotEmpty ? parsedPacUrls.first.url : ''),
+      pacUrls: parsedPacUrls,
+      pacRuleCount: (json['pacRuleCount'] as num?)?.toInt() ?? 0,
+      source: source,
+      proxies: ((json['proxies'] as List?) ?? [])
+          .map((e) => DetectedProxy.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      message: json['message'] as String? ?? '',
+    );
+  }
 }
 
 class DetectedProxy {

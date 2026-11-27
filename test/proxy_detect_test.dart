@@ -447,5 +447,83 @@ void main() {
       expect(core.addedPayloads.first['port'], 0);
       expect(core.addedPayloads.first['pacUrl'], 'http://wpad.corp.local/proxy.pac');
     });
+
+    testWidgets('shows both Dynamic DNS WPAD and Static IP DHCP PAC options, defaulting to http://wpad/wpad.dat', (tester) async {
+      tester.view.physicalSize = const Size(1280, 860);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final appState = AppStateModel(ThemeMode.light, const Locale('en'));
+      final core = _FakeDetectCoreManager(
+        appState: appState,
+        proxies: [],
+        detectResult: DetectProxyResult.fromJson({
+          'pacUrl': 'http://wpad/wpad.dat',
+          'pacUrls': [
+            {
+              'url': 'http://wpad/wpad.dat',
+              'source': 'wpad-dns',
+              'isDynamic': true,
+            },
+            {
+              'url': 'http://10.60.0.1:80/wpad.dat',
+              'source': 'dhcp-252',
+              'isDynamic': false,
+            },
+          ],
+          'pacRuleCount': 70,
+          'source': 'wpad-dns',
+          'proxies': [
+            {
+              'host': '10.8.0.1',
+              'port': '8082',
+              'type': 'http',
+              'pacUrl': 'http://wpad/wpad.dat',
+            },
+          ],
+          'message': '',
+        }),
+      );
+
+      await tester.pumpWidget(_wrapProxiesPage(appState: appState, coreManager: core));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Detect Proxy'));
+      await tester.pumpAndSettle();
+
+      // Both URLs and their Dynamic DNS / Static IP badges should be visible
+      expect(find.text('http://wpad/wpad.dat'), findsOneWidget);
+      expect(find.text('http://10.60.0.1:80/wpad.dat'), findsOneWidget);
+      expect(find.text('Dynamic DNS'), findsOneWidget);
+      expect(find.text('Static IP'), findsOneWidget);
+
+      // Default selection is http://wpad/wpad.dat (Dynamic DNS)
+      await tester.tap(find.text('Add Proxy'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(core.addedPayloads, hasLength(1));
+      expect(core.addedPayloads.first['pacUrl'], 'http://wpad/wpad.dat');
+      expect(core.addedPayloads.first['name'], 'Proxy 1');
+
+      // Re-open and explicitly pick the Static IP DHCP option
+      await tester.tap(find.text('Detect Proxy'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('http://10.60.0.1:80/wpad.dat'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add Proxy'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(core.addedPayloads, hasLength(2));
+      expect(core.addedPayloads[1]['pacUrl'], 'http://10.60.0.1:80/wpad.dat');
+      expect(core.addedPayloads[1]['name'], 'Proxy 2');
+    });
   });
 }
