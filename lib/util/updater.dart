@@ -12,6 +12,7 @@ import 'package:version/version.dart';
 import '../const/const.dart';
 import '../core/core_config.dart';
 import 'app_log.dart';
+import 'telemetry.dart' as telem;
 
 /// Result of an update check.
 class UpdateInfo {
@@ -994,6 +995,10 @@ Future<void> downloadAndInstall(
 
     if (response.statusCode != 200) {
       appLog('UPDATE', 'download failed — HTTP ${response.statusCode}');
+      telem.telemetryError(
+        'update-failed',
+        'download HTTP ${response.statusCode} (${info.currentVersion} -> ${info.latestVersion})',
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1211,6 +1216,10 @@ Future<void> downloadAndInstall(
           await mountDir.delete();
         } catch (_) {}
         appLog('UPDATE', 'hdiutil attach failed: ${mountResult.stderr}');
+        telem.telemetryError(
+          'update-failed',
+          'macOS DMG mount failed (${info.latestVersion}): ${mountResult.stderr}',
+        );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Could not mount DMG: ${mountResult.stderr}')),
@@ -1254,6 +1263,10 @@ Future<void> downloadAndInstall(
         final dittoResult = await Process.run('ditto', [appPath, destNew]);
         if (dittoResult.exitCode != 0) {
           appLog('UPDATE', 'ditto failed: ${dittoResult.stderr}');
+          telem.telemetryError(
+            'update-failed',
+            'macOS ditto install failed (${info.latestVersion}): ${dittoResult.stderr}',
+          );
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Install failed: ${dittoResult.stderr}')),
@@ -1329,6 +1342,13 @@ Future<void> downloadAndInstall(
           mode: ProcessStartMode.detached);
       await Future.delayed(const Duration(milliseconds: 300));
       // Record that we just updated so the relaunched app doesn't prompt again
+      telem.telemetryOp(
+        'update-install',
+        'macOS ${info.currentVersion} -> ${info.latestVersion} (${info.channel})',
+      );
+      await telem
+          .flushTelemetry(stopTimer: true)
+          .timeout(const Duration(seconds: 3), onTimeout: () {});
       await writeLastUpdateCheckAt();
       exit(0);
     } else if (Platform.isWindows) {
@@ -1370,11 +1390,22 @@ Future<void> downloadAndInstall(
       await Future.delayed(const Duration(milliseconds: 500));
       appLog('UPDATE', 'exiting lux for updater');
       // Record that we just updated so the relaunched app doesn't prompt again
+      telem.telemetryOp(
+        'update-install',
+        'Windows ${info.currentVersion} -> ${info.latestVersion} (${info.channel})',
+      );
+      await telem
+          .flushTelemetry(stopTimer: true)
+          .timeout(const Duration(seconds: 3), onTimeout: () {});
       await writeLastUpdateCheckAt();
       exit(0);
     }
   } catch (e) {
     appLog('UPDATE', 'download error: $e');
+    telem.telemetryError(
+      'update-failed',
+      'update exception (${info.currentVersion} -> ${info.latestVersion}): $e',
+    );
     debugPrint('[Updater] download failed: $e');
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

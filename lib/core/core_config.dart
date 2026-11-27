@@ -234,6 +234,28 @@ Future<void> writeTelemetryLevel(String level) async {
   await _writePrefs(prefs);
 }
 
+/// Reads an existing anonymous device id without creating one (used when
+/// telemetry is still off so no identifier is generated before opt-in).
+Future<String?> readTelemetryUuidIfExists() async {
+  final prefs = await _readPrefs();
+  final existing = prefs['telemetryUuid'];
+  return existing is String && existing.isNotEmpty ? existing : null;
+}
+
+/// Watermark timestamp of the last blackbox.json incident forwarded to
+/// telemetry, so restarts never replay old incidents.
+Future<String?> readLastBlackboxTelemetryAt() async {
+  final prefs = await _readPrefs();
+  final v = prefs['lastBlackboxTelemetryAt'];
+  return v is String && v.isNotEmpty ? v : null;
+}
+
+Future<void> writeLastBlackboxTelemetryAt(String isoTimestamp) async {
+  final prefs = await _readPrefs();
+  prefs['lastBlackboxTelemetryAt'] = isoTimestamp;
+  await _writePrefs(prefs);
+}
+
 /// Stable anonymous device id, generated on first read.
 ///
 /// Random and unrelated to any account; it exists so a user can quote it when

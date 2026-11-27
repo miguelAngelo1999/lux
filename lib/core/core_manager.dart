@@ -17,6 +17,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../tr.dart';
 import '../util/cert_trust.dart';
 import '../util/notifier.dart';
+import '../util/telemetry.dart' as telem;
 import 'core_config.dart';
 
 Future<int> findAvailablePort(int startPort, int endPort) async {
@@ -355,6 +356,7 @@ class CoreManager {
     await stop();
     appState.updateIsStarted(false);
     onConnectionStateChanged?.call();
+    telem.telemetryOp('disconnect', 'manual stop');
   }
 
   /// Shared start/stop toggle used by both the header switch and the
@@ -755,6 +757,7 @@ class CoreManager {
         // yet. Silent when already trusted, when the proxy needs a login we
         // do not have, or when the user already skipped it this session.
         unawaited(checkCertTrustOnConnect());
+        telem.telemetryOp('connect', 'tunnel started');
         return; // success
       } on DioException catch (e) {
         final status = e.response?.statusCode;
@@ -776,6 +779,10 @@ class CoreManager {
           await Future.delayed(Duration(seconds: attempt));
           continue;
         }
+        telem.telemetryError(
+          'core-start-failed',
+          'start() failed (status=$status): ${e.message ?? e.type}',
+        );
         rethrow;
       }
     }
@@ -888,8 +895,11 @@ class CoreManager {
         username: req.username,
         password: req.password,
       );
-      return !recheck.intercepted;
+      final trusted = !recheck.intercepted;
+      telem.telemetryOp('cert-trust', 'trusted=$trusted');
+      return trusted;
     } catch (_) {
+      telem.telemetryOp('cert-trust', 'trusted=assumed');
       return true;
     }
   }
@@ -1066,6 +1076,12 @@ class CoreManager {
       final certError = res.data['certError'] as bool? ?? false;
       final pacOnly = res.data['pacOnly'] as bool? ?? false;
       final error = res.data['error'] as String? ?? '';
+      if (delay < 0) {
+        telem.telemetryOp(
+          'proxy-test-fail',
+          'certError=$certError pacOnly=$pacOnly reason=${_classifyProxyError(error)}',
+        );
+      }
       return (delay: delay, certError: certError, pacOnly: pacOnly, error: error);
     } on DioException catch (e) {
       if (e.response?.data is Map) {
@@ -1074,12 +1090,42 @@ class CoreManager {
         final certError = data['certError'] as bool? ?? false;
         final pacOnly = data['pacOnly'] as bool? ?? false;
         final error = (data['error'] ?? data['message'] ?? e.message ?? '') as String;
+        if (delay < 0) {
+          telem.telemetryOp(
+            'proxy-test-fail',
+            'certError=$certError pacOnly=$pacOnly reason=${_classifyProxyError(error)}',
+          );
+        }
         return (delay: delay, certError: certError, pacOnly: pacOnly, error: error);
       }
       return (delay: -1, certError: false, pacOnly: false, error: e.message ?? e.toString());
     } catch (e) {
       return (delay: -1, certError: false, pacOnly: false, error: e.toString());
     }
+  }
+
+  /// Categorizes proxy probe errors without leaking private proxy IPs or hosts.
+  String _classifyProxyError(String raw) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('407') ||
+        lower.contains('auth') ||
+        lower.contains('credential') ||
+        lower.contains('proxy authentication')) {
+      return 'auth_407';
+    }
+    if (lower.contains('cert') ||
+        lower.contains('x509') ||
+        lower.contains('tls') ||
+        lower.contains('unknown authority')) {
+      return 'tls_cert';
+    }
+    if (lower.contains('timeout') || lower.contains('deadline')) {
+      return 'timeout';
+    }
+    if (lower.contains('refused')) return 'conn_refused';
+    if (lower.contains('reset')) return 'conn_reset';
+    if (lower.contains('eof')) return 'eof';
+    return lower.isEmpty ? 'unknown' : 'unreachable';
   }
 
   Future<void> selectProxy(String id) async {
@@ -1529,6 +1575,7 @@ class CoreManager {
     raw['autoMode'] = am;
 
     await dio.put('$baseHttpUrl/setting', data: raw);
+    telem.setTelemetryProxyPort(setting.localServerPort);
 
     // Apply a mode change live: if the core is running, restart the tunnel so
     // the old mode tears down (TUN device / system-proxy restored) and the new
@@ -1536,6 +1583,7 @@ class CoreManager {
     // also restarts lux_core.exe elevated (triggering UAC) before starting the
     // new mode, and reverts cleanly to the previous mode if UAC is cancelled.
     if (modeChanged) {
+      telem.telemetryOp('mode-change', '$prevMode -> $newMode');
       final running = await getIsStarted();
       if (running) {
         appLog('CORE', 'mode changed $prevMode→$newMode — restarting tunnel');

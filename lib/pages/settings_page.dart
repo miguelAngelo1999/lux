@@ -66,6 +66,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   telem.TelemetryLevel _telemetryLevel = telem.TelemetryLevel.off;
   String _telemetryUuid = '';
+  bool _sendingTelemetryTest = false;
   bool _uuidCopied = false;
 
   bool _checkingUpdate = false;
@@ -148,7 +149,10 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       final setting = await widget.coreManager.getSetting();
       final ifaces = await widget.coreManager.getSettingInterfaces();
       final level = await readTelemetryLevel();
-      final uuid = await readOrCreateTelemetryUuid();
+      final parsedLevel = telem.telemetryLevelFromString(level);
+      final uuid = parsedLevel == telem.TelemetryLevel.off
+          ? (await readTelemetryUuidIfExists() ?? '')
+          : await readOrCreateTelemetryUuid();
       final rawVersion = await getAppVersionString();
       var pending = await readPendingUpdateVersion();
       if (pending != null && pending.isNotEmpty) {
@@ -1502,8 +1506,10 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        dropdownTile<telem.TelemetryLevel>(
+        segmentedTile<telem.TelemetryLevel>(
+          context: context,
           title: 'Anonymous usage data',
+          subtitle: telem.telemetryLevelDescription(_telemetryLevel),
           value: _telemetryLevel,
           options: const [
             telem.TelemetryLevel.off,
@@ -1512,21 +1518,22 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ],
           label: (l) => switch (l) {
             telem.TelemetryLevel.off => 'Off',
-            telem.TelemetryLevel.ops => 'Errors only',
+            telem.TelemetryLevel.ops => 'Basic',
             telem.TelemetryLevel.full => 'Full',
           },
           onChanged: (v) async {
             await writeTelemetryLevel(telem.telemetryLevelToString(v));
-            telem.setTelemetryLevel(v);
-            if (mounted) setState(() => _telemetryLevel = v);
+            final uuid = v == telem.TelemetryLevel.off
+                ? _telemetryUuid
+                : await readOrCreateTelemetryUuid();
+            await telem.setTelemetryLevel(v, uuid: uuid);
+            if (mounted) {
+              setState(() {
+                _telemetryLevel = v;
+                _telemetryUuid = uuid;
+              });
+            }
           },
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-          child: TText(
-            telem.telemetryLevelDescription(_telemetryLevel),
-            style: TextStyle(fontSize: 11, color: tokens.textMuted),
-          ),
         ),
         if (!telem.telemetryConfigured)
           Padding(
@@ -1536,9 +1543,120 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               'sent regardless of this setting.',
               style: TextStyle(fontSize: 11, color: tokens.amber),
             ),
+          )
+        else if (_telemetryLevel != telem.TelemetryLevel.off)
+          ValueListenableBuilder<telem.TelemetryStats>(
+            valueListenable: telem.telemetryStatsNotifier,
+            builder: (ctx, stats, _) {
+              final hasError =
+                  stats.lastError != null && stats.lastError!.isNotEmpty;
+              final dotColor = hasError
+                  ? tokens.danger
+                  : stats.sentCount > 0
+                      ? tokens.emerald
+                      : tokens.cobalt;
+              final statusLine = hasError
+                  ? 'Last send failed: ${stats.lastError}'
+                  : stats.sentCount > 0
+                      ? 'Active · ${stats.sentCount} sent'
+                          '${stats.lastRoute != null ? ' via ${stats.lastRoute}' : ''}'
+                          '${stats.lastFlushAt != null ? ' · ${_formatTelemetryAgo(stats.lastFlushAt!)}' : ''}'
+                      : stats.bufferedCount > 0
+                          ? 'Active · ${stats.bufferedCount} queued'
+                          : 'Active · waiting for events';
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 6.5,
+                      height: 6.5,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: dotColor,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        statusLine,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: luxMonoStyle(
+                          fontSize: 10.5,
+                          color: hasError ? tokens.danger : tokens.textMuted,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 26,
+                      child: OutlinedButton(
+                        key: const Key('settings-telemetry-test-button'),
+                        onPressed: _sendingTelemetryTest
+                            ? null
+                            : _runTelemetryTest,
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: tokens.subtlePillBg,
+                          foregroundColor: tokens.textPrimary,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          minimumSize: const Size(0, 26),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          side: BorderSide(color: tokens.hairline, width: 0.75),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        child: _sendingTelemetryTest
+                            ? SizedBox(
+                                width: 11,
+                                height: 11,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: tokens.cobalt,
+                                ),
+                              )
+                            : const TText(
+                                'Send test',
+                                style: TextStyle(fontSize: 11),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
       ],
     );
+  }
+
+  String _formatTelemetryAgo(DateTime at) {
+    final diff = DateTime.now().difference(at);
+    if (diff.inSeconds < 15) return 'just now';
+    if (diff.inMinutes < 1) return '${diff.inSeconds}s ago';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
+  }
+
+  Future<void> _runTelemetryTest() async {
+    setState(() => _sendingTelemetryTest = true);
+    try {
+      final res = await telem.sendTestTelemetry();
+      if (!mounted) return;
+      if (res.ok) {
+        _notify(
+          'Telemetry OK · sent via ${res.route} (HTTP ${res.statusCode ?? 200})',
+        );
+      } else {
+        _notify(
+          'Telemetry failed: ${res.error ?? "HTTP ${res.statusCode}"}',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sendingTelemetryTest = false);
+    }
   }
 
   Widget _appcastTile(BuildContext context) {

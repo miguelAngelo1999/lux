@@ -10,6 +10,7 @@ import 'package:lux/core/core_config.dart';
 import 'package:lux/error.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/notifier.dart';
+import 'package:lux/util/telemetry.dart' as telem;
 import 'package:lux/util/utils.dart';
 import 'package:lux/widget/error/release_mode_error_widget.dart';
 import 'package:window_manager/window_manager.dart';
@@ -47,7 +48,18 @@ void main(List<String> args) async {
   // ────────────────────────────────────────────────────────────────────────
   await notifier.ensureInitialized();
 
+  final previousFlutterError = FlutterError.onError;
+  FlutterError.onError = (FlutterErrorDetails details) {
+    telem.telemetryCrash('flutter-error', details.exception, details.stack);
+    if (previousFlutterError != null) {
+      previousFlutterError(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+
   PlatformDispatcher.instance.onError = (error, stack) {
+    telem.telemetryCrash('uncaught-error', error, stack);
     if (error is DioException) {
       if (error.response?.data is Map<String, dynamic>) {
         final coreHttpError = CoreHttpError.fromJson(error.response?.data);

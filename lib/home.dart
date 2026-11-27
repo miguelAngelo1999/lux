@@ -159,6 +159,10 @@ class WatchdogController {
     if (restartFails >= maxRestarts) {
       appLog('WATCHDOG',
           'core failed to stay up after $maxRestarts restarts — giving up');
+      telem.telemetryError(
+        'watchdog-gave-up',
+        'core failed to stay up after $maxRestarts restarts',
+      );
       appState.userWantsRunning = false;
       restartFails = 0;
       _showNotification?.call(
@@ -169,6 +173,10 @@ class WatchdogController {
     restartFails++;
     appLog('WATCHDOG',
         'core stopped unexpectedly (daemonDown=${!coreProcessAlive}) — restarting (attempt $restartFails/$maxRestarts)');
+    telem.telemetryError(
+      'watchdog-restart',
+      'core stopped unexpectedly (daemonDown=${!coreProcessAlive}, attempt=$restartFails/$maxRestarts)',
+    );
 
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -332,7 +340,13 @@ class _HomeState extends State<Home>
   var needRestart = false;
   dynamic coreError;
   bool _quickEditMode = false;
+  bool _reportedAppStart = false;
+  final DateTime _appStartedAt = DateTime.now();
   Timer? _watchdogTimer;
+  Timer? _telemetryBlackboxTimer;
+  Timer? _telemetryHeartbeatTimer;
+  Timer? _telemetryConnTimer;
+  Timer? _telemetryStartupFlushTimer;
   late final WatchdogController _watchdogController = WatchdogController(
     showNotification: (msg) {
       if (mounted) {
@@ -483,13 +497,16 @@ class _HomeState extends State<Home>
     // load is a single bundled asset read.
     await TranslationCache.load();
 
-    // Usage reporting is opt-in; initTelemetry returns immediately when the
-    // stored level is off.
-    final telemetryLevel = await readTelemetryLevel();
-    final telemetryUuid = await readOrCreateTelemetryUuid();
+    // Usage reporting is opt-in; when level is off, do not generate a device id
+    // or send anything.
+    final telemetryLevelStr = await readTelemetryLevel();
+    final telemetryLevel = telem.telemetryLevelFromString(telemetryLevelStr);
+    final telemetryUuid = telemetryLevel == telem.TelemetryLevel.off
+        ? (await readTelemetryUuidIfExists() ?? '')
+        : await readOrCreateTelemetryUuid();
     await telem.initTelemetry(
       uuid: telemetryUuid,
-      level: telem.telemetryLevelFromString(telemetryLevel),
+      level: telemetryLevel,
     );
 
     final port = await findAvailablePort(8000, 9000);
@@ -586,6 +603,7 @@ class _HomeState extends State<Home>
     mgr.coreProcess!.needElevate = false;
     await writeWindowsServiceDeclined(true);
     mgr.appState.updateWindowsLimitedMode(true);
+    telem.telemetryOp('windows-limited', 'fell back to non-elevated System mode');
     setState(() {
       coreError = null;
     });
@@ -635,6 +653,8 @@ class _HomeState extends State<Home>
     setState(() {
       isCoreReady.value = true;
     });
+    unawaited(_reportStartupTelemetry(appState));
+    unawaited(_scanBlackboxForTelemetry());
     _eventChannelSub?.cancel();
     _eventChannelSub = null;
     eventChannel = null;
@@ -702,6 +722,9 @@ class _HomeState extends State<Home>
               }
             case 'exit_app':
               {
+                await telem
+                    .flushTelemetry(stopTimer: true)
+                    .timeout(const Duration(seconds: 3), onTimeout: () {});
                 await coreManager?.exitCore();
                 exitApp();
               }
@@ -740,6 +763,10 @@ class _HomeState extends State<Home>
               {
                 final data = message['data'] as Map<String, dynamic>?;
                 if (data == null) break;
+                final swState = data['state']?.toString() ?? '';
+                if (swState.isNotEmpty) {
+                  telem.telemetryOp('net-switch', 'state=$swState');
+                }
                 final msg = applyNetSwitchEvent(
                   data,
                   appState,
@@ -818,6 +845,22 @@ class _HomeState extends State<Home>
     // Watchdog: restart the core if it stops unexpectedly while the user
     // had it running. Checks every 30 seconds.
     _watchdogTimer = Timer.periodic(const Duration(seconds: 30), (_) => _watchdog());
+    // Periodic telemetry maintenance:
+    // - Scan blackbox.json for new core incidents every 5 minutes.
+    // - Emit one lightweight health heartbeat every 6 hours for long-running sessions.
+    // - In `full` mode only, sample deduplicated routing domains every 60 seconds.
+    _telemetryBlackboxTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => unawaited(_scanBlackboxForTelemetry()),
+    );
+    _telemetryHeartbeatTimer = Timer.periodic(
+      const Duration(hours: 6),
+      (_) => unawaited(_emitTelemetryHeartbeat()),
+    );
+    _telemetryConnTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => unawaited(_sampleConnectionsForTelemetry()),
+    );
     // Subscribe to connectivity changes for auto-switch trigger.
     // Fires on interface changes (WiFi on/off, Ethernet plug/unplug).
     _connectivitySub = Connectivity().onConnectivityChanged.listen((_) {
@@ -949,7 +992,165 @@ class _HomeState extends State<Home>
     }
   }
 
+  Future<void> _reportStartupTelemetry(AppStateModel appState) async {
+    final mgr = coreManager;
+    if (mgr == null) return;
+    try {
+      final setting = await mgr.getSetting();
+      telem.setTelemetryProxyPort(setting.localServerPort);
+      if (_reportedAppStart) return;
+      _reportedAppStart = true;
+
+      if (telem.telemetryLevel == telem.TelemetryLevel.off) return;
+      final elevated = await mgr.isCoreAdmin().catchError((_) => false);
+      final proxies = await mgr.getProxyList().catchError(
+            (_) => ProxyList([], ''),
+          );
+      final rules = await mgr.getCustomizedRules().catchError(
+            (_) => <CustomizedRuleItem>[],
+          );
+      final beta = await readBetaUpdatesEnabled().catchError((_) => false);
+      final modeStr = setting.mode == ProxyMode.tun
+          ? 'tun'
+          : setting.mode == ProxyMode.system
+              ? 'system'
+              : 'mixed';
+      telem.telemetryOp(
+        'app-start',
+        'mode=$modeStr elevated=$elevated channel=${beta ? "beta" : "stable"} '
+            'proxies=${proxies.proxies.length} rules=${rules.length}',
+        extra: {
+          'mode': modeStr,
+          'elevated': elevated,
+          'channel': beta ? 'beta' : 'stable',
+          'proxies': proxies.proxies.length,
+          'rules': rules.length,
+          if (Platform.isWindows) 'limited': appState.windowsLimitedMode,
+        },
+      );
+      // Flush startup snapshot shortly after core settles so installs/versions
+      // appear promptly instead of waiting 60 seconds.
+      _telemetryStartupFlushTimer?.cancel();
+      _telemetryStartupFlushTimer = Timer(const Duration(seconds: 10), () {
+        unawaited(telem.flushTelemetry());
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _scanBlackboxForTelemetry() async {
+    if (homeDir.isEmpty || telem.telemetryLevel == telem.TelemetryLevel.off) {
+      return;
+    }
+    await telem.forwardBlackboxIncidents(
+      homeDir,
+      readWatermark: readLastBlackboxTelemetryAt,
+      writeWatermark: writeLastBlackboxTelemetryAt,
+    );
+  }
+
+  Future<void> _emitTelemetryHeartbeat() async {
+    final mgr = coreManager;
+    if (mgr == null ||
+        !mounted ||
+        telem.telemetryLevel == telem.TelemetryLevel.off) {
+      return;
+    }
+    try {
+      final appState = Provider.of<AppStateModel>(context, listen: false);
+      final setting = await mgr.getSetting();
+      final elevated = await mgr.isCoreAdmin().catchError((_) => false);
+      final modeStr = setting.mode == ProxyMode.tun
+          ? 'tun'
+          : setting.mode == ProxyMode.system
+              ? 'system'
+              : 'mixed';
+      final uptimeHours = DateTime.now().difference(_appStartedAt).inHours;
+      telem.telemetryOp(
+        'heartbeat',
+        'uptime=${uptimeHours}h connected=${appState.isStarted} mode=$modeStr elevated=$elevated',
+        extra: {
+          'uptimeHours': uptimeHours,
+          'connected': appState.isStarted,
+          'mode': modeStr,
+          'elevated': elevated,
+        },
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _sampleConnectionsForTelemetry() async {
+    final mgr = coreManager;
+    if (mgr == null ||
+        !mounted ||
+        telem.telemetryLevel != telem.TelemetryLevel.full) {
+      return;
+    }
+    final appState = Provider.of<AppStateModel>(context, listen: false);
+    if (!appState.isStarted) return;
+
+    WebSocketChannel? channel;
+    try {
+      channel = await mgr.getConnectionsChannel();
+      await channel.ready.timeout(const Duration(seconds: 4));
+      final raw = await channel.stream.first.timeout(const Duration(seconds: 4));
+      if (raw is! String) return;
+      final decoded = json.decode(raw);
+      final List<dynamic> connList;
+      if (decoded is List) {
+        connList = decoded;
+      } else if (decoded is Map && decoded['connections'] is List) {
+        connList = decoded['connections'] as List;
+      } else {
+        return;
+      }
+      for (final item in connList) {
+        if (item is! Map) continue;
+        final meta = item['metadata'] as Map? ?? const {};
+        final domain = item['domain']?.toString() ?? '';
+        final destPort = meta['destinationPort']?.toString() ?? '';
+        final rawHost = meta['host']?.toString() ?? '';
+        final rawIp = meta['destinationIP']?.toString() ?? '';
+        final dest = domain.isNotEmpty
+            ? (domain.contains(':') || destPort.isEmpty
+                ? domain
+                : '$domain:$destPort')
+            : rawHost.isNotEmpty
+                ? (destPort.isEmpty ? rawHost : '$rawHost:$destPort')
+                : (rawIp.isEmpty
+                    ? ''
+                    : (destPort.isEmpty ? rawIp : '$rawIp:$destPort'));
+        if (dest.isEmpty) continue;
+
+        final ruleObj = item['rule'] as Map? ?? const {};
+        final ruleType =
+            (ruleObj['ruleType'] ?? ruleObj['type'] ?? '').toString();
+        final rulePayload = (ruleObj['payload'] ?? '').toString();
+        final ruleStr = rulePayload.isEmpty
+            ? ruleType
+            : (ruleType.isEmpty ? rulePayload : '$ruleType,$rulePayload');
+
+        String outcome = (ruleObj['policy'] ?? item['proxy'] ?? '').toString();
+        if (outcome.isEmpty && item['chains'] is List) {
+          final chains = item['chains'] as List;
+          if (chains.isNotEmpty) outcome = chains.first.toString();
+        }
+        if (outcome.isEmpty) outcome = 'PROXY';
+
+        telem.telemetryConn(dest, ruleStr, outcome);
+      }
+    } catch (_) {
+      // Sampling is strictly best-effort and must never affect app behavior.
+    } finally {
+      try {
+        await channel?.sink.close();
+      } catch (_) {}
+    }
+  }
+
   Future<AppExitResponse> _handleExitRequest() async {
+    await telem
+        .flushTelemetry(stopTimer: true)
+        .timeout(const Duration(seconds: 3), onTimeout: () {});
     if (Platform.isMacOS || Platform.isWindows) {
       await coreManager?.safeExit();
     }
@@ -959,6 +1160,10 @@ class _HomeState extends State<Home>
   @override
   void dispose() {
     _watchdogTimer?.cancel();
+    _telemetryBlackboxTimer?.cancel();
+    _telemetryHeartbeatTimer?.cancel();
+    _telemetryConnTimer?.cancel();
+    _telemetryStartupFlushTimer?.cancel();
     _connectivitySub?.cancel();
     _autoSwitchDebounce?.cancel();
     _eventChannelSub?.cancel();
