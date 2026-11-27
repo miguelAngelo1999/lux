@@ -1,17 +1,17 @@
 {
-  "version": "1.50.128",
+  "version": "1.50.129",
   "channel": "beta",
-  "notes": "feat(captive-portal): integrate captive Wi-Fi sign-in assist and hardened watchdog safety",
+  "notes": "feat(ui): Option A macOS Liquid Glass, Obsidian Dark theme, thin icons, and quick account swap",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "db7ee5bd956cabb2b53cbf56cae1adfe044253ed75e47f7864273d7aba4ca29f",
-    "size": 45814506,
-    "version": "1.50.128"
+    "sha256": "c945e2288e4c37181fab4e87f9a547eea9683cc400e036a09338d1e5166fd0f6",
+    "size": 45847529,
+    "version": "1.50.129"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "c7ee0cdda9e9051a42ead7396a8a61510388dad80bf9dc0e5fd940b4227d5a04",
-    "size": 41743717,
-    "version": "1.50.128"
+    "sha256": "0b1d53b650370a8c7047c617d518e460440167c89a00c2e1129883422dd69c6e",
+    "size": 41752765,
+    "version": "1.50.129"
   }
 }
