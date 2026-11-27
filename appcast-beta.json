@@ -1,17 +1,17 @@
 {
-  "version": "1.50.140",
+  "version": "1.50.141",
   "channel": "beta",
-  "notes": "feat(ui,net-switch): Simple/Advanced mode, Auto Home/Office labels, PAC failover & Stay connected backups",
+  "notes": "feat(log): Proxy Denied filter & badges, 1-click rules from logs, and updated core checksum",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "4c788bf074ea15d8baa5cb57ec6980fb5dcca8fb1a8d9971ee749a4257a5d7da",
-    "size": 46462082,
-    "version": "1.50.140"
+    "sha256": "aa8cb0de1a6a7bb6ca7b8818a8dacc404e1de932bef673513f6163ab5b348e8e",
+    "size": 46513347,
+    "version": "1.50.141"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "d4c29d4853580b9258f2a8f1a4010542e5ba94a753360d2b1e9a3d2a8d215c9b",
-    "size": 42132446,
-    "version": "1.50.140"
+    "sha256": "c8fd94fc814ee19d97b4020bf145df1929a842b62edada12c8fef4c07740c16d",
+    "size": 42177587,
+    "version": "1.50.141"
   }
 }
