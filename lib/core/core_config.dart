@@ -1141,21 +1141,29 @@ class Setting {
 }
 
 
-/// Result from POST /proxies/detect — discovered proxy entries from the network's PAC.
+/// Result from POST /proxies/detect — discovered proxy entries and/or PAC script.
 class DetectProxyResult {
   final String pacUrl;
+  final int pacRuleCount;
+  final String source;
   final List<DetectedProxy> proxies;
   final String message;
 
   const DetectProxyResult({
     required this.pacUrl,
+    this.pacRuleCount = 0,
+    this.source = '',
     required this.proxies,
     required this.message,
   });
 
+  bool get hasPac => pacUrl.trim().isNotEmpty;
+
   factory DetectProxyResult.fromJson(Map<String, dynamic> json) =>
       DetectProxyResult(
-        pacUrl: json['pacUrl'] as String? ?? '',
+        pacUrl: (json['pacUrl'] as String? ?? '').trim(),
+        pacRuleCount: (json['pacRuleCount'] as num?)?.toInt() ?? 0,
+        source: (json['source'] as String? ?? '').trim(),
         proxies: ((json['proxies'] as List?) ?? [])
             .map((e) => DetectedProxy.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -1166,17 +1174,47 @@ class DetectProxyResult {
 class DetectedProxy {
   final String host;
   final String port;
+  final String type; // 'http' or 'socks5'
   final String pacUrl;
+  final bool pacOnly;
 
-  const DetectedProxy({required this.host, required this.port, required this.pacUrl});
+  const DetectedProxy({
+    required this.host,
+    required this.port,
+    this.type = 'http',
+    required this.pacUrl,
+    this.pacOnly = false,
+  });
 
-  factory DetectedProxy.fromJson(Map<String, dynamic> json) => DetectedProxy(
-        host: json['host'] as String? ?? '',
-        port: json['port'] as String? ?? '8080',
-        pacUrl: json['pacUrl'] as String? ?? '',
-      );
+  bool get isPacOnly => pacOnly || host.trim().isEmpty;
 
-  String get displayName => '$host:$port';
+  factory DetectedProxy.fromJson(Map<String, dynamic> json) {
+    final host = (json['host'] as String? ?? '').trim();
+    final pacOnly = json['pacOnly'] as bool? ?? host.isEmpty;
+    final rawType = (json['type'] as String? ?? 'http').trim().toLowerCase();
+    final type = (rawType == 'socks5' || rawType == 'socks') ? 'socks5' : 'http';
+    return DetectedProxy(
+      host: host,
+      port: (json['port'] as String? ?? (pacOnly ? '' : '8080')).trim(),
+      type: type,
+      pacUrl: (json['pacUrl'] as String? ?? '').trim(),
+      pacOnly: pacOnly,
+    );
+  }
+
+  String get displayName {
+    if (isPacOnly) {
+      if (pacUrl.isNotEmpty) {
+        final uri = Uri.tryParse(pacUrl);
+        if (uri != null && uri.host.isNotEmpty) {
+          return 'PAC (${uri.host})';
+        }
+        return pacUrl;
+      }
+      return 'PAC';
+    }
+    return port.isNotEmpty ? '$host:$port' : host;
+  }
 }
 
 

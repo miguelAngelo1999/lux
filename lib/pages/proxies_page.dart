@@ -1057,14 +1057,19 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     _detectTimer = null;
   }
 
-  Future<void> _checkCertForProxy(DetectedProxy proxy, _ProxyCredentials creds) async {
+  Future<void> _checkCertForProxy(
+    DetectedProxy proxy,
+    _ProxyCredentials creds, {
+    CertCheckResult? precheckedCert,
+  }) async {
     try {
-      final result = await widget.coreManager.checkCert(
-        server: proxy.host,
-        port: int.tryParse(proxy.port) ?? 8080,
-        username: creds.username,
-        password: creds.password,
-      );
+      final result = precheckedCert ??
+          await widget.coreManager.checkCert(
+            server: proxy.host,
+            port: int.tryParse(proxy.port) ?? 8080,
+            username: creds.username,
+            password: creds.password,
+          );
 
       if (!mounted) return;
 
@@ -1193,110 +1198,30 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
   }
 
   Future<_ProxyCredentials?> _promptCredentials(DetectedProxy proxy) async {
-    final usernameCtrl = TextEditingController();
-    final passwordCtrl = TextEditingController();
-    String passwordMode = 'persistent';
-    int ttlMinutes = 60;
-
-    final result = await showDialog<_ProxyCredentials>(
+    return showDialog<_ProxyCredentials>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Credentials for ${proxy.host}:${proxy.port}'),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: usernameCtrl,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: tl(ctx, 'Username'),
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passwordCtrl,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: tl(ctx, 'Password'),
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => Navigator.pop(
-                    ctx,
-                    _ProxyCredentials(
-                      username: usernameCtrl.text,
-                      password: passwordCtrl.text,
-                      passwordMode: passwordMode,
-                      ttlMinutes: ttlMinutes,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: passwordMode,
-                  decoration: InputDecoration(
-                    labelText: tl(ctx, 'Password type'),
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'persistent', child: TText('Persistent (saved)')),
-                    DropdownMenuItem(value: 'timed', child: TText('Timed (expires)')),
-                    DropdownMenuItem(value: 'one-time', child: TText('One-time (cleared after use)')),
-                  ],
-                  onChanged: (v) => setDialogState(() => passwordMode = v!),
-                ),
-                if (passwordMode == 'timed') ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: tl(ctx, 'Expires after (minutes)'),
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                    controller: TextEditingController(text: '$ttlMinutes'),
-                    onChanged: (v) => ttlMinutes = int.tryParse(v) ?? 60,
-                  ),
-                ],
-                const SizedBox(height: 8),
-                const TText(
-                  'Leave empty if the proxy does not require authentication.',
-                  style: TextStyle(fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: const TText('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(
-                ctx,
-                _ProxyCredentials(
-                  username: usernameCtrl.text,
-                  password: passwordCtrl.text,
-                  passwordMode: passwordMode,
-                  ttlMinutes: ttlMinutes,
-                ),
-              ),
-              child: const TText('Add Proxy'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _CredentialsDialog(proxy: proxy),
     );
+  }
 
-    usernameCtrl.dispose();
-    passwordCtrl.dispose();
-    return result;
+  String _formatDetectionSource(BuildContext ctx, String source) {
+    switch (source) {
+      case 'dhcp-252':
+        return tl(ctx, 'DHCP Option 252');
+      case 'os-pac':
+      case 'saved-pac':
+        return tl(ctx, 'System PAC configuration');
+      case 'wpad-probe':
+        return tl(ctx, 'WPAD auto-discovery');
+      case 'os-manual':
+        return tl(ctx, 'System proxy settings');
+      case 'env':
+        return tl(ctx, 'Environment variables');
+      case 'lan-probe':
+        return tl(ctx, 'Local network scan');
+      default:
+        return source;
+    }
   }
 
   Future<void> _detectProxies() async {
@@ -1309,203 +1234,442 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       if (mounted) setState(() => _detectProgress = 1.0);
       if (!mounted) return;
 
-      if (result.proxies.isEmpty) {
+      if (result.proxies.isEmpty && !result.hasPac) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.message.isNotEmpty
-                ? result.message
-                : 'No proxies detected on this network'),
+            content: Text(
+              result.message.isNotEmpty
+                  ? result.message
+                  : tl(context, 'No proxies or PAC scripts detected on this network'),
+            ),
           ),
         );
         return;
       }
 
-      // Show detected proxies and offer to add them
-      final added = await showDialog<bool>(
+      // Build display candidates: if only a PAC URL was returned, create a PAC-only entry.
+      final candidates = result.proxies.isNotEmpty
+          ? List<DetectedProxy>.from(result.proxies)
+          : <DetectedProxy>[
+              DetectedProxy(
+                host: '',
+                port: '',
+                type: 'http',
+                pacUrl: result.pacUrl,
+                pacOnly: true,
+              ),
+            ];
+      final fixedCandidates = candidates.where((p) => !p.isPacOnly).toList();
+      final bool isPurePacResult = fixedCandidates.isEmpty && result.hasPac;
+
+      // Selection state for the confirmation dialog
+      bool attachPac = result.hasPac;
+      bool usePacOnly = isPurePacResult;
+      final selectedIndices = <int>{if (fixedCandidates.isNotEmpty) 0};
+
+      // Step 1: Show detected proxies / PAC script and let user confirm selection
+      final selection = await showDialog<_DetectedProxySelection>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const TText('Detected Proxies'),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (result.pacUrl.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      'Found via PAC: ${result.pacUrl}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final tokens = LuxTokens.of(ctx);
+            final sourceLabel = _formatDetectionSource(ctx, result.source);
+            final selectedCount = usePacOnly ? 1 : selectedIndices.length;
+            final canAdd = usePacOnly ? result.hasPac : selectedIndices.isNotEmpty;
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Expanded(
+                    child: TText(
+                      isPurePacResult ? 'Detected PAC Script' : 'Detected Proxies',
                     ),
                   ),
-                ...result.proxies.map((p) => ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.dns, size: 20),
-                      title: Text('${p.host}:${p.port}'),
-                      subtitle: const TText('HTTP Proxy'),
-                    )),
+                  if (sourceLabel.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: tokens.cobalt.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: tokens.cobalt.withValues(alpha: 0.35)),
+                      ),
+                      child: Text(
+                        sourceLabel,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          color: tokens.cobalt,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              content: SizedBox(
+                width: 420,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 420),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (result.hasPac) ...[
+                          Material(
+                            color: tokens.cardBg,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: BorderSide(color: tokens.hairline),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.alt_route_rounded,
+                                          size: 16, color: tokens.cobalt),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: TText(
+                                          'PAC Script',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: tokens.textPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                      if (result.pacRuleCount > 0)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: tokens.subtlePillBg,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            '${result.pacRuleCount} ${tl(ctx, 'PAC rules')}',
+                                            style: TextStyle(
+                                              fontSize: 10.5,
+                                              color: tokens.textSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  SelectableText(
+                                    result.pacUrl,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontFamily: 'monospace',
+                                      color: tokens.textSecondary,
+                                    ),
+                                  ),
+                                  if (fixedCandidates.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    CheckboxListTile(
+                                      value: attachPac,
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      controlAffinity: ListTileControlAffinity.leading,
+                                      visualDensity: VisualDensity.compact,
+                                      title: TText(
+                                        'Attach PAC script',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: tokens.textPrimary,
+                                        ),
+                                      ),
+                                      onChanged: usePacOnly
+                                          ? null
+                                          : (v) => setDialogState(() => attachPac = v ?? true),
+                                    ),
+                                    CheckboxListTile(
+                                      value: usePacOnly,
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      controlAffinity: ListTileControlAffinity.leading,
+                                      visualDensity: VisualDensity.compact,
+                                      title: TText(
+                                        'PAC-only (dynamic routing)',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: tokens.textPrimary,
+                                        ),
+                                      ),
+                                      onChanged: (v) => setDialogState(() {
+                                        usePacOnly = v ?? false;
+                                        if (usePacOnly) attachPac = true;
+                                      }),
+                                    ),
+                                  ] else ...[
+                                    const SizedBox(height: 4),
+                                    TText(
+                                      'PAC-only: this PAC picks the upstream proxy per site.',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: tokens.textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (fixedCandidates.isNotEmpty) const SizedBox(height: 10),
+                        ],
+                        if (fixedCandidates.isNotEmpty)
+                          Opacity(
+                            opacity: usePacOnly ? 0.45 : 1.0,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: List.generate(fixedCandidates.length, (i) {
+                                final p = fixedCandidates[i];
+                                final checked = !usePacOnly && selectedIndices.contains(i);
+                                final protoLabel = p.type.toUpperCase();
+                                final subtitle = p.type == 'socks5'
+                                    ? tl(ctx, 'SOCKS5 Proxy')
+                                    : tl(ctx, 'HTTP Proxy');
+
+                                return CheckboxListTile(
+                                  value: checked,
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                                  controlAffinity: ListTileControlAffinity.leading,
+                                  onChanged: usePacOnly
+                                      ? null
+                                      : (v) => setDialogState(() {
+                                            if (v == true) {
+                                              selectedIndices.add(i);
+                                            } else {
+                                              selectedIndices.remove(i);
+                                            }
+                                          }),
+                                  title: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 5, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: tokens.subtlePillBg,
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(color: tokens.hairline),
+                                        ),
+                                        child: Text(
+                                          protoLabel,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: tokens.textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          p.displayName,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Text(
+                                    subtitle,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: tokens.textMuted,
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const TText('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: canAdd
+                      ? () {
+                          final chosen = usePacOnly
+                              ? <DetectedProxy>[
+                                  DetectedProxy(
+                                    host: '',
+                                    port: '',
+                                    type: 'http',
+                                    pacUrl: result.pacUrl,
+                                    pacOnly: true,
+                                  ),
+                                ]
+                              : (selectedIndices.toList()..sort())
+                                  .map((idx) => fixedCandidates[idx])
+                                  .toList();
+                          Navigator.pop(
+                            ctx,
+                            _DetectedProxySelection(
+                              proxies: chosen,
+                              attachPac: attachPac || usePacOnly,
+                              pacUrl: result.pacUrl,
+                            ),
+                          );
+                        }
+                      : null,
+                  child: Text(
+                    usePacOnly
+                        ? tl(ctx, 'Add PAC Proxy')
+                        : selectedCount == 1
+                            ? tl(ctx, 'Add Proxy')
+                            : tl(ctx, 'Add {count} Proxies')
+                                .replaceAll('{count}', '$selectedCount'),
+                  ),
+                ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const TText('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text('Add ${result.proxies.length} Prox${result.proxies.length == 1 ? "y" : "ies"}'),
-            ),
-          ],
+            );
+          },
         ),
       );
 
-      if (added == true) {
-        // Step 2: Prompt for credentials with retry on auth failure
-        final firstProxy = result.proxies.first;
-        final port = int.tryParse(firstProxy.port) ?? 8080;
-        _ProxyCredentials? creds;
-        CertCheckResult? certResult;
+      if (selection == null || selection.proxies.isEmpty) return;
 
-        while (true) {
-          creds = await _promptCredentials(firstProxy);
-          if (creds == null) return;
-
-          // Step 3: Validate credentials via cert check
-          try {
-            certResult = await widget.coreManager.checkCert(
-              server: firstProxy.host,
-              port: port,
-              username: creds.username,
-              password: creds.password,
-            );
-          } catch (_) {
-            // Network/timeout error - proceed without cert info
+      // Step 2: Prompt for credentials with retry on auth failure
+      final firstProxy = selection.proxies.first;
+      // If an HTTP host is available (even when saving PAC-only from a PAC that
+      // returned hosts), probe it to verify credentials and read any bump cert
+      // organization name.
+      DetectedProxy? certProbeProxy;
+      if (!firstProxy.isPacOnly && firstProxy.type == 'http') {
+        certProbeProxy = firstProxy;
+      } else {
+        for (final p in fixedCandidates) {
+          if (p.type == 'http' && p.host.isNotEmpty) {
+            certProbeProxy = p;
             break;
           }
-
-          // Check if auth failed (407 in response body)
-          if (certResult.error.isNotEmpty) {
-            final err = certResult.error.toLowerCase();
-            if (err.contains('407') || err.contains('auth') || err.contains('denied')) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: TText('Wrong password — try again'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-              continue; // loop back to credentials prompt
-            }
-          }
-          break; // auth succeeded or no error
         }
+      }
 
-        // Step 4: Derive proxy name from cert issuer (only when MITM is detected)
-        String suggestedName = firstProxy.host;
-        if (certResult != null && certResult.intercepted && certResult.issuer.isNotEmpty) {
-          // Try to extract O= (Organization) from the issuer DN
-          final orgMatch = RegExp(r'O=([^,]+)').firstMatch(certResult.issuer);
-          if (orgMatch != null) {
-            suggestedName = orgMatch.group(1)!.trim();
-          } else {
-            // Fall back to CN= or the whole issuer string
-            final cnMatch = RegExp(r'CN=([^,]+)').firstMatch(certResult.issuer);
-            suggestedName = cnMatch != null ? cnMatch.group(1)!.trim() : certResult.issuer;
-          }
-        }
-        // Widget may have unmounted during the credential prompt / cert check
-        // above (desktop window close or hot-restart). Guard before using context.
-        if (!mounted) return;
-        // Step 5: Let user confirm or override the name (no duplicates)
-        final existingNames = proxyListGroup.allProxies.map((p) => p.name.toLowerCase()).toSet();
-        final nameCtrl = TextEditingController(text: suggestedName);
-        String? nameError;
-        final confirmedName = await showDialog<String>(
-          context: context,
-          builder: (ctx) => StatefulBuilder(
-            builder: (ctx, setDialogState) {
-              void validate(String v) {
-                final trimmed = v.trim().toLowerCase();
-                setDialogState(() {
-                  if (trimmed.isEmpty) {
-                    nameError = 'Name cannot be empty';
-                  } else if (existingNames.contains(trimmed)) {
-                    nameError = 'A proxy with this name already exists';
-                  } else {
-                    nameError = null;
-                  }
-                });
-              }
+      _ProxyCredentials? creds;
+      CertCheckResult? certResult;
 
-              return AlertDialog(
-                title: const TText('Name this proxy'),
-                content: TextField(
-                  controller: nameCtrl,
-                  decoration: InputDecoration(
-                    labelText: tl(ctx, 'Proxy name'),
-                    hintText: tl(ctx, 'e.g. Office, School, Home'),
-                    errorText: nameError,
-                  ),
-                  autofocus: true,
-                  onChanged: validate,
-                  onSubmitted: (v) {
-                    if (nameError == null && v.trim().isNotEmpty) {
-                      Navigator.pop(ctx, v.trim());
-                    }
-                  },
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, null),
-                    child: const TText('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: nameError == null && nameCtrl.text.trim().isNotEmpty
-                        ? () => Navigator.pop(ctx, nameCtrl.text.trim())
-                        : null,
-                    child: const TText('Add'),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-        nameCtrl.dispose();
-        if (confirmedName == null || confirmedName.isEmpty) return;
+      while (true) {
+        creds = await _promptCredentials(firstProxy);
+        if (creds == null) return;
 
-        // Step 6: Add the proxy
-        for (final p in result.proxies) {
-          await widget.coreManager.addProxy({
-            'name': confirmedName.trim(),
-            'type': 'http',
-            'server': p.host.trim(),
-            'port': int.tryParse(p.port) ?? 8080,
-            if (creds.username.trim().isNotEmpty) 'username': creds.username.trim(),
-            if (creds.password.isNotEmpty) 'password': creds.password,
-            if (creds.passwordMode.isNotEmpty) 'passwordMode': creds.passwordMode,
-            if (creds.passwordMode == 'timed' && creds.ttlMinutes > 0)
-              'passwordTTLMinutes': creds.ttlMinutes,
-          });
-        }
-        await refreshProxyList();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Added ${result.proxies.length} proxy(ies) as "$confirmedName"')),
+        // Step 3: Validate credentials & inspect SSL bump cert when an HTTP host exists
+        if (certProbeProxy == null) break;
+        final probePort = int.tryParse(certProbeProxy.port) ?? 8080;
+        try {
+          certResult = await widget.coreManager.checkCert(
+            server: certProbeProxy.host,
+            port: probePort,
+            username: creds.username,
+            password: creds.password,
           );
-          // Show SSL interception info if detected
-          if (certResult != null && certResult.intercepted) {
-            _checkCertForProxy(firstProxy, creds);
+        } catch (_) {
+          // Network/timeout error - proceed without cert info
+          break;
+        }
+
+        // Check if auth failed (407 in response body)
+        if (certResult.error.isNotEmpty) {
+          final err = certResult.error.toLowerCase();
+          if (err.contains('407') || err.contains('auth') || err.contains('denied')) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: TText('Wrong password — try again'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            continue; // loop back to credentials prompt
           }
+        }
+        break; // auth succeeded or no error
+      }
+
+      // Step 4: Derive proxy name from bump cert issuer when intercepted;
+      // otherwise default to sequential "Proxy 1", "Proxy 2", ... (never raw IP/host).
+      final existingNameList = proxyListGroup.allProxies.map((p) => p.name).toList();
+      final suggestedName = suggestDetectedProxyName(
+        certResult: certResult,
+        existingNames: existingNameList,
+      );
+
+      // Widget may have unmounted during the credential prompt / cert check
+      // above (desktop window close or hot-restart). Guard before using context.
+      if (!mounted) return;
+
+      // Step 5: Let user confirm or override the name (no duplicates)
+      final existingNamesLower =
+          existingNameList.map((n) => n.trim().toLowerCase()).toSet();
+      final confirmedName = await showDialog<String>(
+        context: context,
+        builder: (_) => _NameProxyDialog(
+          initialName: suggestedName,
+          existingNamesLower: existingNamesLower,
+        ),
+      );
+      if (confirmedName == null || confirmedName.isEmpty) return;
+
+      // Step 6: Add each selected proxy with deduplicated names and PAC URL preserved
+      final takenLower = Set<String>.from(existingNamesLower);
+      final addedNames = <String>[];
+      for (final p in selection.proxies) {
+        final proxyName = uniqueProxyName(confirmedName, takenLower);
+        addedNames.add(proxyName);
+        final effectivePacUrl = p.isPacOnly
+            ? (p.pacUrl.isNotEmpty ? p.pacUrl : selection.pacUrl)
+            : (selection.attachPac
+                ? (p.pacUrl.isNotEmpty ? p.pacUrl : selection.pacUrl)
+                : '');
+
+        await widget.coreManager.addProxy({
+          'name': proxyName,
+          'type': p.type,
+          'server': p.isPacOnly ? '' : p.host.trim(),
+          'port': p.isPacOnly ? 0 : (int.tryParse(p.port) ?? 8080),
+          if (effectivePacUrl.isNotEmpty) 'pacUrl': effectivePacUrl,
+          if (creds.username.trim().isNotEmpty) 'username': creds.username.trim(),
+          if (creds.password.isNotEmpty) 'password': creds.password,
+          if (creds.passwordMode.isNotEmpty) 'passwordMode': creds.passwordMode,
+          if (creds.passwordMode == 'timed' && creds.ttlMinutes > 0)
+            'passwordTTLMinutes': creds.ttlMinutes,
+        });
+      }
+      await refreshProxyList();
+      if (mounted) {
+        final summary = addedNames.length == 1
+            ? tl(context, 'Added proxy "{name}"')
+                .replaceAll('{name}', addedNames.first)
+            : tl(context, 'Added {count} proxies')
+                .replaceAll('{count}', '${addedNames.length}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(summary)),
+        );
+        // Show SSL interception info if detected
+        if (certResult != null && certResult.intercepted && certProbeProxy != null) {
+          _checkCertForProxy(certProbeProxy, creds, precheckedCert: certResult);
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Detection failed: $e'),
+            content: Text('${tl(context, 'Detection failed')}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1519,6 +1683,324 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         });
       }
     }
+  }
+}
+
+/// Extracts a human-friendly organization/CA name from an SSL bump cert's
+/// issuer DN (`O=` preferred, then `CN=`), rejecting empty, generic, or raw
+/// IP/host values. Returns `null` when no usable name is available.
+String? _extractBumpCertName(CertCheckResult? certResult) {
+  if (certResult == null || !certResult.intercepted) return null;
+  final issuer = certResult.issuer.trim();
+  if (issuer.isEmpty) return null;
+
+  String? extractAttr(String key) {
+    // Match `O=...` or `CN=...` at start or after comma/whitespace, handling
+    // RFC 2253 escaped commas (`\,`) and optional surrounding quotes.
+    final re = RegExp('(?:^|[,;\\s])$key=((?:\\\\.|[^,;])+)', caseSensitive: false);
+    final match = re.firstMatch(issuer);
+    if (match == null) return null;
+    var val = match.group(1)!.trim();
+    val = val.replaceAll(r'\,', ',').replaceAll(r'\"', '"');
+    if (val.length >= 2 && val.startsWith('"') && val.endsWith('"')) {
+      val = val.substring(1, val.length - 1).trim();
+    }
+    return val;
+  }
+
+  bool isUsableName(String? raw) {
+    if (raw == null) return false;
+    final v = raw.trim();
+    if (v.isEmpty) return false;
+    final lower = v.toLowerCase();
+    const generic = {
+      'localhost',
+      'unknown',
+      'default',
+      'none',
+      'n/a',
+      'untitled',
+      'proxy',
+    };
+    if (generic.contains(lower)) return false;
+    // Reject bare IPv4 addresses or IPv6 / host:port literals.
+    if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}(:\d+)?$').hasMatch(v)) return false;
+    if (v.contains(':')) return false;
+    return true;
+  }
+
+  final org = extractAttr('O');
+  if (isUsableName(org)) return org!.trim();
+
+  final cn = extractAttr('CN');
+  if (isUsableName(cn)) return cn!.trim();
+
+  return null;
+}
+
+/// Returns the next unused sequential default proxy name (`Proxy 1`, `Proxy 2`,
+/// ...) compared case-insensitively against [existingNames].
+String nextDefaultProxyName(Iterable<String> existingNames) {
+  final taken = existingNames.map((n) => n.trim().toLowerCase()).toSet();
+  var index = 1;
+  while (taken.contains('proxy $index')) {
+    index++;
+  }
+  return 'Proxy $index';
+}
+
+/// Deduplicates [base] against [takenLower] (updating [takenLower] in place).
+/// If [base] already ends with a number (e.g. `Proxy 1`), increments the number
+/// (`Proxy 2`, `Proxy 3`, ...) instead of appending ` 2` (`Proxy 1 2`).
+String uniqueProxyName(String base, Set<String> takenLower) {
+  final trimmed = base.trim();
+  final candidate = trimmed.isEmpty ? 'Proxy 1' : trimmed;
+  if (takenLower.add(candidate.toLowerCase())) {
+    return candidate;
+  }
+
+  final numbered = RegExp(r'^(.*?\s)(\d+)$').firstMatch(candidate);
+  if (numbered != null) {
+    final prefix = numbered.group(1)!;
+    var num = int.tryParse(numbered.group(2)!) ?? 1;
+    while (true) {
+      num++;
+      final next = '$prefix$num';
+      if (takenLower.add(next.toLowerCase())) return next;
+    }
+  }
+
+  var suffix = 2;
+  while (true) {
+    final next = '$candidate $suffix';
+    if (takenLower.add(next.toLowerCase())) return next;
+    suffix++;
+  }
+}
+
+/// Computes the default name for a newly auto-detected proxy:
+/// 1. If SSL interception (bump cert) was detected and exposes a usable `O=` or
+///    `CN=`, uses that name (deduplicated against [existingNames]).
+/// 2. Otherwise falls back to sequential `Proxy 1`, `Proxy 2`, ... — never the
+///    raw server IP or hostname.
+String suggestDetectedProxyName({
+  CertCheckResult? certResult,
+  required Iterable<String> existingNames,
+}) {
+  final certName = _extractBumpCertName(certResult);
+  if (certName != null) {
+    final taken = existingNames.map((n) => n.trim().toLowerCase()).toSet();
+    return uniqueProxyName(certName, taken);
+  }
+  return nextDefaultProxyName(existingNames);
+}
+
+class _DetectedProxySelection {
+  final List<DetectedProxy> proxies;
+  final bool attachPac;
+  final String pacUrl;
+
+  const _DetectedProxySelection({
+    required this.proxies,
+    required this.attachPac,
+    required this.pacUrl,
+  });
+}
+
+class _CredentialsDialog extends StatefulWidget {
+  final DetectedProxy proxy;
+  const _CredentialsDialog({required this.proxy});
+
+  @override
+  State<_CredentialsDialog> createState() => _CredentialsDialogState();
+}
+
+class _CredentialsDialogState extends State<_CredentialsDialog> {
+  final _usernameCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _ttlCtrl = TextEditingController(text: '60');
+  String _passwordMode = 'persistent';
+  int _ttlMinutes = 60;
+
+  @override
+  void dispose() {
+    _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
+    _ttlCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    Navigator.pop(
+      context,
+      _ProxyCredentials(
+        username: _usernameCtrl.text,
+        password: _passwordCtrl.text,
+        passwordMode: _passwordMode,
+        ttlMinutes: _ttlMinutes,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.proxy.isPacOnly
+            ? tl(context, 'Credentials for PAC proxy')
+            : '${tl(context, 'Credentials')}: ${widget.proxy.displayName}',
+      ),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _usernameCtrl,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: tl(context, 'Username'),
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordCtrl,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: tl(context, 'Password'),
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _passwordMode,
+              decoration: InputDecoration(
+                labelText: tl(context, 'Password type'),
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'persistent', child: TText('Persistent (saved)')),
+                DropdownMenuItem(value: 'timed', child: TText('Timed (expires)')),
+                DropdownMenuItem(value: 'one-time', child: TText('One-time (cleared after use)')),
+              ],
+              onChanged: (v) => setState(() => _passwordMode = v!),
+            ),
+            if (_passwordMode == 'timed') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _ttlCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: tl(context, 'Expires after (minutes)'),
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (v) => _ttlMinutes = int.tryParse(v) ?? 60,
+              ),
+            ],
+            const SizedBox(height: 8),
+            const TText(
+              'Leave empty if the proxy does not require authentication.',
+              style: TextStyle(fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const TText('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const TText('Continue'),
+        ),
+      ],
+    );
+  }
+}
+
+class _NameProxyDialog extends StatefulWidget {
+  final String initialName;
+  final Set<String> existingNamesLower;
+  const _NameProxyDialog({
+    required this.initialName,
+    required this.existingNamesLower,
+  });
+
+  @override
+  State<_NameProxyDialog> createState() => _NameProxyDialogState();
+}
+
+class _NameProxyDialogState extends State<_NameProxyDialog> {
+  late final TextEditingController _nameCtrl;
+  String? _nameError;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  void _validate(String v) {
+    final trimmed = v.trim().toLowerCase();
+    setState(() {
+      if (trimmed.isEmpty) {
+        _nameError = tl(context, 'Name cannot be empty');
+      } else if (widget.existingNamesLower.contains(trimmed)) {
+        _nameError = tl(context, 'A proxy with this name already exists');
+      } else {
+        _nameError = null;
+      }
+    });
+  }
+
+  void _submit() {
+    final trimmed = _nameCtrl.text.trim();
+    if (_nameError == null && trimmed.isNotEmpty) {
+      Navigator.pop(context, trimmed);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const TText('Name this proxy'),
+      content: TextField(
+        controller: _nameCtrl,
+        decoration: InputDecoration(
+          labelText: tl(context, 'Proxy name'),
+          hintText: tl(context, 'e.g. Office, School, Home'),
+          errorText: _nameError,
+        ),
+        autofocus: true,
+        onChanged: _validate,
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const TText('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _nameError == null && _nameCtrl.text.trim().isNotEmpty
+              ? _submit
+              : null,
+          child: const TText('Add'),
+        ),
+      ],
+    );
   }
 }
 
