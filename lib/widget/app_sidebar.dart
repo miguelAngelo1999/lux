@@ -249,49 +249,64 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hoveredIndex = index),
-        onExit: (_) {
-          if (_hoveredIndex == index) setState(() => _hoveredIndex = null);
-        },
-        child: GestureDetector(
-          key: Key('sidebar-tab-${tab.label.toLowerCase()}'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => widget.onSelected(index),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: bg,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hoveredIndex = index),
+          onExit: (_) {
+            if (_hoveredIndex == index) setState(() => _hoveredIndex = null);
+          },
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              key: Key('sidebar-tab-${tab.label.toLowerCase()}'),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: selected ? tokens.activeNavBorder : Colors.transparent,
-                width: 0.75,
-              ),
-            ),
-            child: Row(
-              children: [
-                LuxIcon(
-                  tab.glyph,
-                  size: 15,
-                  strokeWidth: 1.35,
-                  color: selected ? tokens.cobalt : tokens.textSecondary,
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: TText(
-                    tab.label,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-                      color: selected ? tokens.textPrimary : tokens.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+              hoverColor: Colors.transparent,
+              splashColor: tokens.cobalt.withValues(alpha: 0.08),
+              highlightColor: tokens.subtlePillBg,
+              onTap: () => widget.onSelected(index),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color:
+                        selected ? tokens.activeNavBorder : Colors.transparent,
+                    width: 0.75,
                   ),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    LuxIcon(
+                      tab.glyph,
+                      size: 15,
+                      strokeWidth: 1.35,
+                      color: selected ? tokens.cobalt : tokens.textSecondary,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: TText(
+                        tab.label,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight:
+                              selected ? FontWeight.w500 : FontWeight.w400,
+                          color: selected
+                              ? tokens.textPrimary
+                              : tokens.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

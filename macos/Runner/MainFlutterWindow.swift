@@ -3,6 +3,19 @@ import FlutterMacOS
 import window_manager
 import LaunchAtLogin
 
+/// Passive behind-window vibrancy backdrop that never intercepts mouse events.
+private final class PassThroughVisualEffectView: NSVisualEffectView {
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
+}
+
+/// Passive macOS 26+ Liquid Glass sidebar backdrop that never intercepts clicks.
+@available(macOS 26.0, *)
+private final class PassThroughGlassEffectView: NSGlassEffectView {
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
+}
+
 class MainFlutterWindow: NSWindow {
 
   private var quickEditChannel: FlutterMethodChannel?
@@ -230,58 +243,53 @@ class MainFlutterWindow: NSWindow {
   }
 
   private func setupWindowSurface(for controller: FlutterViewController) {
-    guard let hostView = self.contentView else { return }
-    let flutterView = controller.view
+    // CRITICAL: Keep `self.contentViewController = controller` intact!
+    // Replacing `self.contentView` detaches `contentViewController` (nil), which
+    // breaks FlutterViewController's AppKit lifecycle (`viewWillAppear` /
+    // `configureTrackingArea`) and stops pointer/click events from reaching
+    // Flutter. Instead, insert passive pass-through backdrop views directly
+    // inside `controller.view` positioned strictly BELOW `FlutterView`.
+    let wrapper = controller.view
+    let flutterMetalView = wrapper.subviews.first
 
-    // Wrap the Flutter view inside a container so native behind-window glass
-    // layers sit deterministically below the transparent Flutter metal surface.
-    let container = NSView(frame: hostView.bounds)
-    container.autoresizingMask = [.width, .height]
-
-    let baseBackdrop = NSVisualEffectView(frame: container.bounds)
+    let baseBackdrop = PassThroughVisualEffectView(frame: wrapper.bounds)
     baseBackdrop.autoresizingMask = [.width, .height]
     baseBackdrop.material = .underWindowBackground
     baseBackdrop.blendingMode = .behindWindow
     baseBackdrop.state = .followsWindowActiveState
-    container.addSubview(baseBackdrop)
+    wrapper.addSubview(baseBackdrop, positioned: .below, relativeTo: flutterMetalView)
     self.windowBackdropView = baseBackdrop
 
     let sidebarView: NSView
     if #available(macOS 26.0, *) {
-      let glass = NSGlassEffectView(frame: .zero)
+      let glass = PassThroughGlassEffectView(frame: .zero)
       glass.style = .regular
       glass.cornerRadius = 14
       glass.translatesAutoresizingMaskIntoConstraints = false
-      container.addSubview(glass)
+      wrapper.addSubview(glass, positioned: .below, relativeTo: flutterMetalView)
       NSLayoutConstraint.activate([
-        glass.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
-        glass.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
-        glass.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+        glass.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 8),
+        glass.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 8),
+        glass.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -8),
         glass.widthAnchor.constraint(equalToConstant: 164),
       ])
       sidebarView = glass
     } else {
-      let vibrancy = NSVisualEffectView(frame: .zero)
+      let vibrancy = PassThroughVisualEffectView(frame: .zero)
       vibrancy.material = .sidebar
       vibrancy.blendingMode = .behindWindow
       vibrancy.state = .followsWindowActiveState
       vibrancy.translatesAutoresizingMaskIntoConstraints = false
-      container.addSubview(vibrancy)
+      wrapper.addSubview(vibrancy, positioned: .below, relativeTo: flutterMetalView)
       NSLayoutConstraint.activate([
-        vibrancy.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-        vibrancy.topAnchor.constraint(equalTo: container.topAnchor),
-        vibrancy.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        vibrancy.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
+        vibrancy.topAnchor.constraint(equalTo: wrapper.topAnchor),
+        vibrancy.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
         vibrancy.widthAnchor.constraint(equalToConstant: 176),
       ])
       sidebarView = vibrancy
     }
     self.sidebarBackdropView = sidebarView
-
-    // Keep Flutter view filling the container on top of the native backdrop.
-    flutterView.frame = container.bounds
-    flutterView.autoresizingMask = [.width, .height]
-    container.addSubview(flutterView)
-    self.contentView = container
 
     refreshSurfaceTransparency()
   }
