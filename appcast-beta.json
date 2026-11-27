@@ -1,17 +1,17 @@
 {
-  "version": "1.50.136",
+  "version": "1.50.137",
   "channel": "beta",
-  "notes": "fix(updater): remove duplicate SnackBar and behind-modal progress bars + double percentage",
+  "notes": "feat(detect): robust PAC/proxy auto-detection UI and Proxy 1 default naming",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "59f69ab3d9039c75d19e4dec90026e67521da1200e91be76c54e3d3d9ea3a896",
-    "size": 46100614,
-    "version": "1.50.136"
+    "sha256": "53cf3b90aa98f317b169cdd3bbad586415cc2e02b8c2aa7d555c7ef64e8c10a7",
+    "size": 46323965,
+    "version": "1.50.137"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "4ab9ad735bad4454c22ba40da831c189c62563787b69053a8f57c1e7c46d5f52",
-    "size": 41860630,
-    "version": "1.50.136"
+    "sha256": "a92c34cc7a18d5665876146af0222861e8739276be9b62a44f9ad3ff4cc6b4d3",
+    "size": 42020523,
+    "version": "1.50.137"
   }
 }
