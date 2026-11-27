@@ -6,13 +6,59 @@ import LaunchAtLogin
 class MainFlutterWindow: NSWindow {
 
   private var quickEditChannel: FlutterMethodChannel?
+  private var surfaceChannel: FlutterMethodChannel?
   private var quickEditPanel: NSPanel?
+  private var windowBackdropView: NSVisualEffectView?
+  private var sidebarBackdropView: NSView?
+  private var flutterVC: FlutterViewController?
+  private var accessibilityObserver: NSObjectProtocol?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
+    self.flutterVC = flutterViewController
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+
+    // Configure native macOS glass/vibrancy surface with graceful fallback
+    // for macOS 12-15 (NSVisualEffectView) and Reduce Transparency (opaque).
+    setupWindowSurface(for: flutterViewController)
+
+    // Window surface channel: reports live capability tier to Flutter and
+    // syncs NSAppearance when the user picks Light/Dark/System in Lux.
+    let surfChannel = FlutterMethodChannel(
+      name: "lux_window_surface",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    self.surfaceChannel = surfChannel
+    surfChannel.setMethodCallHandler { [weak self] (call, result) in
+      guard let self = self else {
+        result("opaque")
+        return
+      }
+      switch call.method {
+      case "getSurfaceTier":
+        result(self.currentSurfaceTier())
+      case "setAppearance":
+        let mode = (call.arguments as? [String: Any])?["mode"] as? String ?? "system"
+        DispatchQueue.main.async {
+          self.applyWindowAppearance(mode)
+        }
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      guard let self = self else { return }
+      self.refreshSurfaceTransparency()
+      self.surfaceChannel?.invokeMethod("onSurfaceTierChanged", arguments: self.currentSurfaceTier())
+    }
 
     // LaunchAtLogin channel
     FlutterMethodChannel(
@@ -152,5 +198,108 @@ class MainFlutterWindow: NSWindow {
   override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
     super.order(place, relativeTo: otherWin)
     hiddenWindowAtLaunch()
+  }
+
+  deinit {
+    if let obs = accessibilityObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(obs)
+    }
+  }
+
+  // MARK: - Native macOS Liquid Glass / Vibrancy surface
+
+  private func currentSurfaceTier() -> String {
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+      return "opaque"
+    }
+    if #available(macOS 26.0, *) {
+      return "liquid_glass"
+    }
+    return "vibrancy"
+  }
+
+  private func applyWindowAppearance(_ mode: String) {
+    switch mode {
+    case "dark":
+      self.appearance = NSAppearance(named: .darkAqua)
+    case "light":
+      self.appearance = NSAppearance(named: .aqua)
+    default:
+      self.appearance = nil
+    }
+  }
+
+  private func setupWindowSurface(for controller: FlutterViewController) {
+    guard let hostView = self.contentView else { return }
+    let flutterView = controller.view
+
+    // Wrap the Flutter view inside a container so native behind-window glass
+    // layers sit deterministically below the transparent Flutter metal surface.
+    let container = NSView(frame: hostView.bounds)
+    container.autoresizingMask = [.width, .height]
+
+    let baseBackdrop = NSVisualEffectView(frame: container.bounds)
+    baseBackdrop.autoresizingMask = [.width, .height]
+    baseBackdrop.material = .underWindowBackground
+    baseBackdrop.blendingMode = .behindWindow
+    baseBackdrop.state = .followsWindowActiveState
+    container.addSubview(baseBackdrop)
+    self.windowBackdropView = baseBackdrop
+
+    let sidebarView: NSView
+    if #available(macOS 26.0, *) {
+      let glass = NSGlassEffectView(frame: .zero)
+      glass.style = .regular
+      glass.cornerRadius = 14
+      glass.translatesAutoresizingMaskIntoConstraints = false
+      container.addSubview(glass)
+      NSLayoutConstraint.activate([
+        glass.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+        glass.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
+        glass.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+        glass.widthAnchor.constraint(equalToConstant: 164),
+      ])
+      sidebarView = glass
+    } else {
+      let vibrancy = NSVisualEffectView(frame: .zero)
+      vibrancy.material = .sidebar
+      vibrancy.blendingMode = .behindWindow
+      vibrancy.state = .followsWindowActiveState
+      vibrancy.translatesAutoresizingMaskIntoConstraints = false
+      container.addSubview(vibrancy)
+      NSLayoutConstraint.activate([
+        vibrancy.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+        vibrancy.topAnchor.constraint(equalTo: container.topAnchor),
+        vibrancy.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        vibrancy.widthAnchor.constraint(equalToConstant: 176),
+      ])
+      sidebarView = vibrancy
+    }
+    self.sidebarBackdropView = sidebarView
+
+    // Keep Flutter view filling the container on top of the native backdrop.
+    flutterView.frame = container.bounds
+    flutterView.autoresizingMask = [.width, .height]
+    container.addSubview(flutterView)
+    self.contentView = container
+
+    refreshSurfaceTransparency()
+  }
+
+  private func refreshSurfaceTransparency() {
+    let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+    if reduced {
+      self.isOpaque = true
+      self.backgroundColor = .windowBackgroundColor
+      self.flutterVC?.backgroundColor = .windowBackgroundColor
+      self.windowBackdropView?.isHidden = true
+      self.sidebarBackdropView?.isHidden = true
+    } else {
+      self.isOpaque = false
+      self.backgroundColor = .clear
+      self.flutterVC?.backgroundColor = .clear
+      self.windowBackdropView?.isHidden = false
+      self.sidebarBackdropView?.isHidden = false
+    }
   }
 }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:lux/theme.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/pac_rules_dialog.dart';
 import 'package:lux/widget/password_peek_dialog.dart';
 import 'package:lux/widget/proxy_item_action_menu.dart';
@@ -94,6 +96,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
   String _effectivePasswordMode = 'persistent';
   bool _detailLoaded = false;
   bool _credentialsExpanded = false;
+  List<String> _recentUsernames = const [];
 
   /// A PAC-only proxy has a PAC URL and no fixed server, so a latency test to a
   /// single upstream is meaningless — show "PAC — n/a" instead of a red fail.
@@ -208,6 +211,35 @@ class _ProxyListItemState extends State<ProxyListItem> {
     _usernameCtrl.text = widget.item.username ?? '';
     // Never load a stored password into _passwordCtrl.
     _passwordCtrl.clear();
+    _loadRecentUsernames();
+  }
+
+  Future<void> _loadRecentUsernames() async {
+    if (!_supportsCredentials) return;
+    final list = await readRecentUsernames(widget.item.id);
+    if (!mounted) return;
+    if (list.isNotEmpty) {
+      setState(() => _recentUsernames = list);
+    }
+  }
+
+  void _pickRecentUsername(String username) {
+    final changed = _usernameCtrl.text.trim() != username;
+    setState(() {
+      _usernameCtrl.text = username;
+      _usernameDirty = true;
+    });
+    if (changed) {
+      // Swapping to another account on a shared laptop -> immediately open &
+      // focus the password box so they just type their password and hit Enter.
+      if (_isLockedView) {
+        _startRetype();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _passwordFocus.requestFocus();
+        });
+      }
+    }
   }
 
   void _attachSelectedController() {
@@ -315,6 +347,13 @@ class _ProxyListItemState extends State<ProxyListItem> {
       }
 
       await widget.coreManager!.updateProxy(widget.item.id, updated);
+      if (trimmedUsername.isNotEmpty) {
+        final updatedRecent =
+            await recordRecentUsername(widget.item.id, trimmedUsername);
+        if (mounted) {
+          _recentUsernames = updatedRecent;
+        }
+      }
       if (!mounted) return;
       final savedNewPassword = _retyping && _passwordCtrl.text.isNotEmpty;
       setState(() {
@@ -555,41 +594,54 @@ class _ProxyListItemState extends State<ProxyListItem> {
 
   // ── test result chip (separate from the Test button — Option B) ──────────
   Widget _resultChip(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final tokens = LuxTokens.of(context);
     Color fg, bg;
     String text;
     bool tappable = false;
-    IconData? icon;
+    LuxGlyph glyph;
     switch (_state) {
       case TestState.untested:
         return const SizedBox.shrink(); // nothing until tested
       case TestState.testing:
-        return const SizedBox(
-          width: 12, height: 12,
-          child: CircularProgressIndicator(strokeWidth: 1.6),
+        return SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.4,
+            color: tokens.cobalt,
+          ),
         );
       case TestState.reachable:
-        fg = Colors.green; bg = Colors.green.withAlpha(28);
-        icon = Icons.check_circle_outline;
+        fg = _pacReachable ? tokens.teal : tokens.emerald;
+        bg = fg.withValues(alpha: 0.11);
+        glyph = LuxGlyph.check;
         text = _pacReachable ? 'PAC OK' : '$_latencyMs ms';
         if (_pacReachable) tappable = true;
         break;
       case TestState.unreachable:
-        fg = cs.error; bg = cs.error.withAlpha(28);
-        icon = Icons.error_outline; text = tl(context, 'Unreachable');
+        fg = tokens.danger;
+        bg = fg.withValues(alpha: 0.11);
+        glyph = LuxGlyph.alertCircle;
+        text = tl(context, 'Unreachable');
         break;
       case TestState.authError:
-        fg = const Color(0xFFE05638); bg = const Color(0x22E05638);
-        icon = Icons.lock_outline; text = tl(context, 'Invalid username or password');
+        fg = tokens.danger;
+        bg = fg.withValues(alpha: 0.11);
+        glyph = LuxGlyph.lock;
+        text = tl(context, 'Invalid username or password');
         break;
       case TestState.certError:
-        fg = const Color(0xFFE0A31E); bg = const Color(0x22E0A31E);
-        icon = Icons.gpp_maybe_outlined; text = tl(context, 'Certificate Untrusted');
+        fg = tokens.amber;
+        bg = fg.withValues(alpha: 0.12);
+        glyph = LuxGlyph.shieldAlert;
+        text = tl(context, 'Certificate Untrusted');
         tappable = true;
         break;
       case TestState.notApplicable:
-        fg = cs.outline; bg = Colors.transparent;
-        icon = Icons.info_outline; text = tl(context, 'PAC — n/a');
+        fg = tokens.textMuted;
+        bg = tokens.subtlePillBg;
+        glyph = LuxGlyph.route;
+        text = tl(context, 'PAC — n/a');
         tappable = true;
         break;
     }
@@ -614,11 +666,17 @@ class _ProxyListItemState extends State<ProxyListItem> {
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: fg.withValues(alpha: 0.18), width: 0.75),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 12, color: fg),
+          LuxIcon(glyph, size: 11.5, color: fg),
           const SizedBox(width: 4),
-          Text(text, style: TextStyle(fontSize: 10.5, color: fg)),
+          Text(
+            text,
+            style: _state == TestState.reachable && !_pacReachable
+                ? luxMonoStyle(fontSize: 10.5, color: fg)
+                : TextStyle(fontSize: 10.5, fontWeight: FontWeight.w400, color: fg),
+          ),
         ]),
       ),
     );
@@ -640,27 +698,20 @@ class _ProxyListItemState extends State<ProxyListItem> {
     BuildContext context, {
     Key? boxKey,
     FocusNode? focusNode,
-    required IconData prefixIcon,
+    required LuxGlyph prefixGlyph,
     required Widget child,
     Widget? trailing,
     bool isAuthError = false,
   }) {
-    final cs = Theme.of(context).colorScheme;
+    final tokens = LuxTokens.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const authErrorColor = Color(0xFFE05638);
     final fillColor = isDark
-        ? (widget.selected
-            ? Colors.black.withValues(alpha: 0.22)
-            : Colors.white.withValues(alpha: 0.04))
-        : (widget.selected
-            ? Colors.black.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.02));
+        ? Colors.black.withValues(alpha: 0.24)
+        : Colors.white.withValues(alpha: 0.85);
     final baseBorderColor = isAuthError
-        ? authErrorColor.withValues(alpha: 0.75)
-        : (isDark
-            ? Colors.white.withValues(alpha: 0.12)
-            : Colors.black.withValues(alpha: 0.14));
-    final focusBorderColor = isAuthError ? authErrorColor : cs.primary;
+        ? tokens.danger.withValues(alpha: 0.7)
+        : tokens.hairlineStrong;
+    final focusBorderColor = isAuthError ? tokens.danger : tokens.cobalt;
 
     Widget buildShell(bool hasFocus) {
       return SizedBox(
@@ -669,10 +720,10 @@ class _ProxyListItemState extends State<ProxyListItem> {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: fillColor,
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: hasFocus ? focusBorderColor : baseBorderColor,
-              width: 1,
+              width: hasFocus ? 1.0 : 0.75,
             ),
           ),
           child: Row(
@@ -681,7 +732,11 @@ class _ProxyListItemState extends State<ProxyListItem> {
                 width: 30,
                 height: 34,
                 child: Center(
-                  child: Icon(prefixIcon, size: 15, color: cs.onSurfaceVariant),
+                  child: LuxIcon(
+                    prefixGlyph,
+                    size: 13.5,
+                    color: tokens.textMuted,
+                  ),
                 ),
               ),
               Expanded(child: child),
@@ -705,12 +760,13 @@ class _ProxyListItemState extends State<ProxyListItem> {
     BuildContext context, {
     required String hintText,
   }) {
-    final cs = Theme.of(context).colorScheme;
+    final tokens = LuxTokens.of(context);
     return InputDecoration(
       hintText: hintText,
       hintStyle: TextStyle(
         fontSize: 12,
-        color: cs.onSurfaceVariant.withValues(alpha: 0.65),
+        fontWeight: FontWeight.w400,
+        color: tokens.textMuted,
       ),
       border: InputBorder.none,
       enabledBorder: InputBorder.none,
@@ -721,27 +777,109 @@ class _ProxyListItemState extends State<ProxyListItem> {
   }
 
   Widget _credentialsToggleButton(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final mutedColor = isDark ? Colors.white54 : cs.onSurfaceVariant;
+    final tokens = LuxTokens.of(context);
 
     return Tooltip(
       message: tl(context, 'Credentials'),
       child: InkWell(
         key: Key('credentials-toggle-${widget.item.id}'),
-        borderRadius: BorderRadius.circular(6),
-        hoverColor: cs.onSurface.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(7),
         onTap: _toggleCredentialsExpanded,
+        child: Container(
+          height: 26,
+          padding: EdgeInsets.symmetric(horizontal: _credentialsExpanded ? 7 : 6),
+          decoration: BoxDecoration(
+            color: _credentialsExpanded
+                ? tokens.cobalt.withValues(alpha: 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: _credentialsExpanded
+                  ? tokens.cobalt.withValues(alpha: 0.28)
+                  : Colors.transparent,
+              width: 0.75,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LuxIcon(
+                LuxGlyph.key,
+                size: 13.5,
+                color: _credentialsExpanded ? tokens.cobalt : tokens.textMuted,
+              ),
+              if (_credentialsExpanded) ...[
+                const SizedBox(width: 3),
+                LuxIcon(
+                  LuxGlyph.chevronUp,
+                  size: 11.5,
+                  color: tokens.cobalt,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget? _buildUsernameHistoryDropdown(BuildContext context, LuxTokens tokens) {
+    final current = _usernameCtrl.text.trim();
+    final options = <String>[
+      ..._recentUsernames,
+      if (current.isNotEmpty && !_recentUsernames.contains(current)) current,
+    ];
+    if (options.isEmpty) return null;
+
+    return Tooltip(
+      message: tl(context, 'Switch user'),
+      child: PopupMenuButton<String>(
+        key: Key('inline-username-history-${widget.item.id}'),
+        tooltip: '',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 160),
+        onSelected: _pickRecentUsername,
+        itemBuilder: (ctx) => [
+          for (final user in options)
+            PopupMenuItem<String>(
+              value: user,
+              height: 34,
+              child: Row(
+                children: [
+                  LuxIcon(
+                    LuxGlyph.person,
+                    size: 13,
+                    color: user == current ? tokens.cobalt : tokens.textMuted,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      user,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            user == current ? FontWeight.w500 : FontWeight.w400,
+                        color: tokens.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (user == current) ...[
+                    const SizedBox(width: 6),
+                    LuxIcon(LuxGlyph.check, size: 12, color: tokens.cobalt),
+                  ],
+                ],
+              ),
+            ),
+        ],
         child: SizedBox(
-          width: 28,
-          height: 28,
+          width: 26,
+          height: 34,
           child: Center(
-            child: Icon(
-              _credentialsExpanded
-                  ? Icons.keyboard_arrow_up_rounded
-                  : Icons.key_rounded,
-              size: 16,
-              color: mutedColor,
+            child: LuxIcon(
+              LuxGlyph.chevronDown,
+              size: 12.5,
+              color: tokens.textMuted,
             ),
           ),
         ),
@@ -750,25 +888,28 @@ class _ProxyListItemState extends State<ProxyListItem> {
   }
 
   Widget _buildInlineCredentialsStrip(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tokens = LuxTokens.of(context);
     final item = widget.item;
     final isAuthError = _state == TestState.authError;
-    const authErrorColor = Color(0xFFE05638);
-    const accentBlue = Color(0xFF2563EB);
 
     final usernameField = _inlineFieldShell(
       context,
       focusNode: _usernameFocus,
-      prefixIcon: Icons.person_outline,
+      prefixGlyph: LuxGlyph.person,
       isAuthError: isAuthError,
+      trailing: _buildUsernameHistoryDropdown(context, tokens),
       child: SizedBox(
         height: 34,
         child: TextField(
           key: Key('inline-username-${item.id}'),
           controller: _usernameCtrl,
           focusNode: _usernameFocus,
-          style: const TextStyle(fontSize: 12.5, height: 1.2),
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.2,
+            fontWeight: FontWeight.w400,
+            color: tokens.textPrimary,
+          ),
           textAlignVertical: TextAlignVertical.center,
           maxLines: 1,
           expands: false,
@@ -787,13 +928,17 @@ class _ProxyListItemState extends State<ProxyListItem> {
         ? _inlineFieldShell(
             context,
             boxKey: Key('inline-password-locked-${item.id}'),
-            prefixIcon: Icons.lock_outline,
+            prefixGlyph: LuxGlyph.lock,
             isAuthError: isAuthError,
-            child: const Align(
+            child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 '••••••••••••',
-                style: TextStyle(fontSize: 12.5, letterSpacing: 1.5),
+                style: TextStyle(
+                  fontSize: 12,
+                  letterSpacing: 1.4,
+                  color: tokens.textSecondary,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -823,10 +968,10 @@ class _ProxyListItemState extends State<ProxyListItem> {
                           width: 28,
                           height: 34,
                           child: Center(
-                            child: Icon(
-                              Icons.visibility_outlined,
-                              size: 15,
-                              color: cs.onSurfaceVariant,
+                            child: LuxIcon(
+                              LuxGlyph.eye,
+                              size: 13.5,
+                              color: tokens.textMuted,
                             ),
                           ),
                         ),
@@ -837,13 +982,17 @@ class _ProxyListItemState extends State<ProxyListItem> {
                   key: Key('inline-retype-${item.id}'),
                   onPressed: _startRetype,
                   style: TextButton.styleFrom(
+                    foregroundColor: tokens.textSecondary,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: const Size(0, 34),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: Text(
                     tl(context, 'Retype'),
-                    style: const TextStyle(fontSize: 11),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ),
               ],
@@ -852,7 +1001,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
         : _inlineFieldShell(
             context,
             focusNode: _passwordFocus,
-            prefixIcon: Icons.lock_outline,
+            prefixGlyph: LuxGlyph.lock,
             isAuthError: isAuthError,
             child: SizedBox(
               height: 34,
@@ -861,7 +1010,12 @@ class _ProxyListItemState extends State<ProxyListItem> {
                 controller: _passwordCtrl,
                 focusNode: _passwordFocus,
                 obscureText: _obscurePassword,
-                style: const TextStyle(fontSize: 12.5, height: 1.2),
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.2,
+                  fontWeight: FontWeight.w400,
+                  color: tokens.textPrimary,
+                ),
                 textAlignVertical: TextAlignVertical.center,
                 maxLines: 1,
                 expands: false,
@@ -887,12 +1041,10 @@ class _ProxyListItemState extends State<ProxyListItem> {
                     width: 30,
                     height: 34,
                     child: Center(
-                      child: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        size: 15,
-                        color: cs.onSurfaceVariant,
+                      child: LuxIcon(
+                        _obscurePassword ? LuxGlyph.eyeOff : LuxGlyph.eye,
+                        size: 13.5,
+                        color: tokens.textMuted,
                       ),
                     ),
                   ),
@@ -911,29 +1063,36 @@ class _ProxyListItemState extends State<ProxyListItem> {
             ? null
             : _saveAndTest,
         style: FilledButton.styleFrom(
-          backgroundColor: accentBlue,
+          backgroundColor: const Color(0xFF2563EB),
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 13),
           minimumSize: const Size(0, 34),
           maximumSize: const Size(double.infinity, 34),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         child: _isSavingCredentials
             ? const SizedBox(
-                width: 14,
-                height: 14,
+                width: 13,
+                height: 13,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2,
+                  strokeWidth: 1.6,
                   color: Colors.white,
                 ),
               )
-            : Text(
-                tl(context, 'Save & Test'),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const LuxIcon(LuxGlyph.check, size: 12.5, color: Colors.white),
+                  const SizedBox(width: 5),
+                  Text(
+                    tl(context, 'Save & Test'),
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
       ),
     );
@@ -944,19 +1103,17 @@ class _ProxyListItemState extends State<ProxyListItem> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          height: 1,
-          margin: const EdgeInsets.only(left: 36, right: 12),
+          height: 0.75,
+          margin: const EdgeInsets.only(left: 38, right: 14),
           color: isAuthError
-              ? authErrorColor.withValues(alpha: 0.35)
-              : (isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.08)),
+              ? tokens.danger.withValues(alpha: 0.32)
+              : tokens.hairline,
         ),
         Container(
           color: isAuthError
-              ? authErrorColor.withValues(alpha: 0.06)
+              ? tokens.danger.withValues(alpha: 0.05)
               : Colors.transparent,
-          padding: const EdgeInsets.fromLTRB(36, 8, 12, 10),
+          padding: const EdgeInsets.fromLTRB(38, 9, 14, 11),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -964,16 +1121,15 @@ class _ProxyListItemState extends State<ProxyListItem> {
               if (isAuthError) ...[
                 Row(
                   children: [
-                    const Icon(Icons.error_outline,
-                        size: 14, color: authErrorColor),
+                    LuxIcon(LuxGlyph.alertCircle, size: 13, color: tokens.danger),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         tl(context, 'Invalid username or password'),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: authErrorColor,
-                          fontWeight: FontWeight.w600,
+                          color: tokens.danger,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
@@ -1024,29 +1180,30 @@ class _ProxyListItemState extends State<ProxyListItem> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tokens = LuxTokens.of(context);
     final selected = widget.selected;
     final subtitleUsername = _usernameCtrl.text.trim();
-    final mutedSubtitleColor = isDark ? Colors.white54 : cs.onSurfaceVariant;
 
     final titleText = item.name.isNotEmpty
         ? item.name
         : '${item.server ?? ''}:${item.port ?? ''}';
 
     final headerRow = InkWell(
-      // Whole-row select — the core fix. Tapping anywhere that isn't an
-      // explicit action control (Test button / result chip / ⋯ menu)
-      // selects this proxy.
       onTap: widget.onSelect == null ? null : () => widget.onSelect!(item.id),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
         child: Row(children: [
-          // Leading radio (visual + keyboard; inherits the ancestor
-          // RadioGroup so Space/arrow keys still work).
-          Radio<String>(value: item.id),
-          const SizedBox(width: 4),
-          // Name + subtitle (part of the select surface)
+          // Leading radio (inherits ancestor RadioGroup for keyboard support).
+          Transform.scale(
+            scale: 0.85,
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: Radio<String>(value: item.id),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Name + metadata row
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1057,48 +1214,61 @@ class _ProxyListItemState extends State<ProxyListItem> {
                       titleText,
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+                        color: tokens.textPrimary,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (selected) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 7),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
+                          horizontal: 6, vertical: 1.5),
                       decoration: BoxDecoration(
-                        color: Colors.green.withAlpha(36),
-                        borderRadius: BorderRadius.circular(8),
+                        color: tokens.emerald.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(tl(context, 'Active'),
-                          style: const TextStyle(
-                              fontSize: 9, color: Colors.green)),
+                      child: Text(
+                        tl(context, 'Active'),
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w500,
+                          color: tokens.emerald,
+                        ),
+                      ),
                     ),
                   ],
                 ]),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Row(children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
+                        horizontal: 5.5, vertical: 1.5),
                     decoration: BoxDecoration(
-                      color: cs.secondaryContainer,
-                      borderRadius: BorderRadius.circular(3),
+                      color: tokens.subtlePillBg,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: tokens.hairline, width: 0.5),
                     ),
-                    child: Text(_typeLabel(item.type),
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: cs.onSecondaryContainer)),
+                    child: Text(
+                      _typeLabel(item.type),
+                      style: luxMonoStyle(
+                        fontSize: 9.5,
+                        color: tokens.textSecondary,
+                      ),
+                    ),
                   ),
                   if (item.server != null && item.server!.isNotEmpty) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 7),
                     Flexible(
-                      child: Text('${item.server}:${item.port}',
-                          style:
-                              TextStyle(fontSize: 10, color: cs.outline),
-                          overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        '${item.server}:${item.port}',
+                        style: luxMonoStyle(
+                          fontSize: 10.5,
+                          color: tokens.textMuted,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                   if (_supportsCredentials &&
@@ -1110,45 +1280,37 @@ class _ProxyListItemState extends State<ProxyListItem> {
                         cursor: SystemMouseCursors.click,
                         child: InkWell(
                           key: Key('subtitle-username-${item.id}'),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(6),
                           onTap: _toggleCredentialsExpanded,
-                          child: Padding(
+                          child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 2, vertical: 1),
-                            child: Text.rich(
-                              TextSpan(
-                                children: [
-                                  if (item.server != null &&
-                                      item.server!.isNotEmpty)
-                                    TextSpan(
-                                      text: '·  ',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        color: mutedSubtitleColor,
-                                      ),
-                                    ),
-                                  WidgetSpan(
-                                    alignment: PlaceholderAlignment.middle,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(right: 3),
-                                      child: Icon(
-                                        Icons.person_outline,
-                                        size: 12,
-                                        color: mutedSubtitleColor,
-                                      ),
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: subtitleUsername,
+                                horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: tokens.subtlePillBg,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                LuxIcon(
+                                  LuxGlyph.person,
+                                  size: 11,
+                                  color: tokens.textMuted,
+                                ),
+                                const SizedBox(width: 3),
+                                Flexible(
+                                  child: Text(
+                                    subtitleUsername,
                                     style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: mutedSubtitleColor,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w400,
+                                      color: tokens.textSecondary,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -1158,18 +1320,19 @@ class _ProxyListItemState extends State<ProxyListItem> {
                 ]),
                 if (_errorMessage.isNotEmpty &&
                     (_state == TestState.unreachable ||
-                     _state == TestState.authError ||
-                     _state == TestState.certError)) ...[
-                  const SizedBox(height: 2),
+                        _state == TestState.authError ||
+                        _state == TestState.certError)) ...[
+                  const SizedBox(height: 3),
                   Tooltip(
                     message: _errorMessage,
                     child: Text(
                       _errorMessage,
                       style: TextStyle(
-                        fontSize: 9.5,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
                         color: _state == TestState.certError
-                            ? const Color(0xFFE0A31E)
-                            : cs.error,
+                            ? tokens.amber
+                            : tokens.danger,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1183,73 +1346,82 @@ class _ProxyListItemState extends State<ProxyListItem> {
           if (widget.coreManager != null) ...[
             _resultChip(context),
             const SizedBox(width: 6),
-            // Explicit, labeled Trust button — only when the proxy is
-            // reachable but its certificate isn't trusted. Opens the
-            // same cert-trust flow as tapping the "Trust?" chip.
             if (_state == TestState.certError) ...[
               SizedBox(
                 height: 26,
                 child: OutlinedButton(
                   onPressed: _promptCertTrust,
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: const Size(0, 26),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    side: const BorderSide(color: Color(0xFFE0A31E)),
-                    foregroundColor: const Color(0xFFE0A31E),
+                    side: BorderSide(color: tokens.amber.withValues(alpha: 0.7), width: 0.75),
+                    foregroundColor: tokens.amber,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                   ),
-                  child: Text(tl(context, 'Trust'),
-                      style: const TextStyle(fontSize: 11)),
+                  child: Text(
+                    tl(context, 'Trust'),
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
             ],
-            // Explicit, labeled PAC Rules button
             if ((item.pacUrl ?? '').isNotEmpty) ...[
               SizedBox(
                 height: 26,
                 child: OutlinedButton(
                   onPressed: _openPacRules,
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 7),
                     minimumSize: const Size(0, 26),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    side: BorderSide(color: cs.outline.withAlpha(100)),
-                    foregroundColor: cs.onSurfaceVariant,
+                    side: BorderSide(color: tokens.hairlineStrong, width: 0.75),
+                    foregroundColor: tokens.textSecondary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.alt_route, size: 12),
+                      LuxIcon(LuxGlyph.route, size: 11.5, color: tokens.textSecondary),
                       const SizedBox(width: 4),
-                      Text(tl(context, 'PAC'),
-                          style: const TextStyle(fontSize: 11)),
+                      Text(
+                        tl(context, 'PAC'),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+                      ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
             ],
-            // Quiet, borderless credentials toggle (available on every HTTP/SOCKS5/PAC proxy)
             if (_supportsCredentials) ...[
               _credentialsToggleButton(context),
-              const SizedBox(width: 4),
+              const SizedBox(width: 5),
             ],
-            // Explicit, labeled Test button (Option B).
             SizedBox(
               height: 26,
               child: OutlinedButton(
-                onPressed:
-                    _state == TestState.testing ? null : _testDelay,
+                onPressed: _state == TestState.testing ? null : _testDelay,
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: const Size(0, 26),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  side: BorderSide(color: cs.primary.withAlpha(140)),
-                  foregroundColor: cs.primary,
+                  side: BorderSide(color: tokens.hairlineStrong, width: 0.75),
+                  foregroundColor: tokens.textPrimary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                 ),
-                child: Text(tl(context, 'Test'),
-                    style: const TextStyle(fontSize: 11)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LuxIcon(LuxGlyph.bolt, size: 11, color: tokens.cobalt),
+                    const SizedBox(width: 3),
+                    Text(
+                      tl(context, 'Test'),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 2),
@@ -1271,16 +1443,18 @@ class _ProxyListItemState extends State<ProxyListItem> {
       selected: selected,
       label: titleText,
       child: Material(
-        color: selected ? cs.primaryContainer.withAlpha(90) : Colors.transparent,
+        color: selected ? tokens.cardBgSelected : Colors.transparent,
         child: Stack(children: [
           if (selected)
             Positioned(
-              left: 0, top: 6, bottom: 6,
+              left: 0,
+              top: 8,
+              bottom: 8,
               child: Container(
-                width: 3,
+                width: 2.5,
                 decoration: BoxDecoration(
-                  color: cs.primary,
-                  borderRadius: BorderRadius.circular(3),
+                  color: tokens.cobalt,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),

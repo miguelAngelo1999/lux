@@ -1,42 +1,247 @@
 import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:lux/util/window_surface.dart';
 
-/// The [AppTheme] defines light and dark themes for the app.
-///
-/// Theme setup for FlexColorScheme package v8.
-/// Use same major flex_color_scheme package version. If you use a
-/// lower minor version, some properties may not be supported.
-/// In that case, remove them after copying this theme to your
-/// app or upgrade the package to version 8.3.0.
-///
-/// Use it in a [MaterialApp] like this:
-///
-/// MaterialApp(
-///   theme: AppTheme.light,
-///   darkTheme: AppTheme.dark,
-/// );
+/// Semantic design tokens matching Lux's Option A macOS Liquid Glass (Porcelain
+/// Light & Obsidian Dark) system, with automatic translucent vs. opaque
+/// adjustments based on [WindowSurfaceTier].
+@immutable
+class LuxTokens extends ThemeExtension<LuxTokens> {
+  final Color canvasOpaque;
+  final Color canvasTranslucent;
+  final Color sidebarOpaque;
+  final Color sidebarTranslucent;
+  final Color cardBg;
+  final Color cardBgSelected;
+  final Color hairline;
+  final Color hairlineStrong;
+  final Color specularRim;
+  final Color subtlePillBg;
+  final Color activeNavBg;
+  final Color activeNavBorder;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textMuted;
+  final Color cobalt;
+  final Color emerald;
+  final Color teal;
+  final Color amber;
+  final Color danger;
+
+  const LuxTokens({
+    required this.canvasOpaque,
+    required this.canvasTranslucent,
+    required this.sidebarOpaque,
+    required this.sidebarTranslucent,
+    required this.cardBg,
+    required this.cardBgSelected,
+    required this.hairline,
+    required this.hairlineStrong,
+    required this.specularRim,
+    required this.subtlePillBg,
+    required this.activeNavBg,
+    required this.activeNavBorder,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textMuted,
+    required this.cobalt,
+    required this.emerald,
+    required this.teal,
+    required this.amber,
+    required this.danger,
+  });
+
+  static const light = LuxTokens(
+    canvasOpaque: Color(0xFFF7F9FC),
+    canvasTranslucent: Color(0xD8F8FAFD),
+    sidebarOpaque: Color(0xFFF1F4F9),
+    sidebarTranslucent: Color(0x66FFFFFF),
+    cardBg: Color(0xF5FFFFFF),
+    cardBgSelected: Color(0xFFF3F7FF),
+    hairline: Color(0x160F172A),
+    hairlineStrong: Color(0x240F172A),
+    specularRim: Color(0xCCFFFFFF),
+    subtlePillBg: Color(0x0D0F172A),
+    activeNavBg: Color(0xB8FFFFFF),
+    activeNavBorder: Color(0x180F172A),
+    textPrimary: Color(0xFF1E293B),
+    textSecondary: Color(0xFF526075),
+    textMuted: Color(0xFF8A96A8),
+    cobalt: Color(0xFF2563EB),
+    emerald: Color(0xFF16A34A),
+    teal: Color(0xFF0D9488),
+    amber: Color(0xFFD98A16),
+    danger: Color(0xFFDC4A38),
+  );
+
+  static const dark = LuxTokens(
+    canvasOpaque: Color(0xFF0B0E14),
+    canvasTranslucent: Color(0xC80B0E14),
+    sidebarOpaque: Color(0xFF0F131B),
+    sidebarTranslucent: Color(0x4D121722),
+    cardBg: Color(0xE8141924),
+    cardBgSelected: Color(0xFF172033),
+    hairline: Color(0x17FFFFFF),
+    hairlineStrong: Color(0x28FFFFFF),
+    specularRim: Color(0x1FFFFFFF),
+    subtlePillBg: Color(0x12FFFFFF),
+    activeNavBg: Color(0x1AFFFFFF),
+    activeNavBorder: Color(0x24FFFFFF),
+    textPrimary: Color(0xFFE6ECF5),
+    textSecondary: Color(0xFF94A3B8),
+    textMuted: Color(0xFF6B788E),
+    cobalt: Color(0xFF4F8FF7),
+    emerald: Color(0xFF34D399),
+    teal: Color(0xFF2DD4BF),
+    amber: Color(0xFFF5B041),
+    danger: Color(0xFFEF6B5B),
+  );
+
+  Color canvasFor(WindowSurfaceTier tier) =>
+      tier.isTranslucent ? canvasTranslucent : canvasOpaque;
+
+  Color sidebarFor(WindowSurfaceTier tier) =>
+      tier.isTranslucent ? sidebarTranslucent : sidebarOpaque;
+
+  static LuxTokens of(BuildContext context) {
+    final ext = Theme.of(context).extension<LuxTokens>();
+    if (ext != null) return ext;
+    return Theme.of(context).brightness == Brightness.dark ? dark : light;
+  }
+
+  @override
+  LuxTokens copyWith({
+    Color? canvasOpaque,
+    Color? canvasTranslucent,
+    Color? sidebarOpaque,
+    Color? sidebarTranslucent,
+    Color? cardBg,
+    Color? cardBgSelected,
+    Color? hairline,
+    Color? hairlineStrong,
+    Color? specularRim,
+    Color? subtlePillBg,
+    Color? activeNavBg,
+    Color? activeNavBorder,
+    Color? textPrimary,
+    Color? textSecondary,
+    Color? textMuted,
+    Color? cobalt,
+    Color? emerald,
+    Color? teal,
+    Color? amber,
+    Color? danger,
+  }) =>
+      LuxTokens(
+        canvasOpaque: canvasOpaque ?? this.canvasOpaque,
+        canvasTranslucent: canvasTranslucent ?? this.canvasTranslucent,
+        sidebarOpaque: sidebarOpaque ?? this.sidebarOpaque,
+        sidebarTranslucent: sidebarTranslucent ?? this.sidebarTranslucent,
+        cardBg: cardBg ?? this.cardBg,
+        cardBgSelected: cardBgSelected ?? this.cardBgSelected,
+        hairline: hairline ?? this.hairline,
+        hairlineStrong: hairlineStrong ?? this.hairlineStrong,
+        specularRim: specularRim ?? this.specularRim,
+        subtlePillBg: subtlePillBg ?? this.subtlePillBg,
+        activeNavBg: activeNavBg ?? this.activeNavBg,
+        activeNavBorder: activeNavBorder ?? this.activeNavBorder,
+        textPrimary: textPrimary ?? this.textPrimary,
+        textSecondary: textSecondary ?? this.textSecondary,
+        textMuted: textMuted ?? this.textMuted,
+        cobalt: cobalt ?? this.cobalt,
+        emerald: emerald ?? this.emerald,
+        teal: teal ?? this.teal,
+        amber: amber ?? this.amber,
+        danger: danger ?? this.danger,
+      );
+
+  @override
+  LuxTokens lerp(ThemeExtension<LuxTokens>? other, double t) {
+    if (other is! LuxTokens) return this;
+    return LuxTokens(
+      canvasOpaque: Color.lerp(canvasOpaque, other.canvasOpaque, t)!,
+      canvasTranslucent:
+          Color.lerp(canvasTranslucent, other.canvasTranslucent, t)!,
+      sidebarOpaque: Color.lerp(sidebarOpaque, other.sidebarOpaque, t)!,
+      sidebarTranslucent:
+          Color.lerp(sidebarTranslucent, other.sidebarTranslucent, t)!,
+      cardBg: Color.lerp(cardBg, other.cardBg, t)!,
+      cardBgSelected: Color.lerp(cardBgSelected, other.cardBgSelected, t)!,
+      hairline: Color.lerp(hairline, other.hairline, t)!,
+      hairlineStrong: Color.lerp(hairlineStrong, other.hairlineStrong, t)!,
+      specularRim: Color.lerp(specularRim, other.specularRim, t)!,
+      subtlePillBg: Color.lerp(subtlePillBg, other.subtlePillBg, t)!,
+      activeNavBg: Color.lerp(activeNavBg, other.activeNavBg, t)!,
+      activeNavBorder: Color.lerp(activeNavBorder, other.activeNavBorder, t)!,
+      textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
+      textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
+      textMuted: Color.lerp(textMuted, other.textMuted, t)!,
+      cobalt: Color.lerp(cobalt, other.cobalt, t)!,
+      emerald: Color.lerp(emerald, other.emerald, t)!,
+      teal: Color.lerp(teal, other.teal, t)!,
+      amber: Color.lerp(amber, other.amber, t)!,
+      danger: Color.lerp(danger, other.danger, t)!,
+    );
+  }
+}
+
+/// Shared tabular-numerals monospace style for IPs, latencies, and live speeds.
+TextStyle luxMonoStyle({
+  double fontSize = 11.5,
+  Color? color,
+  FontWeight fontWeight = FontWeight.w400,
+}) {
+  return TextStyle(
+    fontSize: fontSize,
+    color: color,
+    fontWeight: fontWeight,
+    fontFamily: 'SF Mono',
+    fontFamilyFallback: const ['Menlo', 'Consolas', 'monospace'],
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
+}
+
+/// The [AppTheme] defines Porcelain Light and Obsidian Dark themes for Lux.
 abstract final class AppTheme {
-  // The FlexColorScheme defined light mode ThemeData.
-  static ThemeData light = FlexThemeData.light(
-    // Using FlexColorScheme built-in FlexScheme enum based colors
-    scheme: FlexScheme.shadBlue,
-    // Input color modifiers.
-    swapLegacyOnMaterial3: true,
-    // Surface color adjustments.
-    lightIsWhite: true,
-    // Convenience direct styling properties.
-    bottomAppBarElevation: 0.5,
-    // Component theme configurations for light mode.
-    subThemesData: const FlexSubThemesData(
+  static TextTheme _refineTypography(TextTheme base, Color primaryText) {
+    TextStyle? soften(TextStyle? s, {FontWeight? weight}) {
+      if (s == null) return null;
+      return s.copyWith(
+        color: primaryText,
+        fontWeight: weight ?? FontWeight.w400,
+      );
+    }
+
+    return base.copyWith(
+      titleLarge: soften(base.titleLarge, weight: FontWeight.w500),
+      titleMedium: soften(base.titleMedium, weight: FontWeight.w500),
+      titleSmall: soften(base.titleSmall, weight: FontWeight.w500),
+      bodyLarge: soften(base.bodyLarge, weight: FontWeight.w400),
+      bodyMedium: soften(base.bodyMedium, weight: FontWeight.w400),
+      bodySmall: soften(base.bodySmall, weight: FontWeight.w400),
+      labelLarge: soften(base.labelLarge, weight: FontWeight.w500),
+      labelMedium: soften(base.labelMedium, weight: FontWeight.w400),
+      labelSmall: soften(base.labelSmall, weight: FontWeight.w400),
+    );
+  }
+
+  // Porcelain Light mode ThemeData.
+  static ThemeData get light {
+    final base = FlexThemeData.light(
+      scheme: FlexScheme.shadBlue,
+      swapLegacyOnMaterial3: true,
+      lightIsWhite: true,
+      bottomAppBarElevation: 0.0,
+      subThemesData: const FlexSubThemesData(
         interactionEffects: true,
-        blendOnLevel: 10,
+        blendOnLevel: 6,
         useM2StyleDividerInM3: true,
         splashType: FlexSplashType.instantSplash,
         splashTypeAdaptive: FlexSplashType.instantSplash,
         adaptiveElevationShadowsBack: FlexAdaptive.all(),
         adaptiveAppBarScrollUnderOff: FlexAdaptive.all(),
-        defaultRadius: 6.0,
+        defaultRadius: 8.0,
         elevatedButtonSchemeColor: SchemeColor.onPrimaryContainer,
         elevatedButtonSecondarySchemeColor: SchemeColor.primaryContainer,
         outlinedButtonSchemeColor: SchemeColor.onSurface,
@@ -48,210 +253,184 @@ abstract final class AppTheme {
         switchAdaptiveCupertinoLike: FlexAdaptive.all(),
         unselectedToggleIsColored: true,
         sliderValueTinted: true,
-        sliderTrackHeight: 8,
+        sliderTrackHeight: 6,
         inputDecoratorIsDense: true,
         inputDecoratorContentPadding:
-            EdgeInsetsDirectional.fromSTEB(12, 12, 12, 12),
+            EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
         inputDecoratorBorderSchemeColor: SchemeColor.primary,
         inputDecoratorBorderType: FlexInputBorderType.outline,
         inputDecoratorRadius: 8.0,
-        inputDecoratorBorderWidth: 0.5,
-        inputDecoratorFocusedBorderWidth: 2.0,
-        fabUseShape: true,
-        fabAlwaysCircular: true,
+        inputDecoratorBorderWidth: 0.75,
+        inputDecoratorFocusedBorderWidth: 1.5,
         chipSchemeColor: SchemeColor.secondaryContainer,
         chipSelectedSchemeColor: SchemeColor.primaryContainer,
-        chipFontSize: 12,
-        chipIconSize: 16,
-        chipPadding: EdgeInsetsDirectional.fromSTEB(4, 4, 4, 4),
+        chipFontSize: 11.5,
+        chipIconSize: 15,
+        chipPadding: EdgeInsetsDirectional.fromSTEB(4, 2, 4, 2),
         cardRadius: 12.0,
-        popupMenuRadius: 6.0,
+        cardElevation: 0.0,
+        popupMenuRadius: 10.0,
+        popupMenuElevation: 3.0,
+        alignedDropdown: true,
+        tooltipRadius: 6,
+        tooltipSchemeColor: SchemeColor.surfaceContainerHigh,
+        tooltipOpacity: 0.96,
+        dialogBackgroundSchemeColor: SchemeColor.surfaceContainerLowest,
+        dialogRadius: 14.0,
+        snackBarRadius: 8,
+        snackBarElevation: 4,
+        snackBarBackgroundSchemeColor: SchemeColor.surfaceContainerLow,
+        appBarBackgroundSchemeColor: SchemeColor.surfaceContainerLowest,
+        appBarScrolledUnderElevation: 0.0,
+        menuRadius: 10.0,
+        menuElevation: 3.0,
+        menuSchemeColor: SchemeColor.surfaceContainerLowest,
+        menuPadding: EdgeInsetsDirectional.fromSTEB(6, 8, 6, 8),
+        menuIndicatorBackgroundSchemeColor: SchemeColor.surfaceContainerHigh,
+        menuIndicatorRadius: 6.0,
+        scaffoldBackgroundSchemeColor: SchemeColor.surfaceContainerHighest,
+        cardBackgroundSchemeColor: SchemeColor.white,
+      ),
+      keyColors: const FlexKeyColors(
+        useSecondary: true,
+        useTertiary: true,
+        useError: true,
+        keepPrimary: true,
+        keepSecondary: true,
+        keepError: true,
+        keepTertiaryContainer: true,
+      ),
+      tones: FlexSchemeVariant.chroma
+          .tones(Brightness.light)
+          .higherContrastFixed()
+          .monochromeSurfaces(),
+      visualDensity: FlexColorScheme.comfortablePlatformDensity,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      cupertinoOverrideTheme: const CupertinoThemeData(applyThemeToAll: true),
+    );
+    return base.copyWith(
+      scaffoldBackgroundColor: LuxTokens.light.canvasOpaque,
+      dividerColor: LuxTokens.light.hairline,
+      textTheme: _refineTypography(base.textTheme, LuxTokens.light.textPrimary),
+      iconTheme: IconThemeData(color: LuxTokens.light.textSecondary, size: 18),
+      cardTheme: CardThemeData(
+        color: LuxTokens.light.cardBg,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: LuxTokens.light.hairline),
+        ),
+      ),
+      extensions: const <ThemeExtension<dynamic>>[LuxTokens.light],
+    );
+  }
+
+  // Obsidian Dark mode ThemeData.
+  static ThemeData get dark {
+    final base = FlexThemeData.dark(
+      scheme: FlexScheme.shadBlue,
+      swapLegacyOnMaterial3: true,
+      bottomAppBarElevation: 0.0,
+      subThemesData: const FlexSubThemesData(
+        interactionEffects: true,
+        blendOnLevel: 14,
+        blendOnColors: true,
+        useM2StyleDividerInM3: true,
+        splashType: FlexSplashType.instantSplash,
+        splashTypeAdaptive: FlexSplashType.instantSplash,
+        adaptiveElevationShadowsBack: FlexAdaptive.all(),
+        adaptiveAppBarScrollUnderOff: FlexAdaptive.all(),
+        defaultRadius: 8.0,
+        elevatedButtonSchemeColor: SchemeColor.onPrimaryContainer,
+        elevatedButtonSecondarySchemeColor: SchemeColor.primaryContainer,
+        outlinedButtonSchemeColor: SchemeColor.onSurface,
+        outlinedButtonOutlineSchemeColor: SchemeColor.outlineVariant,
+        toggleButtonsBorderSchemeColor: SchemeColor.outlineVariant,
+        segmentedButtonSchemeColor: SchemeColor.primary,
+        segmentedButtonBorderSchemeColor: SchemeColor.outlineVariant,
+        switchThumbSchemeColor: SchemeColor.onPrimaryContainer,
+        switchAdaptiveCupertinoLike: FlexAdaptive.all(),
+        unselectedToggleIsColored: true,
+        sliderValueTinted: true,
+        sliderTrackHeight: 6,
+        inputDecoratorIsDense: true,
+        inputDecoratorContentPadding:
+            EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
+        inputDecoratorBorderSchemeColor: SchemeColor.primary,
+        inputDecoratorBorderType: FlexInputBorderType.outline,
+        inputDecoratorRadius: 8.0,
+        inputDecoratorBorderWidth: 0.75,
+        inputDecoratorFocusedBorderWidth: 1.5,
+        chipSchemeColor: SchemeColor.secondaryContainer,
+        chipSelectedSchemeColor: SchemeColor.primaryContainer,
+        chipFontSize: 11.5,
+        chipIconSize: 15,
+        chipPadding: EdgeInsetsDirectional.fromSTEB(4, 2, 4, 2),
+        cardRadius: 12.0,
+        cardElevation: 0.0,
+        popupMenuRadius: 10.0,
         popupMenuElevation: 4.0,
         alignedDropdown: true,
         tooltipRadius: 6,
         tooltipSchemeColor: SchemeColor.surfaceContainerHigh,
         tooltipOpacity: 0.96,
         dialogBackgroundSchemeColor: SchemeColor.surfaceContainerHigh,
-        dialogRadius: 12.0,
-        snackBarRadius: 6,
-        snackBarElevation: 6,
+        dialogRadius: 14.0,
+        snackBarRadius: 8,
+        snackBarElevation: 4,
         snackBarBackgroundSchemeColor: SchemeColor.surfaceContainerLow,
         appBarBackgroundSchemeColor: SchemeColor.surfaceContainerLowest,
-        appBarScrolledUnderElevation: 0.5,
-        bottomAppBarHeight: 60,
-        tabBarIndicatorWeight: 4,
-        tabBarIndicatorTopRadius: 4,
-        tabBarDividerColor: Color(0x00000000),
-        drawerRadius: 0.0,
-        drawerElevation: 2.0,
-        drawerIndicatorOpacity: 0.5,
-        bottomSheetBackgroundColor: SchemeColor.surfaceContainerHigh,
-        bottomSheetModalBackgroundColor: SchemeColor.surfaceContainer,
-        bottomSheetRadius: 12.0,
-        bottomSheetElevation: 4.0,
-        bottomSheetModalElevation: 6.0,
-        bottomNavigationBarSelectedLabelSchemeColor: SchemeColor.primary,
-        bottomNavigationBarMutedUnselectedLabel: true,
-        bottomNavigationBarSelectedIconSchemeColor: SchemeColor.primary,
-        bottomNavigationBarMutedUnselectedIcon: true,
-        bottomNavigationBarBackgroundSchemeColor: SchemeColor.surfaceContainer,
-        bottomNavigationBarElevation: 0.0,
-        menuRadius: 6.0,
+        appBarScrolledUnderElevation: 0.0,
+        menuRadius: 10.0,
         menuElevation: 4.0,
-        menuSchemeColor: SchemeColor.surfaceContainerLowest,
-        menuPadding: EdgeInsetsDirectional.fromSTEB(6, 10, 5, 10),
-        menuBarRadius: 0.0,
-        menuBarElevation: 0.0,
-        menuBarShadowColor: Color(0x00000000),
-        menuIndicatorBackgroundSchemeColor: SchemeColor.surfaceContainerHigh,
+        menuSchemeColor: SchemeColor.surfaceContainerHigh,
+        menuPadding: EdgeInsetsDirectional.fromSTEB(6, 8, 6, 8),
+        menuIndicatorBackgroundSchemeColor: SchemeColor.surfaceContainerHighest,
         menuIndicatorRadius: 6.0,
-        searchBarElevation: 0.0,
-        searchViewElevation: 0.0,
-        navigationBarIndicatorSchemeColor: SchemeColor.secondaryContainer,
-        navigationBarBackgroundSchemeColor: SchemeColor.surfaceContainer,
-        navigationBarElevation: 0.0,
-        navigationBarHeight: 72.0,
-        navigationRailUseIndicator: true,
-        navigationRailIndicatorSchemeColor: SchemeColor.secondaryContainer,
-        navigationRailIndicatorOpacity: 1.00,
-        navigationRailBackgroundSchemeColor: SchemeColor.surfaceContainer,
-        scaffoldBackgroundSchemeColor: SchemeColor.surfaceContainerHighest,
-        cardBackgroundSchemeColor: SchemeColor.white),
-    // ColorScheme seed generation configuration for light mode.
-    keyColors: const FlexKeyColors(
-      useSecondary: true,
-      useTertiary: true,
-      useError: true,
-      keepPrimary: true,
-      keepSecondary: true,
-      keepError: true,
-      keepTertiaryContainer: true,
-    ),
-    tones: FlexSchemeVariant.chroma
-        .tones(Brightness.light)
-        .higherContrastFixed()
-        .monochromeSurfaces(),
-    // Direct ThemeData properties.
-    visualDensity: FlexColorScheme.comfortablePlatformDensity,
-    materialTapTargetSize: MaterialTapTargetSize.padded,
-    cupertinoOverrideTheme: const CupertinoThemeData(applyThemeToAll: true),
-  );
-
-  // The FlexColorScheme defined dark mode ThemeData.
-  static ThemeData dark = FlexThemeData.dark(
-    // Using FlexColorScheme built-in FlexScheme enum based colors.
-    scheme: FlexScheme.shadBlue,
-    // Input color modifiers.
-    swapLegacyOnMaterial3: true,
-    // Convenience direct styling properties.
-    bottomAppBarElevation: 0.5,
-    // Component theme configurations for dark mode.
-    subThemesData: const FlexSubThemesData(
-      interactionEffects: true,
-      blendOnLevel: 20,
-      blendOnColors: true,
-      useM2StyleDividerInM3: true,
-      splashType: FlexSplashType.instantSplash,
-      splashTypeAdaptive: FlexSplashType.instantSplash,
-      adaptiveElevationShadowsBack: FlexAdaptive.all(),
-      adaptiveAppBarScrollUnderOff: FlexAdaptive.all(),
-      defaultRadius: 6.0,
-      elevatedButtonSchemeColor: SchemeColor.onPrimaryContainer,
-      elevatedButtonSecondarySchemeColor: SchemeColor.primaryContainer,
-      outlinedButtonSchemeColor: SchemeColor.onSurface,
-      outlinedButtonOutlineSchemeColor: SchemeColor.outlineVariant,
-      toggleButtonsBorderSchemeColor: SchemeColor.outlineVariant,
-      segmentedButtonSchemeColor: SchemeColor.primary,
-      segmentedButtonBorderSchemeColor: SchemeColor.outlineVariant,
-      switchThumbSchemeColor: SchemeColor.onPrimaryContainer,
-      switchAdaptiveCupertinoLike: FlexAdaptive.all(),
-      unselectedToggleIsColored: true,
-      sliderValueTinted: true,
-      sliderTrackHeight: 8,
-      inputDecoratorIsDense: true,
-      inputDecoratorContentPadding:
-          EdgeInsetsDirectional.fromSTEB(12, 12, 12, 12),
-      inputDecoratorBorderSchemeColor: SchemeColor.primary,
-      inputDecoratorBorderType: FlexInputBorderType.outline,
-      inputDecoratorRadius: 8.0,
-      inputDecoratorBorderWidth: 0.5,
-      inputDecoratorFocusedBorderWidth: 2.0,
-      fabUseShape: true,
-      fabAlwaysCircular: true,
-      chipSchemeColor: SchemeColor.secondaryContainer,
-      chipSelectedSchemeColor: SchemeColor.primaryContainer,
-      chipFontSize: 12,
-      chipIconSize: 16,
-      chipPadding: EdgeInsetsDirectional.fromSTEB(4, 4, 4, 4),
-      cardRadius: 12.0,
-      popupMenuRadius: 6.0,
-      popupMenuElevation: 4.0,
-      alignedDropdown: true,
-      tooltipRadius: 6,
-      tooltipSchemeColor: SchemeColor.surfaceContainerHigh,
-      tooltipOpacity: 0.96,
-      dialogBackgroundSchemeColor: SchemeColor.surfaceContainerHigh,
-      dialogRadius: 12.0,
-      snackBarRadius: 6,
-      snackBarElevation: 6,
-      snackBarBackgroundSchemeColor: SchemeColor.surfaceContainerLow,
-      appBarBackgroundSchemeColor: SchemeColor.surfaceContainerLowest,
-      appBarScrolledUnderElevation: 2.5,
-      bottomAppBarHeight: 60,
-      tabBarIndicatorWeight: 4,
-      tabBarIndicatorTopRadius: 4,
-      tabBarDividerColor: Color(0x00000000),
-      drawerRadius: 0.0,
-      drawerElevation: 2.0,
-      drawerIndicatorOpacity: 0.5,
-      bottomSheetBackgroundColor: SchemeColor.surfaceContainerHigh,
-      bottomSheetModalBackgroundColor: SchemeColor.surfaceContainer,
-      bottomSheetRadius: 12.0,
-      bottomSheetElevation: 4.0,
-      bottomSheetModalElevation: 6.0,
-      bottomNavigationBarSelectedLabelSchemeColor: SchemeColor.primary,
-      bottomNavigationBarMutedUnselectedLabel: true,
-      bottomNavigationBarSelectedIconSchemeColor: SchemeColor.primary,
-      bottomNavigationBarMutedUnselectedIcon: true,
-      bottomNavigationBarBackgroundSchemeColor: SchemeColor.surfaceContainer,
-      bottomNavigationBarElevation: 0.0,
-      menuRadius: 6.0,
-      menuElevation: 4.0,
-      menuSchemeColor: SchemeColor.surfaceContainerLowest,
-      menuPadding: EdgeInsetsDirectional.fromSTEB(6, 10, 5, 10),
-      menuBarRadius: 0.0,
-      menuBarElevation: 0.0,
-      menuBarShadowColor: Color(0x00000000),
-      menuIndicatorBackgroundSchemeColor: SchemeColor.surfaceContainerHigh,
-      menuIndicatorRadius: 6.0,
-      searchBarElevation: 0.0,
-      searchViewElevation: 0.0,
-      navigationBarIndicatorSchemeColor: SchemeColor.secondaryContainer,
-      navigationBarBackgroundSchemeColor: SchemeColor.surfaceContainer,
-      navigationBarElevation: 0.0,
-      navigationBarHeight: 72.0,
-      navigationRailUseIndicator: true,
-      navigationRailIndicatorSchemeColor: SchemeColor.secondaryContainer,
-      navigationRailIndicatorOpacity: 1.00,
-      navigationRailBackgroundSchemeColor: SchemeColor.surfaceContainer,
-    ),
-    // ColorScheme seed configuration setup for dark mode.
-    keyColors: const FlexKeyColors(
-      useSecondary: true,
-      useTertiary: true,
-      useError: true,
-      keepPrimary: true,
-      keepSecondary: true,
-      keepError: true,
-      keepTertiaryContainer: true,
-    ),
-    tones: FlexSchemeVariant.chroma
-        .tones(Brightness.dark)
-        .higherContrastFixed()
-        .monochromeSurfaces(),
-    // Direct ThemeData properties.
-    visualDensity: FlexColorScheme.comfortablePlatformDensity,
-    materialTapTargetSize: MaterialTapTargetSize.padded,
-    cupertinoOverrideTheme: const CupertinoThemeData(applyThemeToAll: true),
-  );
+      ),
+      keyColors: const FlexKeyColors(
+        useSecondary: true,
+        useTertiary: true,
+        useError: true,
+        keepPrimary: true,
+        keepSecondary: true,
+        keepError: true,
+        keepTertiaryContainer: true,
+      ),
+      tones: FlexSchemeVariant.chroma
+          .tones(Brightness.dark)
+          .higherContrastFixed()
+          .monochromeSurfaces(),
+      visualDensity: FlexColorScheme.comfortablePlatformDensity,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      cupertinoOverrideTheme: const CupertinoThemeData(applyThemeToAll: true),
+    );
+    return base.copyWith(
+      scaffoldBackgroundColor: LuxTokens.dark.canvasOpaque,
+      canvasColor: LuxTokens.dark.canvasOpaque,
+      dividerColor: LuxTokens.dark.hairline,
+      colorScheme: base.colorScheme.copyWith(
+        surface: LuxTokens.dark.canvasOpaque,
+        surfaceContainerLowest: LuxTokens.dark.sidebarOpaque,
+        surfaceContainerLow: LuxTokens.dark.cardBg,
+        surfaceContainer: LuxTokens.dark.cardBg,
+        surfaceContainerHigh: const Color(0xFF1A202E),
+        primary: LuxTokens.dark.cobalt,
+        onSurface: LuxTokens.dark.textPrimary,
+        onSurfaceVariant: LuxTokens.dark.textSecondary,
+        outlineVariant: LuxTokens.dark.hairlineStrong,
+      ),
+      textTheme: _refineTypography(base.textTheme, LuxTokens.dark.textPrimary),
+      iconTheme: IconThemeData(color: LuxTokens.dark.textSecondary, size: 18),
+      cardTheme: CardThemeData(
+        color: LuxTokens.dark.cardBg,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: LuxTokens.dark.hairline),
+        ),
+      ),
+      extensions: const <ThemeExtension<dynamic>>[LuxTokens.dark],
+    );
+  }
 }

@@ -5,6 +5,7 @@ import 'package:lux/home.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/theme.dart';
 import 'package:lux/tr.dart';
+import 'package:lux/util/window_surface.dart';
 import 'package:provider/provider.dart';
 
 import 'l10n/app_localizations.dart';
@@ -27,6 +28,9 @@ class _App extends State<App> {
   @override
   void initState() {
     super.initState();
+    WindowSurfaceBridge.syncAppearance(widget.theme);
+    WindowSurfaceBridge.listenTierChanges(appState.updateSurfaceTier);
+    WindowSurfaceBridge.queryTier().then(appState.updateSurfaceTier);
   }
 
   @override

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
+import 'package:lux/theme.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/t_text.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:provider/provider.dart';
 
 class ProxyItemActionMenu extends StatefulWidget {
@@ -205,16 +207,28 @@ class _ProxyItemActionMenuState extends State<ProxyItemActionMenu> {
           controller: widget.controller,
           menuChildren: actionItems,
           builder: (_, MenuController controller, Widget? child) {
-            return IconButton(
+            final tokens = LuxTokens.of(context);
+            return InkWell(
               focusNode: buttonFocusNode,
-              onPressed: () {
+              borderRadius: BorderRadius.circular(6),
+              onTap: () {
                 if (controller.isOpen) {
                   controller.close();
                 } else {
                   controller.open();
                 }
               },
-              icon: const Icon(Icons.more_horiz),
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: Center(
+                  child: LuxIcon(
+                    LuxGlyph.moreHorizontal,
+                    size: 15,
+                    color: tokens.textMuted,
+                  ),
+                ),
+              ),
             );
           });
     });

@@ -2,18 +2,23 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:lux/util/notifier.dart';
-import 'package:lux/util/t_text.dart';
+import 'package:lux/core/core_config.dart'
+    show shouldSkipUpdateCheck, writeLastUpdateCheckAt, writePendingUpdateVersion;
+import 'package:lux/model/app.dart';
 import 'package:lux/pages/connections_page.dart';
 import 'package:lux/pages/log_page.dart';
 import 'package:lux/pages/proxies_page.dart';
 import 'package:lux/pages/rules_page.dart';
 import 'package:lux/pages/settings_page.dart';
+import 'package:lux/theme.dart';
+import 'package:lux/util/notifier.dart';
 import 'package:lux/util/updater.dart' show checkForUpdate, showUpdateDialog;
-import 'package:lux/core/core_config.dart' show shouldSkipUpdateCheck, writeLastUpdateCheckAt, writePendingUpdateVersion;
-import 'package:lux/widget/app_bottom_bar.dart';
+import 'package:lux/util/window_surface.dart';
 import 'package:lux/widget/app_header_bar.dart';
+import 'package:lux/widget/app_sidebar.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/windows_service_banner.dart';
+import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/core_manager.dart';
@@ -35,12 +40,12 @@ class _DashboardState extends State<Dashboard> with WindowListener {
   String curProxyInfo = "";
   int _selectedTab = 0;
 
-  final _tabs = [
-    (icon: Icons.swap_horiz, label: 'Proxies'),
-    (icon: Icons.rule, label: 'Rules'),
-    (icon: Icons.device_hub, label: 'Connections'),
-    (icon: Icons.article_outlined, label: 'Log'),
-    (icon: Icons.settings_outlined, label: 'Settings'),
+  static const _tabs = [
+    AppSidebarTab(glyph: LuxGlyph.proxies, label: 'Proxies'),
+    AppSidebarTab(glyph: LuxGlyph.rules, label: 'Rules'),
+    AppSidebarTab(glyph: LuxGlyph.connections, label: 'Connections'),
+    AppSidebarTab(glyph: LuxGlyph.logs, label: 'Log'),
+    AppSidebarTab(glyph: LuxGlyph.settings, label: 'Settings'),
   ];
 
   @override
@@ -70,7 +75,8 @@ class _DashboardState extends State<Dashboard> with WindowListener {
         await writePendingUpdateVersion(info.latestVersion);
         // System notification too, so it is seen when the window is hidden.
         // No payload: the app updates in place, it must not open a web page.
-        unawaited(notifier.show('Lux ${info.latestVersion} is available. Open Lux to update.'));
+        unawaited(notifier.show(
+            'Lux ${info.latestVersion} is available. Open Lux to update.'));
         await showUpdateDialog(context, info);
         return;
       } catch (_) {
@@ -128,56 +134,44 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     }
   }
 
-  /// On Windows the hidden title bar leaves nothing to drag the window by,
-  /// so the whole header doubles as the drag surface.
-  Widget _wrapDraggable(Widget child) {
-    if (!Platform.isWindows) return child;
-    return DragToMoveArea(child: child);
-  }
-
   @override
   Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
+    final tier =
+        context.select<AppStateModel, WindowSurfaceTier>((m) => m.surfaceTier);
+
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(50),
-        // Windows hides the native title bar, so the header itself has to
-        // be the drag handle. Buttons inside still win the hit test.
-        child: _wrapDraggable(AppHeaderBar(
-          coreManager: widget.coreManager,
-          urlStr: widget.urlStr,
-          curProxyInfo: curProxyInfo,
-          onCurProxyInfoChange: onCurProxyInfoChange,
-        )),
-      ),
+      backgroundColor:
+          tier.isTranslucent ? Colors.transparent : tokens.canvasOpaque,
       body: Row(
         children: [
-          // Left navigation rail
-          NavigationRail(
+          AppSidebar(
+            tabs: _tabs,
             selectedIndex: _selectedTab,
-            onDestinationSelected: (i) => setState(() => _selectedTab = i),
-            labelType: NavigationRailLabelType.all,
-            minWidth: 64,
-            destinations: _tabs
-                .map((t) => NavigationRailDestination(
-                      icon: Icon(t.icon, size: 20),
-                      label: TText(t.label,
-                          style: const TextStyle(fontSize: 10)),
-                    ))
-                .toList(),
+            onSelected: (i) => setState(() => _selectedTab = i),
+            coreManager: widget.coreManager,
           ),
-          const VerticalDivider(width: 1, thickness: 1),
-          // Main content
           Expanded(
-            child: Column(
-              children: [
-                WindowsServiceBanner(coreManager: widget.coreManager),
-                Expanded(child: _buildPage()),
-              ],
+            child: Container(
+              color: tokens.canvasFor(tier),
+              child: Column(
+                children: [
+                  DragToMoveArea(
+                    child: AppHeaderBar(
+                      coreManager: widget.coreManager,
+                      urlStr: widget.urlStr,
+                      curProxyInfo: curProxyInfo,
+                      onCurProxyInfoChange: onCurProxyInfoChange,
+                    ),
+                  ),
+                  WindowsServiceBanner(coreManager: widget.coreManager),
+                  Expanded(child: _buildPage()),
+                ],
+              ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: AppBottomBar(widget.coreManager),
     );
   }
 }

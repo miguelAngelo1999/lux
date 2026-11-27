@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/core/core_manager.dart';
+import 'package:lux/theme.dart';
 import 'package:lux/tr.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/proxy_list_item.dart';
 
 import '../core/core_config.dart';
@@ -64,57 +66,85 @@ class _ProxyListCardState extends State<ProxyListCard> {
   }
 
   @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     final proxyList = widget.proxyList;
     final title = getTitle();
 
-    return Card(
-      margin: EdgeInsetsGeometry.only(left: 6, right: 6, top: 8, bottom: 8),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              TextButton(
-                onPressed: () {
-                  widget.onCollapse();
-                },
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.resolveWith<Color?>(
-                    (Set<WidgetState> states) {
-                      return Colors.transparent;
-                    },
-                  ),
-                  overlayColor: WidgetStateProperty.resolveWith<Color?>(
-                    (Set<WidgetState> states) {
-                      return Colors.transparent;
-                    },
+          // Quiet section header with count pill
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 7),
+            child: Row(
+              children: [
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => widget.onCollapse(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          LuxIcon(
+                            widget.isCollapsed
+                                ? LuxGlyph.chevronDown
+                                : LuxGlyph.chevronUp,
+                            size: 13,
+                            color: tokens.textMuted,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            title.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.7,
+                              color: tokens.textMuted,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: tokens.subtlePillBg,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${proxyList.proxies.length}',
+                              style: luxMonoStyle(
+                                fontSize: 10,
+                                color: tokens.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(widget.isCollapsed
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down),
-                    Text(
-                      title,
-                      style: TextStyle(fontSize: 12),
-                    )
-                  ],
-                ),
-              )
-            ],
+              ],
+            ),
           ),
-          proxyList.proxies.isEmpty || !widget.isCollapsed
-              ? SizedBox()
-              : ListView.separated(
+          if (proxyList.proxies.isNotEmpty && widget.isCollapsed)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: tokens.cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: tokens.hairline, width: 0.75),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ListView.separated(
                   shrinkWrap: true,
-                  physics: ClampingScrollPhysics(),
-                  padding: EdgeInsetsGeometry.all(0),
+                  physics: const ClampingScrollPhysics(),
+                  padding: EdgeInsets.zero,
                   itemCount: proxyList.proxies.length,
                   itemBuilder: (context, index) {
                     final item = proxyList.proxies[index];
@@ -137,14 +167,15 @@ class _ProxyListCardState extends State<ProxyListCard> {
                     );
                   },
                   separatorBuilder: (BuildContext context, int index) {
-                    return Divider(
-                      height: 1, // Control the space the divider takes up
-                      thickness: 1, // Control the line's thickness
-                      indent: 20, // Left padding
-                      endIndent: 20, // Right padding
+                    return Container(
+                      height: 0.75,
+                      margin: const EdgeInsets.symmetric(horizontal: 14),
+                      color: tokens.hairline,
                     );
                   },
-                )
+                ),
+              ),
+            ),
         ],
       ),
     );

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:lux/theme.dart';
+import 'package:lux/widget/lux_icons.dart';
 
 /// A compact mode selector for the header.
 ///
@@ -21,9 +23,10 @@ class ModeFanButton extends StatefulWidget {
     required this.labelOf,
     required this.descriptionOf,
     required this.iconOf,
+    this.glyphOf,
     required this.onSelected,
     this.enabled = true,
-    this.width = 184,
+    this.width = 166,
   });
 
   /// Ordered list of mode ids (the cycle order).
@@ -35,6 +38,7 @@ class ModeFanButton extends StatefulWidget {
   final String Function(String id) labelOf;
   final String Function(String id) descriptionOf;
   final IconData Function(String id) iconOf;
+  final LuxGlyph Function(String id)? glyphOf;
 
   /// Called with the newly chosen mode id (on cycle or fan pick).
   final ValueChanged<String> onSelected;
@@ -146,6 +150,7 @@ class _ModeFanButtonState extends State<ModeFanButton>
                     for (final id in others)
                       _FanChip(
                         icon: widget.iconOf(id),
+                        glyph: widget.glyphOf?.call(id),
                         label: widget.labelOf(id),
                         description: widget.descriptionOf(id),
                         onTap: () => _pick(id),
@@ -164,10 +169,12 @@ class _ModeFanButtonState extends State<ModeFanButton>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final tokens = LuxTokens.of(context);
     final label = widget.selected.isEmpty ? '' : widget.labelOf(widget.selected);
-    final icon = widget.selected.isEmpty
+    final glyph = widget.selected.isEmpty
+        ? LuxGlyph.rules
+        : widget.glyphOf?.call(widget.selected);
+    final fallbackIcon = widget.selected.isEmpty
         ? Icons.rule
         : widget.iconOf(widget.selected);
 
@@ -176,53 +183,71 @@ class _ModeFanButtonState extends State<ModeFanButton>
       child: SizedBox(
         key: _buttonKey,
         width: widget.width,
-        height: 36,
-        child: Material(
-          color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(10),
-          clipBehavior: Clip.antiAlias,
-          child: Row(
-            children: [
-              // Main body — click to cycle to the next mode.
-              Expanded(
-                child: InkWell(
-                  onTap: widget.enabled ? _cycle : null,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      children: [
-                        Icon(icon, size: 18, color: scheme.primary),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600),
+        height: 30,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: tokens.cardBg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: tokens.hairlineStrong, width: 0.75),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              children: [
+                // Main body — click to cycle to the next mode.
+                Expanded(
+                  child: InkWell(
+                    onTap: widget.enabled ? _cycle : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 9),
+                      child: Row(
+                        children: [
+                          if (glyph != null)
+                            LuxIcon(glyph, size: 14, color: tokens.textSecondary)
+                          else
+                            Icon(fallbackIcon, size: 15, color: tokens.textSecondary),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                                color: tokens.textPrimary,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              // Divider + chevron — click to fan out all modes.
-              Container(width: 1, height: 20, color: theme.dividerColor),
-              InkWell(
-                onTap: widget.enabled ? _toggleFan : null,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: AnimatedRotation(
-                    // Points down (fan opens downward); flips up when open.
-                    turns: _isOpen ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.keyboard_arrow_down,
-                        size: 20, color: scheme.onSurfaceVariant),
+                // Hairline divider + thin chevron — click to fan out all modes.
+                Container(width: 0.75, height: 15, color: tokens.hairline),
+                InkWell(
+                  onTap: widget.enabled ? _toggleFan : null,
+                  child: SizedBox(
+                    width: 26,
+                    height: 30,
+                    child: Center(
+                      child: AnimatedRotation(
+                        turns: _isOpen ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: LuxIcon(
+                          LuxGlyph.chevronDown,
+                          size: 13,
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -278,55 +303,82 @@ class _FanStack extends StatelessWidget {
 class _FanChip extends StatelessWidget {
   const _FanChip({
     required this.icon,
+    this.glyph,
     required this.label,
     required this.description,
     required this.onTap,
   });
 
   final IconData icon;
+  final LuxGlyph? glyph;
   final String label;
   final String description;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Material(
-      color: scheme.surfaceContainerHigh,
-      elevation: 4,
-      borderRadius: BorderRadius.circular(10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: scheme.primary),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
+    final tokens = LuxTokens.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: tokens.hairlineStrong, width: 0.75),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (glyph != null)
+                  LuxIcon(glyph!, size: 15, color: tokens.cobalt)
+                else
+                  Icon(icon, size: 16, color: tokens.cobalt),
+                const SizedBox(width: 9),
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600)),
-                    if (description.isNotEmpty)
-                      Text(description,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: tokens.textPrimary,
+                        ),
+                      ),
+                      if (description.isNotEmpty)
+                        Text(
+                          description,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              fontSize: 10, color: theme.hintColor)),
-                  ],
+                            fontSize: 10,
+                            fontWeight: FontWeight.w400,
+                            color: tokens.textMuted,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

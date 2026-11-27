@@ -146,6 +146,61 @@ Future<void> writeLastUserProxyId(String id) async {
   await _writePrefs(prefs);
 }
 
+// ── Recent usernames per proxy (for 1-click inline account swap) ────────────
+// Stored locally in lux_prefs.json (usernames ONLY, never passwords) so people
+// sharing a laptop can switch proxy usernames in 1 click without a modal.
+
+const _maxRecentUsernames = 8;
+
+Future<List<String>> readRecentUsernames(String proxyId) async {
+  if (proxyId.isEmpty) return const [];
+  final prefs = await _readPrefs();
+  final rawMap = prefs['recentUsernamesByProxy'];
+  if (rawMap is! Map) return const [];
+  final rawList = rawMap[proxyId];
+  if (rawList is! List) return const [];
+  final out = <String>[];
+  for (final entry in rawList) {
+    if (entry is String) {
+      final trimmed = entry.trim();
+      if (trimmed.isNotEmpty && !out.contains(trimmed)) {
+        out.add(trimmed);
+      }
+    }
+  }
+  return out;
+}
+
+Future<List<String>> recordRecentUsername(
+    String proxyId, String username) async {
+  final trimmed = username.trim();
+  if (proxyId.isEmpty || trimmed.isEmpty) {
+    return readRecentUsernames(proxyId);
+  }
+  final prefs = await _readPrefs();
+  final existingMap = prefs['recentUsernamesByProxy'];
+  final byProxy = existingMap is Map
+      ? Map<String, dynamic>.from(existingMap)
+      : <String, dynamic>{};
+  final current = <String>[];
+  final rawList = byProxy[proxyId];
+  if (rawList is List) {
+    for (final entry in rawList) {
+      if (entry is String) {
+        final s = entry.trim();
+        if (s.isNotEmpty && s != trimmed && !current.contains(s)) {
+          current.add(s);
+        }
+      }
+    }
+  }
+  final updated = <String>[trimmed, ...current].take(_maxRecentUsernames).toList();
+  byProxy[proxyId] = updated;
+  prefs['recentUsernamesByProxy'] = byProxy;
+  await _writePrefs(prefs);
+  return updated;
+}
+
 /// Persists the latest available version when an update is found but not yet installed.
 /// Cleared when the user installs the update or when "up to date" is confirmed.
 /// This survives app restarts so the Settings tile always shows the badge.

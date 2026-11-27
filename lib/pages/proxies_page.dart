@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:lux/theme.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/password_peek_dialog.dart';
 import 'package:lux/widget/pac_rules_dialog.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
@@ -392,26 +394,39 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     return widget.curProxyInfo;
   }
 
+  ProxyItem? _selectedProxyItem() {
+    final selectedId = proxyListGroup.selectedId;
+    return proxyListGroup.allProxies
+        .where((p) => p.id == selectedId)
+        .firstOrNull;
+  }
+
   Widget _buildStatusBanner(BuildContext context, AppStateModel appState) {
-    final cs = Theme.of(context).colorScheme;
+    final tokens = LuxTokens.of(context);
     final selectedStatus =
         _testStatuses[proxyListGroup.selectedId] ?? const ProxyTestStatus();
     final proxyName = _selectedProxyDisplayName();
-
-    const amber = Color(0xFFE0A31E);
-    const authRed = Color(0xFFE05638);
+    final selectedProxy = _selectedProxyItem();
+    final serverEndpoint = (selectedProxy != null &&
+            (selectedProxy.server ?? '').isNotEmpty)
+        ? '${selectedProxy.server}:${selectedProxy.port ?? ''}'
+        : '';
 
     final Color accent;
-    final IconData icon;
+    final LuxGlyph glyph;
+    final bool showLiveDot;
     final String message;
+    final String? subtitle;
     final Widget? badge;
     final List<Widget> actions;
 
     if (appState.pausedForCaptivePortal) {
-      accent = amber;
-      icon = Icons.wifi_lock;
+      accent = tokens.amber;
+      glyph = LuxGlyph.wifiLock;
+      showLiveDot = false;
       message = tl(context,
           'Captive Wi-Fi detected — sign in; Lux will resume automatically');
+      subtitle = null;
       badge = null;
       final portalUrl = appState.captivePortalUrl;
       final portalUri =
@@ -450,16 +465,20 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
           ),
       ];
     } else if (appState.pausedForNoNetwork) {
-      accent = amber;
-      icon = Icons.wifi_off;
+      accent = tokens.amber;
+      glyph = LuxGlyph.wifiOff;
+      showLiveDot = false;
       message = tl(context, 'Paused — waiting for Wi-Fi or Ethernet');
+      subtitle = null;
       badge = null;
       actions = const [];
     } else if (selectedStatus.state == TestState.authError) {
-      accent = authRed;
-      icon = Icons.lock_outline;
+      accent = tokens.danger;
+      glyph = LuxGlyph.lock;
+      showLiveDot = false;
       message =
           tl(context, 'Login required — check your username and password below');
+      subtitle = null;
       badge = null;
       actions = [
         _bannerActionButton(
@@ -470,9 +489,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         ),
       ];
     } else if (selectedStatus.state == TestState.certError) {
-      accent = amber;
-      icon = Icons.gpp_maybe_outlined;
+      accent = tokens.amber;
+      glyph = LuxGlyph.shieldAlert;
+      showLiveDot = false;
       message = tl(context, 'Proxy certificate not trusted');
+      subtitle = null;
       badge = null;
       actions = [
         _bannerActionButton(
@@ -483,9 +504,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         ),
       ];
     } else if (selectedStatus.state == TestState.unreachable) {
-      accent = cs.error;
-      icon = Icons.error_outline;
+      accent = tokens.danger;
+      glyph = LuxGlyph.alertCircle;
+      showLiveDot = false;
       message = tl(context, 'Proxy unreachable on this network');
+      subtitle = null;
       badge = null;
       actions = [
         _bannerActionButton(
@@ -503,29 +526,41 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         ),
       ];
     } else if (appState.isStarted) {
-      accent = Colors.green;
-      icon = Icons.check_circle_outline;
+      accent = tokens.emerald;
+      glyph = LuxGlyph.check;
+      showLiveDot = true;
       message = proxyName.isNotEmpty
           ? tl(context, 'Connected via {name}').replaceAll('{name}', proxyName)
           : tl(context, 'Connected');
+      subtitle = serverEndpoint.isNotEmpty ? serverEndpoint : null;
       if (selectedStatus.state == TestState.reachable) {
+        final badgeColor =
+            selectedStatus.pacReachable ? tokens.teal : tokens.emerald;
         final badgeText = selectedStatus.pacReachable
             ? 'PAC OK'
             : '${selectedStatus.latencyMs} ms';
         badge = Container(
           margin: const EdgeInsets.only(left: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.14),
+            color: badgeColor.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(6),
+            border:
+                Border.all(color: badgeColor.withValues(alpha: 0.2), width: 0.75),
           ),
           child: Text(
             badgeText,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: accent,
-            ),
+            style: selectedStatus.pacReachable
+                ? TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    color: badgeColor,
+                  )
+                : luxMonoStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    color: badgeColor,
+                  ),
           ),
         );
       } else {
@@ -533,66 +568,120 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
       }
       actions = const [];
     } else {
-      accent = cs.outline;
-      icon = Icons.power_settings_new;
+      accent = tokens.textMuted;
+      glyph = LuxGlyph.power;
+      showLiveDot = false;
       message = tl(context, 'Disconnected');
+      subtitle = serverEndpoint.isNotEmpty ? serverEndpoint : null;
       badge = null;
       actions = [
         _bannerActionButton(
           key: const Key('banner-action-connect'),
           label: tl(context, 'Connect'),
-          color: cs.primary,
+          color: const Color(0xFF2563EB),
           filled: true,
           loading: _isConnecting,
-          onPressed:
-              (_isConnecting || proxyListGroup.selectedId.isEmpty)
-                  ? null
-                  : _connectFromBanner,
+          onPressed: (_isConnecting || proxyListGroup.selectedId.isEmpty)
+              ? null
+              : _connectFromBanner,
         ),
       ];
     }
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       key: const Key('proxies-status-banner'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        color: tokens.cardBg,
+        borderRadius: BorderRadius.circular(11),
         border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.06),
+          color: (showLiveDot || accent == tokens.textMuted)
+              ? tokens.hairline
+              : accent.withValues(alpha: 0.3),
+          width: 0.75,
         ),
       ),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: accent),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    message,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: cs.onSurface,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (badge != null) badge,
-              ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Container(width: 2.5, color: accent),
             ),
-          ),
-          if (actions.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            ...actions,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(13, 9, 11, 9),
+              child: Row(
+                children: [
+                  if (showLiveDot)
+                    Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accent.withValues(alpha: 0.14),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: accent,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    LuxIcon(glyph, size: 15, color: accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                message,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: tokens.textPrimary,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (badge != null) badge,
+                          ],
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 1.5),
+                          Text(
+                            subtitle,
+                            style: luxMonoStyle(
+                              fontSize: 10.5,
+                              color: tokens.textMuted,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (actions.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    ...actions,
+                  ],
+                ],
+              ),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -609,35 +698,41 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
         ? const SizedBox(
             width: 12,
             height: 12,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: CircularProgressIndicator(strokeWidth: 1.6),
           )
-        : Text(label, style: const TextStyle(fontSize: 11));
+        : Text(label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500));
     if (filled) {
       return SizedBox(
-        height: 26,
+        height: 27,
         child: FilledButton(
           key: key,
           onPressed: onPressed,
           style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            minimumSize: const Size(0, 26),
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 11),
+            minimumSize: const Size(0, 27),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
           ),
           child: child,
         ),
       );
     }
     return SizedBox(
-      height: 26,
+      height: 27,
       child: OutlinedButton(
         key: key,
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          minimumSize: const Size(0, 26),
+          minimumSize: const Size(0, 27),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          side: BorderSide(color: color.withValues(alpha: 0.7)),
+          side: BorderSide(color: color.withValues(alpha: 0.65), width: 0.75),
           foregroundColor: color,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
         ),
         child: child,
       ),
@@ -646,30 +741,43 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     final appState = context.watch<AppStateModel>();
     return Column(
       children: [
-        // Combined Status Banner + Detect Proxy toolbar row
+        // Combined Hero Status Card + Detect Proxy toolbar row
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(
             children: [
               Expanded(child: _buildStatusBanner(context, appState)),
               if (_autoSwitchEnabled) ...[
                 const SizedBox(width: 6),
                 _autoSwitching
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 1.5))
+                    ? SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.4,
+                          color: tokens.cobalt,
+                        ),
+                      )
                     : Tooltip(
                         message: 'Check network and auto-select best proxy',
-                        child: IconButton(
-                          icon: const Icon(Icons.swap_horiz, size: 18),
-                          onPressed: _triggerAutoSwitch,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                              minWidth: 28, minHeight: 28),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(7),
+                          onTap: _triggerAutoSwitch,
+                          child: SizedBox(
+                            width: 30,
+                            height: 30,
+                            child: Center(
+                              child: LuxIcon(
+                                LuxGlyph.swap,
+                                size: 14,
+                                color: tokens.textSecondary,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                 if (_autoSwitchState.isNotEmpty) ...[
@@ -682,21 +790,24 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
               const SizedBox(width: 8),
               _isDetecting
                   ? SizedBox(
-                      width: 120,
+                      width: 118,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
                             '${tl(context, 'Detecting')} ${(_detectProgress * 100).round()}%',
-                            style: const TextStyle(fontSize: 11),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: tokens.textSecondary,
+                            ),
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 4),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(2),
                             child: LinearProgressIndicator(
                               value: _detectProgress,
-                              minHeight: 3,
+                              minHeight: 2.5,
                             ),
                           ),
                         ],
@@ -704,18 +815,40 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     )
                   : SizedBox(
                       height: 34,
-                      child: TextButton.icon(
+                      child: OutlinedButton(
                         key: const Key('proxies-detect-button'),
                         onPressed: _detectProxies,
-                        icon: const Icon(Icons.wifi_find, size: 15),
-                        label: const TText('Detect Proxy',
-                            style: TextStyle(fontSize: 12)),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: tokens.cardBg,
+                          foregroundColor: tokens.textPrimary,
+                          padding: const EdgeInsets.symmetric(horizontal: 11),
                           minimumSize: const Size(0, 34),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          side: BorderSide(
+                            color: tokens.hairlineStrong,
+                            width: 0.75,
+                          ),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            LuxIcon(
+                              LuxGlyph.radar,
+                              size: 13.5,
+                              color: tokens.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            const TText(
+                              'Detect Proxy',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

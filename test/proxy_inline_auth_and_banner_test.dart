@@ -9,6 +9,7 @@ import 'package:lux/model/app.dart';
 import 'package:lux/pages/proxies_page.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/t_text.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:provider/provider.dart';
 
 import 'test_env.dart';
@@ -664,7 +665,10 @@ void main() {
       expect(find.byKey(const Key('inline-password-p-sec')), findsNothing);
       expect(find.byKey(const Key('inline-password-peek-p-sec')),
           findsOneWidget);
-      expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+      expect(
+          find.byWidgetPredicate(
+              (w) => w is LuxIcon && w.glyph == LuxGlyph.eye),
+          findsOneWidget);
       expect(find.text('super-secret-password'), findsNothing);
 
       // Tapping eye button invokes admin-auth peek callback instead of revealing inline.

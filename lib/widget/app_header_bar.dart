@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lux/model/app.dart';
+import 'package:lux/theme.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/widget/mode_fan_button.dart';
 import 'package:provider/provider.dart';
@@ -178,6 +180,23 @@ class _State extends State<AppHeaderBar> with WindowListener {
     }
   }
 
+  LuxGlyph getRuleGlyph(String name) {
+    switch (name) {
+      case "proxy_all":
+        return LuxGlyph.shield;
+      case "proxy_gfw":
+        return LuxGlyph.globe;
+      case "bypass_cn":
+        return LuxGlyph.home;
+      case "bypass_all":
+        return LuxGlyph.bolt;
+      case "bypass_except_proxy":
+        return LuxGlyph.route;
+      default:
+        return LuxGlyph.rules;
+    }
+  }
+
   IconData getRuleIcon(String name) {
     switch (name) {
       case "proxy_all":
@@ -311,87 +330,206 @@ class _State extends State<AppHeaderBar> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     final appStarted =
         context.select<AppStateModel, bool>((model) => model.isStarted);
-    final switchValue = isLoadingSwitch ? isStarted : (isStarted || appStarted) && appStarted;
+    final switchValue =
+        isLoadingSwitch ? isStarted : (isStarted || appStarted) && appStarted;
     final isSwitchDisabled = isLoadingSwitch || widget.curProxyInfo.isEmpty;
-    return AppBar(
-        // dashboard.dart wraps this in a 50px PreferredSize; without
-        // matching it here the default 56px gets squeezed and overlaps.
-        toolbarHeight: 50,
-        // On macOS with hidden title bar, leave space for the traffic lights.
-        leadingWidth: Platform.isMacOS ? 80 : null,
-        leading: Padding(
-          padding: EdgeInsets.only(left: Platform.isMacOS ? 70 : 0),
-          child: IconButton(
-              tooltip: tl(context, 'Open web dashboard (advanced)'),
-              onPressed: openWebDashboard,
-              icon: const Icon(Icons.open_in_browser, size: 18)),
-        ),
-        title: Row(
-          children: [
-            ModeFanButton(
-              modes: ruleList.rules,
-              selected: ruleList.selectedId,
-              labelOf: getRuleLabel,
-              descriptionOf: getRuleDescription,
-              iconOf: getRuleIcon,
-              enabled: !isLoadingRuleDropdown,
-              onSelected: (id) => handleSelectRule(id),
-            ),
-            SizedBox(width: 4),
-            IconButton(
-                tooltip: tr().addProxyTip,
-                onPressed: _handleAdd,
-                icon: const Icon(
-                  Icons.add,
-                )),
-            Spacer(),
-            Text(
-              widget.curProxyInfo,
-              style: TextStyle(fontSize: 14),
-            ),
-            SizedBox(width: 8),
-            SizedBox(
-              width: 48,
-              height: 32,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  FittedBox(
-                    child: Switch(
-                      value: switchValue,
-                      // Non-clickable while a connect/disconnect is in flight
-                      // (isLoadingSwitch) or no proxy is selected.
-                      onChanged: isSwitchDisabled ? null : onSwitchChanged,
-                    ),
-                  ),
-                  // Progress spinner while connecting/disconnecting, so the
-                  // user sees it IS working and doesn't spam-click. An opaque
-                  // barrier over the switch also swallows taps during the op.
-                  if (isLoadingSwitch)
-                    Positioned.fill(
-                      child: AbsorbPointer(
-                        child: Container(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surface
-                              .withValues(alpha: 0.55),
-                          alignment: Alignment.center,
-                          child: const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
+
+    return Container(
+      height: 52,
+      padding: EdgeInsets.only(
+        left: 16,
+        right: Platform.isWindows ? 4 : 16,
+      ),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.hairline, width: 0.75)),
+      ),
+      child: Row(
+        children: [
+          ModeFanButton(
+            modes: ruleList.rules,
+            selected: ruleList.selectedId,
+            labelOf: getRuleLabel,
+            descriptionOf: getRuleDescription,
+            iconOf: getRuleIcon,
+            glyphOf: getRuleGlyph,
+            enabled: !isLoadingRuleDropdown,
+            onSelected: (id) => handleSelectRule(id),
+          ),
+          const Spacer(),
+          // Quiet hairline "+ Add Proxy" capsule
+          Tooltip(
+            message: tr().addProxyTip,
+            child: InkWell(
+              key: const Key('header-add-proxy-button'),
+              borderRadius: BorderRadius.circular(8),
+              onTap: _handleAdd,
+              child: Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: tokens.cardBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: tokens.hairlineStrong, width: 0.75),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LuxIcon(LuxGlyph.plus, size: 13, color: tokens.textSecondary),
+                    const SizedBox(width: 6),
+                    TText(
+                      'Add Proxy',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: tokens.textPrimary,
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: tl(context, 'Open web dashboard (advanced)'),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: openWebDashboard,
+              child: Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: tokens.cardBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: tokens.hairlineStrong, width: 0.75),
+                ),
+                child: Center(
+                  child: LuxIcon(
+                    LuxGlyph.externalLink,
+                    size: 13.5,
+                    color: tokens.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(width: 0.75, height: 18, color: tokens.hairline),
+          const SizedBox(width: 12),
+          TText(
+            switchValue ? 'Connected' : 'Disconnected',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: switchValue ? tokens.textPrimary : tokens.textMuted,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildMasterToggle(tokens, switchValue, isSwitchDisabled),
+          if (Platform.isWindows) ...[
+            const SizedBox(width: 6),
+            ..._windowsCaptionButtons(),
           ],
-        ),
-        actions: Platform.isWindows ? _windowsCaptionButtons() : null);
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMasterToggle(
+    LuxTokens tokens,
+    bool switchValue,
+    bool disabled,
+  ) {
+    return SizedBox(
+      width: 40,
+      height: 24,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          MouseRegion(
+            cursor: disabled
+                ? SystemMouseCursors.basic
+                : SystemMouseCursors.click,
+            child: GestureDetector(
+              key: const Key('header-master-toggle'),
+              onTap: disabled ? null : () => onSwitchChanged(!switchValue),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                width: 38,
+                height: 21,
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(11),
+                  color: switchValue
+                      ? tokens.emerald
+                      : tokens.subtlePillBg,
+                  border: Border.all(
+                    color: switchValue
+                        ? tokens.emerald
+                        : tokens.hairlineStrong,
+                    width: 0.75,
+                  ),
+                  boxShadow: switchValue
+                      ? [
+                          BoxShadow(
+                            color: tokens.emerald.withValues(alpha: 0.28),
+                            blurRadius: 8,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: AnimatedAlign(
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOutCubic,
+                  alignment: switchValue
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    width: 15.5,
+                    height: 15.5,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.16),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (isLoadingSwitch)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: tokens.cardBg.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.6,
+                      color: tokens.cobalt,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   /// Minimise / maximise / close for Windows, replacing the buttons lost

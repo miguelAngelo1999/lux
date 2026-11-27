@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:lux/util/window_surface.dart';
 
 class AppStateModel extends ChangeNotifier {
   late ThemeMode _theme;
   late Locale _locale;
+  WindowSurfaceTier _surfaceTier = WindowSurfaceTier.opaque;
   String _selectedProxyId = "";
   bool _isStarted = false;
   // Whether the user has intentionally started the core.
@@ -60,13 +62,21 @@ class AppStateModel extends ChangeNotifier {
 
   Locale get locale => _locale;
   ThemeMode get theme => _theme;
+  WindowSurfaceTier get surfaceTier => _surfaceTier;
   String get selectedProxyId => _selectedProxyId;
   bool get isStarted => _isStarted;
 
   AppStateModel(this._theme, this._locale);
 
+  void updateSurfaceTier(WindowSurfaceTier tier) {
+    if (tier == _surfaceTier) return;
+    _surfaceTier = tier;
+    notifyListeners();
+  }
+
   void updateTheme(ThemeMode newTheme) {
     _theme = newTheme;
+    WindowSurfaceBridge.syncAppearance(newTheme);
     notifyListeners();
   }
 
