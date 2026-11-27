@@ -96,6 +96,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
   String _effectivePasswordMode = 'persistent';
   bool _detailLoaded = false;
   bool _credentialsExpanded = false;
+  bool _usernamePillHovered = false;
   List<String> _recentUsernames = const [];
 
   /// A PAC-only proxy has a PAC URL and no fixed server, so a latency test to a
@@ -281,11 +282,20 @@ class _ProxyListItemState extends State<ProxyListItem> {
     });
   }
 
-  void _toggleCredentialsExpanded() {
+  void _toggleCredentialsExpanded({bool focusUsername = false}) {
     if (!_supportsCredentials) return;
-    setState(() => _credentialsExpanded = !_credentialsExpanded);
-    if (_credentialsExpanded) {
+    final next = !_credentialsExpanded;
+    setState(() {
+      _credentialsExpanded = next;
+      if (next) _usernamePillHovered = false;
+    });
+    if (next) {
       _loadProxyDetail();
+      if (focusUsername) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _usernameFocus.requestFocus();
+        });
+      }
     }
   }
 
@@ -735,11 +745,27 @@ class _ProxyListItemState extends State<ProxyListItem> {
                   child: LuxIcon(
                     prefixGlyph,
                     size: 13.5,
-                    color: tokens.textMuted,
+                    color: hasFocus ? focusBorderColor : tokens.textMuted,
                   ),
                 ),
               ),
-              Expanded(child: child),
+              Expanded(
+                child: MouseRegion(
+                  cursor: focusNode != null
+                      ? SystemMouseCursors.text
+                      : MouseCursor.defer,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: focusNode != null
+                        ? () => focusNode.requestFocus()
+                        : null,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: child,
+                    ),
+                  ),
+                ),
+              ),
               if (trailing != null) trailing else const SizedBox(width: 8),
             ],
           ),
@@ -765,6 +791,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
       hintText: hintText,
       hintStyle: TextStyle(
         fontSize: 12,
+        height: 1.17,
         fontWeight: FontWeight.w400,
         color: tokens.textMuted,
       ),
@@ -772,12 +799,13 @@ class _ProxyListItemState extends State<ProxyListItem> {
       enabledBorder: InputBorder.none,
       focusedBorder: InputBorder.none,
       isDense: true,
-      contentPadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.symmetric(vertical: 10),
     );
   }
 
   Widget _credentialsToggleButton(BuildContext context) {
     final tokens = LuxTokens.of(context);
+    final highlighted = _credentialsExpanded || _usernamePillHovered;
 
     return Tooltip(
       message: tl(context, 'Credentials'),
@@ -785,17 +813,18 @@ class _ProxyListItemState extends State<ProxyListItem> {
         key: Key('credentials-toggle-${widget.item.id}'),
         borderRadius: BorderRadius.circular(7),
         onTap: _toggleCredentialsExpanded,
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
           height: 26,
           padding: EdgeInsets.symmetric(horizontal: _credentialsExpanded ? 7 : 6),
           decoration: BoxDecoration(
-            color: _credentialsExpanded
+            color: highlighted
                 ? tokens.cobalt.withValues(alpha: 0.12)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
             border: Border.all(
-              color: _credentialsExpanded
-                  ? tokens.cobalt.withValues(alpha: 0.28)
+              color: highlighted
+                  ? tokens.cobalt.withValues(alpha: 0.30)
                   : Colors.transparent,
               width: 0.75,
             ),
@@ -806,7 +835,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
               LuxIcon(
                 LuxGlyph.key,
                 size: 13.5,
-                color: _credentialsExpanded ? tokens.cobalt : tokens.textMuted,
+                color: highlighted ? tokens.cobalt : tokens.textMuted,
               ),
               if (_credentialsExpanded) ...[
                 const SizedBox(width: 3),
@@ -894,6 +923,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
 
     final usernameField = _inlineFieldShell(
       context,
+      boxKey: Key('inline-username-box-${item.id}'),
       focusNode: _usernameFocus,
       prefixGlyph: LuxGlyph.person,
       isAuthError: isAuthError,
@@ -906,7 +936,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
           focusNode: _usernameFocus,
           style: TextStyle(
             fontSize: 12,
-            height: 1.2,
+            height: 1.17,
             fontWeight: FontWeight.w400,
             color: tokens.textPrimary,
           ),
@@ -1000,6 +1030,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
           )
         : _inlineFieldShell(
             context,
+            boxKey: Key('inline-password-box-${item.id}'),
             focusNode: _passwordFocus,
             prefixGlyph: LuxGlyph.lock,
             isAuthError: isAuthError,
@@ -1012,7 +1043,7 @@ class _ProxyListItemState extends State<ProxyListItem> {
                 obscureText: _obscurePassword,
                 style: TextStyle(
                   fontSize: 12,
-                  height: 1.2,
+                  height: 1.17,
                   fontWeight: FontWeight.w400,
                   color: tokens.textPrimary,
                 ),
@@ -1283,41 +1314,87 @@ class _ProxyListItemState extends State<ProxyListItem> {
                           !_credentialsExpanded) ...[
                         const SizedBox(width: 6),
                         Flexible(
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: InkWell(
-                              key: Key('subtitle-username-${item.id}'),
-                              borderRadius: BorderRadius.circular(6),
-                              onTap: _toggleCredentialsExpanded,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 5, vertical: 1.5),
-                                decoration: BoxDecoration(
-                                  color: tokens.subtlePillBg,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    LuxIcon(
-                                      LuxGlyph.person,
-                                      size: 11,
-                                      color: tokens.textMuted,
+                          child: Tooltip(
+                            message:
+                                tl(context, 'Click to edit username & password'),
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              onEnter: (_) =>
+                                  setState(() => _usernamePillHovered = true),
+                              onExit: (_) =>
+                                  setState(() => _usernamePillHovered = false),
+                              child: InkWell(
+                                key: Key('subtitle-username-${item.id}'),
+                                borderRadius: BorderRadius.circular(6),
+                                onTap: () => _toggleCredentialsExpanded(
+                                    focusUsername: true),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 140),
+                                  padding: EdgeInsets.fromLTRB(
+                                    5.5,
+                                    1.5,
+                                    _usernamePillHovered ? 6 : 5.5,
+                                    1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _usernamePillHovered
+                                        ? tokens.cobalt.withValues(alpha: 0.14)
+                                        : tokens.subtlePillBg,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: _usernamePillHovered
+                                          ? tokens.cobalt.withValues(alpha: 0.48)
+                                          : Colors.transparent,
+                                      width: 0.75,
                                     ),
-                                    const SizedBox(width: 3),
-                                    Flexible(
-                                      child: Text(
-                                        subtitleUsername,
-                                        style: TextStyle(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w400,
-                                          color: tokens.textSecondary,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      LuxIcon(
+                                        LuxGlyph.person,
+                                        size: 11,
+                                        color: _usernamePillHovered
+                                            ? tokens.cobalt
+                                            : tokens.textMuted,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 3.5),
+                                      Flexible(
+                                        child: Text(
+                                          subtitleUsername,
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: _usernamePillHovered
+                                                ? FontWeight.w500
+                                                : FontWeight.w400,
+                                            color: _usernamePillHovered
+                                                ? tokens.textPrimary
+                                                : tokens.textSecondary,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      AnimatedSize(
+                                        duration:
+                                            const Duration(milliseconds: 140),
+                                        curve: Curves.easeOutCubic,
+                                        child: _usernamePillHovered
+                                            ? Padding(
+                                                padding: const EdgeInsets.only(
+                                                    left: 4.5),
+                                                child: LuxIcon(
+                                                  LuxGlyph.edit,
+                                                  key: Key(
+                                                      'subtitle-username-pencil-${item.id}'),
+                                                  size: 10.5,
+                                                  color: tokens.cobalt,
+                                                ),
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),

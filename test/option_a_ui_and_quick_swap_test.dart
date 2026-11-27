@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -300,9 +301,29 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Hovering the username pill reveals the inline pencil cue before clicking.
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.byKey(const Key('subtitle-username-p1'))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('subtitle-username-pencil-p1')), findsOneWidget);
+
     // Expand inline auth via clickable username pill.
     await tester.tap(find.byKey(const Key('subtitle-username-p1')));
     await tester.pumpAndSettle();
+
+    // Inline username EditableText itself must be vertically centered inside its 34px shell.
+    final userBoxRect =
+        tester.getRect(find.byKey(const Key('inline-username-box-p1')));
+    final editableRect = tester.getRect(
+      find.descendant(
+        of: find.byKey(const Key('inline-username-p1')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect((editableRect.center.dy - userBoxRect.center.dy).abs(),
+        lessThanOrEqualTo(1.0));
 
     // Open recent-username switcher dropdown and pick 'joao.b'.
     expect(find.byKey(const Key('inline-username-history-p1')), findsOneWidget);
