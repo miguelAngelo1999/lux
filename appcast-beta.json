@@ -1,17 +1,17 @@
 {
-  "version": "1.50.133",
+  "version": "1.50.134",
   "channel": "beta",
-  "notes": "feat(telemetry): make opt-in usage reporting proxy-resilient, complete, and verifiable in Settings",
+  "notes": "feat(i18n): translate all new UI, telemetry, settings, and tray strings across pt/es/it/fil/zh + localized settings search",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "975d8f4bfb25baa0b96b502f6e3f2d7ca6e4bdd4be77b322efb65dd3c609f18b",
-    "size": 46087043,
-    "version": "1.50.133"
+    "sha256": "72a3bc0ac632657d38d211a79f58ab60408968e2489858fd4c6ea61a4b987ea9",
+    "size": 46097879,
+    "version": "1.50.134"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "34fc7433fb63119e7333177defc6aa8cc27dbb45fa37398921c1f1ed82a95d7e",
-    "size": 41848652,
-    "version": "1.50.133"
+    "sha256": "6cb694b5be4816549bfd9212a7feb7d97d6b41f84b6ed547930a38cba4f8d099",
+    "size": 41861474,
+    "version": "1.50.134"
   }
 }
