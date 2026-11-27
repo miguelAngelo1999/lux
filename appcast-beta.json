@@ -1,17 +1,17 @@
 {
-  "version": "1.50.135",
+  "version": "1.50.136",
   "channel": "beta",
-  "notes": "fix(ui): vertically center inline username/password text and add hover edit pencil affordance on username pill",
+  "notes": "fix(updater): remove duplicate SnackBar and behind-modal progress bars + double percentage",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "9c8bfd65546bbf7c84a199f6bfffe9f3c0c3bbf33136355a7cc6e54c4c4794f8",
-    "size": 46106801,
-    "version": "1.50.135"
+    "sha256": "59f69ab3d9039c75d19e4dec90026e67521da1200e91be76c54e3d3d9ea3a896",
+    "size": 46100614,
+    "version": "1.50.136"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "e18af64fc66e9a4defe7fa92fe6d3cf81f5c9758f5d9c39316d4a307ab9bee7f",
-    "size": 41863064,
-    "version": "1.50.135"
+    "sha256": "4ab9ad735bad4454c22ba40da831c189c62563787b69053a8f57c1e7c46d5f52",
+    "size": 41860630,
+    "version": "1.50.136"
   }
 }
