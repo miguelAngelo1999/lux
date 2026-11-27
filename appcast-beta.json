@@ -1,17 +1,17 @@
 {
-  "version": "1.50.129",
+  "version": "1.50.130",
   "channel": "beta",
-  "notes": "feat(ui): Option A macOS Liquid Glass, Obsidian Dark theme, thin icons, and quick account swap",
+  "notes": "fix(macos): keep FlutterViewController attached as contentViewController so clicks reach Flutter",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "c945e2288e4c37181fab4e87f9a547eea9683cc400e036a09338d1e5166fd0f6",
-    "size": 45847529,
-    "version": "1.50.129"
+    "sha256": "15a9973e7d00c179fbab3df607b3f5a50ff8cf460ba4974fc2c8014023d75849",
+    "size": 45854982,
+    "version": "1.50.130"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "0b1d53b650370a8c7047c617d518e460440167c89a00c2e1129883422dd69c6e",
-    "size": 41752765,
-    "version": "1.50.129"
+    "sha256": "414c4dccc2dad1055164a70af870ff5c133fb7de20298bb2709df8775da437e0",
+    "size": 41753152,
+    "version": "1.50.130"
   }
 }
