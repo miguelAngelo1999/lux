@@ -16,10 +16,16 @@ class SettingRow {
     this.keywords = const [],
   });
 
-  bool matches(String query) {
+  bool matches(String query, {String languageCode = 'en'}) {
     if (query.isEmpty) return true;
     final q = query.toLowerCase();
     if (title.toLowerCase().contains(q)) return true;
+    if (languageCode != 'en' &&
+        TranslationCache.translate(title, languageCode)
+            .toLowerCase()
+            .contains(q)) {
+      return true;
+    }
     return keywords.any((k) => k.toLowerCase().contains(q));
   }
 }

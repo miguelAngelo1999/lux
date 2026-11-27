@@ -280,8 +280,8 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                 ),
                 child: Text(
                   _search.isEmpty
-                      ? '${_conns.length} connections'
-                      : '${filtered.length} of ${_conns.length}',
+                      ? '${_conns.length} ${tl(context, 'connections')}'
+                      : '${filtered.length} ${tl(context, 'of')} ${_conns.length}',
                   style: luxMonoStyle(
                       fontSize: 10.5, color: tokens.textSecondary),
                 ),
@@ -513,7 +513,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                                                   value: ('host', 'DIRECT'),
                                                   height: 34,
                                                   child: Text(
-                                                    'Always Direct · ${c.cleanHost}',
+                                                    '${tl(ctx, 'Always Direct')} · ${c.cleanHost}',
                                                     style: TextStyle(
                                                         fontSize: 11.5,
                                                         color: tokens.emerald),
@@ -525,7 +525,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                                                   value: ('host', 'PROXY'),
                                                   height: 34,
                                                   child: Text(
-                                                    'Always Proxy · ${c.cleanHost}',
+                                                    '${tl(ctx, 'Always Proxy')} · ${c.cleanHost}',
                                                     style: TextStyle(
                                                         fontSize: 11.5,
                                                         color: tokens.cobalt),
@@ -537,7 +537,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                                                   value: ('host', 'REJECT'),
                                                   height: 34,
                                                   child: Text(
-                                                    'Reject · ${c.cleanHost}',
+                                                    '${tl(ctx, 'Reject')} · ${c.cleanHost}',
                                                     style: TextStyle(
                                                         fontSize: 11.5,
                                                         color: tokens.danger),
@@ -552,7 +552,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                                                   value: ('process', 'DIRECT'),
                                                   height: 34,
                                                   child: Text(
-                                                    'Always Direct app · ${c.process}',
+                                                    '${tl(ctx, 'Always Direct app')} · ${c.process}',
                                                     style: TextStyle(
                                                         fontSize: 11.5,
                                                         color: tokens.emerald),
@@ -564,7 +564,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                                                   value: ('process', 'PROXY'),
                                                   height: 34,
                                                   child: Text(
-                                                    'Always Proxy app · ${c.process}',
+                                                    '${tl(ctx, 'Always Proxy app')} · ${c.process}',
                                                     style: TextStyle(
                                                         fontSize: 11.5,
                                                         color: tokens.cobalt),

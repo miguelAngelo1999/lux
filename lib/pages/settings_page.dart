@@ -586,7 +586,9 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             build: (ctx) => copyableTile(
               context: ctx,
               title: 'Device ID',
-              value: _telemetryUuid.isEmpty ? 'not generated' : _telemetryUuid,
+              value: _telemetryUuid.isEmpty
+                  ? tl(ctx, 'not generated')
+                  : _telemetryUuid,
               subtitle: 'Random, not linked to any account. Quote it in reports.',
               copied: _uuidCopied,
               onCopy: () async {
@@ -767,7 +769,9 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   Text(
                     statusText.isNotEmpty
                         ? statusText
-                        : (pct != null ? 'Downloading… $pct%' : 'Downloading…'),
+                        : (pct != null
+                            ? '${tl(ctx, 'Downloading…')} $pct%'
+                            : tl(ctx, 'Downloading…')),
                     style: TextStyle(fontSize: 11, color: tokens.amber),
                   ),
                 ],
@@ -861,7 +865,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         return actionTile(
           context: ctx,
           title: 'Check for Updates',
-          subtitle: 'Current version $_appVersion',
+          subtitle: '${tl(ctx, 'Current version')} $_appVersion',
           buttonLabel: 'Check',
           glyph: LuxGlyph.refresh,
           busy: _checkingUpdate,
@@ -1538,7 +1542,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         if (!telem.telemetryConfigured)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-            child: Text(
+            child: TText(
               'No reporting endpoint is configured in this build, so nothing is '
               'sent regardless of this setting.',
               style: TextStyle(fontSize: 11, color: tokens.amber),
@@ -1555,15 +1559,16 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   : stats.sentCount > 0
                       ? tokens.emerald
                       : tokens.cobalt;
+              final activeLabel = tl(ctx, 'Active');
               final statusLine = hasError
-                  ? 'Last send failed: ${stats.lastError}'
+                  ? '${tl(ctx, 'Last send failed')}: ${stats.lastError}'
                   : stats.sentCount > 0
-                      ? 'Active · ${stats.sentCount} sent'
-                          '${stats.lastRoute != null ? ' via ${stats.lastRoute}' : ''}'
-                          '${stats.lastFlushAt != null ? ' · ${_formatTelemetryAgo(stats.lastFlushAt!)}' : ''}'
+                      ? '$activeLabel · ${stats.sentCount} ${tl(ctx, 'sent')}'
+                          '${stats.lastRoute != null ? ' ${tl(ctx, 'via')} ${stats.lastRoute}' : ''}'
+                          '${stats.lastFlushAt != null ? ' · ${_formatTelemetryAgo(ctx, stats.lastFlushAt!)}' : ''}'
                       : stats.bufferedCount > 0
-                          ? 'Active · ${stats.bufferedCount} queued'
-                          : 'Active · waiting for events';
+                          ? '$activeLabel · ${stats.bufferedCount} ${tl(ctx, 'queued')}'
+                          : '$activeLabel · ${tl(ctx, 'waiting for events')}';
               return Padding(
                 padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
                 child: Row(
@@ -1631,12 +1636,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
   }
 
-  String _formatTelemetryAgo(DateTime at) {
+  String _formatTelemetryAgo(BuildContext ctx, DateTime at) {
     final diff = DateTime.now().difference(at);
-    if (diff.inSeconds < 15) return 'just now';
-    if (diff.inMinutes < 1) return '${diff.inSeconds}s ago';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    return '${diff.inHours}h ago';
+    if (diff.inSeconds < 15) return tl(ctx, 'just now');
+    if (diff.inMinutes < 1) return '${diff.inSeconds}s';
+    if (diff.inHours < 1) return '${diff.inMinutes}m';
+    return '${diff.inHours}h';
   }
 
   Future<void> _runTelemetryTest() async {
@@ -1646,11 +1651,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (!mounted) return;
       if (res.ok) {
         _notify(
-          'Telemetry OK · sent via ${res.route} (HTTP ${res.statusCode ?? 200})',
+          '${tl(context, 'Telemetry OK')} · ${tl(context, 'sent')} ${tl(context, 'via')} ${res.route} (HTTP ${res.statusCode ?? 200})',
         );
       } else {
         _notify(
-          'Telemetry failed: ${res.error ?? "HTTP ${res.statusCode}"}',
+          '${tl(context, 'Telemetry failed')}: ${res.error ?? "HTTP ${res.statusCode}"}',
           isError: true,
         );
       }
@@ -1947,9 +1952,13 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   Widget _searchResults(LuxTokens tokens) {
+    final lang =
+        context.select<AppStateModel, String>((m) => m.locale.languageCode);
     final sections = <Widget>[];
     for (final c in _categories) {
-      final hits = _rowsFor(c.id).where((r) => r.matches(_query)).toList();
+      final hits = _rowsFor(c.id)
+          .where((r) => r.matches(_query, languageCode: lang))
+          .toList();
       if (hits.isEmpty) continue;
       sections.add(sectionHeader(context, c.label, glyph: c.glyph));
       sections.add(settingCard(
@@ -1958,8 +1967,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
     if (sections.isEmpty) {
       return Center(
-        child: TText(
-          'No settings match "$_query"',
+        child: Text(
+          '${tl(context, 'No settings match')} "$_query"',
           style: TextStyle(fontSize: 12, color: tokens.textMuted),
         ),
       );

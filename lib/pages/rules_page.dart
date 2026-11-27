@@ -597,7 +597,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   border: Border.all(color: tokens.hairline, width: 0.75),
                 ),
                 child: Text(
-                  '$visibleCount of ${_rules.length}',
+                  '$visibleCount ${tl(context, 'of')} ${_rules.length}',
                   style: luxMonoStyle(
                       fontSize: 10.5, color: tokens.textSecondary),
                 ),
@@ -625,7 +625,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                             size: 12, color: tokens.danger),
                         const SizedBox(width: 4),
                         Text(
-                          '$brokenCount broken',
+                          '$brokenCount ${tl(context, 'broken')}',
                           style: TextStyle(fontSize: 10.5, color: tokens.danger),
                         ),
                       ],

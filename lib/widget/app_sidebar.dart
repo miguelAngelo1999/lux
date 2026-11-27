@@ -792,7 +792,7 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
                     onTap: () => _handleUpdatePillTap(updateState),
                     child: Container(
                       height: 26,
-                      padding: const EdgeInsets.symmetric(horizontal: 7),
+                      padding: const EdgeInsets.symmetric(horizontal: 5.5),
                       decoration: BoxDecoration(
                         color: highlight
                             ? tokens.amber.withValues(alpha: 0.14)
@@ -819,16 +819,16 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
                           else
                             LuxIcon(
                               highlight ? LuxGlyph.download : LuxGlyph.refresh,
-                              size: 11,
+                              size: 10.5,
                               color:
                                   highlight ? tokens.amber : tokens.textMuted,
                             ),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: 3.5),
                           Expanded(
                             child: Text(
                               label,
                               style: luxMonoStyle(
-                                fontSize: 10,
+                                fontSize: 9.8,
                                 fontWeight: highlight
                                     ? FontWeight.w500
                                     : FontWeight.w400,

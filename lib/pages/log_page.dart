@@ -379,7 +379,7 @@ class _LogPageState extends State<LogPage> {
                           ),
                         ),
                         alignment: Alignment.center,
-                        child: Text(
+                        child: TText(
                           'Denied',
                           style: TextStyle(
                             fontSize: 11,

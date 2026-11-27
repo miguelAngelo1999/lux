@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/tr.dart';
+import 'package:lux/util/t_text.dart';
 import 'package:tray_manager/tray_manager.dart';
 
 String? _cachedTrayVersion;
@@ -18,8 +19,11 @@ Future<void> initSystemTray({
   List<ProxyItem> proxies = const [],
   String selectedProxyId = '',
   String? appVersion,
+  String? languageCode,
 }) async {
   final version = await _resolveTrayVersion(appVersion);
+  final lang = languageCode ?? await readLocale();
+  String t(String s) => TranslationCache.translate(s, lang);
   await trayManager.setIcon(
     Platform.isWindows ? 'assets/app_icon.ico' : 'assets/tray.icns',
   );
@@ -51,7 +55,7 @@ Future<void> initSystemTray({
     MenuItem.separator(),
     MenuItem(
       key: isConnected ? 'disconnect' : 'connect',
-      label: isConnected ? 'Disconnect' : 'Connect',
+      label: isConnected ? t('Disconnect') : t('Connect'),
     ),
     MenuItem.separator(),
   ];
@@ -59,7 +63,7 @@ Future<void> initSystemTray({
   // Proxy switcher
   if (proxyItems.isNotEmpty) {
     items.add(MenuItem.submenu(
-      label: 'Switch Profile',
+      label: t('Switch Profile'),
       submenu: Menu(items: proxyItems),
     ));
   }
@@ -67,7 +71,7 @@ Future<void> initSystemTray({
   // Quick edit
   if (editItems.isNotEmpty) {
     items.add(MenuItem.submenu(
-      label: 'Edit Credentials',
+      label: t('Edit Credentials'),
       submenu: Menu(items: editItems),
     ));
   }
@@ -75,11 +79,13 @@ Future<void> initSystemTray({
   items.addAll([
     MenuItem.separator(),
     MenuItem(key: 'open_dashboard', label: tr().trayDashboardLabel),
-    MenuItem(key: 'check_updates', label: 'Check for Updates…'),
+    MenuItem(key: 'check_updates', label: t('Check for Updates…')),
     MenuItem.separator(),
     MenuItem(key: 'exit_app', label: tr().exit),
   ]);
 
   await trayManager.setContextMenu(Menu(items: items));
-  await trayManager.setToolTip(isConnected ? 'Lux — Connected' : 'Lux — Disconnected');
+  await trayManager.setToolTip(
+    isConnected ? 'Lux — ${t('Connected')}' : 'Lux — ${t('Disconnected')}',
+  );
 }
