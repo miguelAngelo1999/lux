@@ -1,6 +1,6 @@
 ﻿[Setup]
 AppId={{80DF132E-434A-4DAB-9BC8-48A79C8383B9}
-AppVersion=1.50.138
+AppVersion=1.50.139
 AppName=Lux
 AppPublisher=igoogolx
 AppPublisherURL=https://github.com/leanflutter/flutter_distributor
@@ -9,7 +9,7 @@ AppUpdatesURL=https://github.com/leanflutter/flutter_distributor
 DefaultDirName={autopf}\lux
 DisableProgramGroupPage=yes
 OutputDir=.
-OutputBaseFilename=Lux-1.50.138-Windows-x64-Setup
+OutputBaseFilename=Lux-1.50.139-Windows-x64-Setup
 Compression=lzma2/fast
 SolidCompression=no
 SetupIconFile=assets\app_icon.ico

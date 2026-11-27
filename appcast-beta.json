@@ -1,17 +1,17 @@
 {
-  "version": "1.50.138",
+  "version": "1.50.139",
   "channel": "beta",
-  "notes": "feat(detect): prefer dynamic DNS WPAD (http://wpad/wpad.dat) and show PAC URL selector",
+  "notes": "feat(ui,detect): restyle modals for Obsidian/Porcelain theme and auto-name from trusted bump certs",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "10f419172fcb295bc28ab755f8e40a7e017d9261b1912722ca1576b3182459af",
-    "size": 46345787,
-    "version": "1.50.138"
+    "sha256": "cb103396357cd1a0bf60b520594b7e884c171874d51599607a14eadf22a646e5",
+    "size": 46358010,
+    "version": "1.50.139"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "64a1a5bcc7846406c2b8e1f9da3fa08ee922fa84c52799c170ce252e474ff28e",
-    "size": 42036864,
-    "version": "1.50.138"
+    "sha256": "19ddb236d9b9a748743f34fc1e14bf87bb38b12de81f325986a1ea31447887f1",
+    "size": 42052325,
+    "version": "1.50.139"
   }
 }
