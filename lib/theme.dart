@@ -310,6 +310,7 @@ abstract final class AppTheme {
     );
     return base.copyWith(
       scaffoldBackgroundColor: LuxTokens.light.canvasOpaque,
+      canvasColor: const Color(0xFFFFFFFF),
       dividerColor: LuxTokens.light.hairline,
       textTheme: _refineTypography(base.textTheme, LuxTokens.light.textPrimary),
       iconTheme: IconThemeData(color: LuxTokens.light.textSecondary, size: 18),
@@ -320,6 +321,145 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: LuxTokens.light.hairline),
         ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: const Color(0xFFFFFFFF),
+        surfaceTintColor: Colors.transparent,
+        elevation: 14,
+        shadowColor: const Color(0x2E0F172A),
+        barrierColor: const Color(0x470F172A),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: LuxTokens.light.hairlineStrong, width: 1),
+        ),
+        titleTextStyle: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+          color: LuxTokens.light.textPrimary,
+        ),
+        contentTextStyle: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          height: 1.4,
+          color: LuxTokens.light.textSecondary,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        labelStyle: TextStyle(fontSize: 12.5, color: LuxTokens.light.textSecondary),
+        floatingLabelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: LuxTokens.light.cobalt,
+        ),
+        hintStyle: TextStyle(fontSize: 12.5, color: LuxTokens.light.textMuted),
+        helperStyle: TextStyle(fontSize: 11, color: LuxTokens.light.textMuted),
+        errorStyle: TextStyle(fontSize: 11, color: LuxTokens.light.danger),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.light.hairlineStrong, width: 1),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.light.hairlineStrong, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.light.cobalt, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.light.danger, width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.light.danger, width: 1.5),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return LuxTokens.light.subtlePillBg;
+            }
+            return LuxTokens.light.cobalt;
+          }),
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return LuxTokens.light.textMuted;
+            }
+            return Colors.white;
+          }),
+          elevation: const WidgetStatePropertyAll(0),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(LuxTokens.light.textSecondary),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(LuxTokens.light.textPrimary),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: LuxTokens.light.hairlineStrong),
+          ),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: const Color(0xFFFFFFFF),
+        surfaceTintColor: Colors.transparent,
+        elevation: 6,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: LuxTokens.light.hairlineStrong),
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return LuxTokens.light.cobalt;
+          }
+          return Colors.transparent;
+        }),
+        checkColor: const WidgetStatePropertyAll(Colors.white),
+        side: BorderSide(color: LuxTokens.light.hairlineStrong, width: 1.2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
@@ -424,15 +564,16 @@ abstract final class AppTheme {
     );
     return base.copyWith(
       scaffoldBackgroundColor: LuxTokens.dark.canvasOpaque,
-      canvasColor: LuxTokens.dark.canvasOpaque,
+      canvasColor: const Color(0xFF141A26),
       dividerColor: LuxTokens.dark.hairline,
       colorScheme: base.colorScheme.copyWith(
         surface: LuxTokens.dark.canvasOpaque,
         surfaceContainerLowest: LuxTokens.dark.sidebarOpaque,
         surfaceContainerLow: LuxTokens.dark.cardBg,
         surfaceContainer: LuxTokens.dark.cardBg,
-        surfaceContainerHigh: const Color(0xFF1A202E),
+        surfaceContainerHigh: const Color(0xFF141A26),
         primary: LuxTokens.dark.cobalt,
+        onPrimary: Colors.white,
         onSurface: LuxTokens.dark.textPrimary,
         onSurfaceVariant: LuxTokens.dark.textSecondary,
         outlineVariant: LuxTokens.dark.hairlineStrong,
@@ -446,6 +587,145 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: LuxTokens.dark.hairline),
         ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: const Color(0xFF141A26),
+        surfaceTintColor: Colors.transparent,
+        elevation: 18,
+        shadowColor: const Color(0xA6000000),
+        barrierColor: const Color(0x9905070B),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: LuxTokens.dark.hairlineStrong, width: 1),
+        ),
+        titleTextStyle: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+          color: LuxTokens.dark.textPrimary,
+        ),
+        contentTextStyle: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          height: 1.4,
+          color: LuxTokens.dark.textSecondary,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF0D111A),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        labelStyle: TextStyle(fontSize: 12.5, color: LuxTokens.dark.textSecondary),
+        floatingLabelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: LuxTokens.dark.cobalt,
+        ),
+        hintStyle: TextStyle(fontSize: 12.5, color: LuxTokens.dark.textMuted),
+        helperStyle: TextStyle(fontSize: 11, color: LuxTokens.dark.textMuted),
+        errorStyle: TextStyle(fontSize: 11, color: LuxTokens.dark.danger),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.dark.hairlineStrong, width: 1),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.dark.hairlineStrong, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.dark.cobalt, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.dark.danger, width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: LuxTokens.dark.danger, width: 1.5),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return LuxTokens.dark.subtlePillBg;
+            }
+            return LuxTokens.dark.cobalt;
+          }),
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return LuxTokens.dark.textMuted;
+            }
+            return Colors.white;
+          }),
+          elevation: const WidgetStatePropertyAll(0),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(LuxTokens.dark.textSecondary),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(LuxTokens.dark.textPrimary),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: LuxTokens.dark.hairlineStrong),
+          ),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: const Color(0xFF161D2B),
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: LuxTokens.dark.hairlineStrong),
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return LuxTokens.dark.cobalt;
+          }
+          return Colors.transparent;
+        }),
+        checkColor: const WidgetStatePropertyAll(Colors.white),
+        side: BorderSide(color: LuxTokens.dark.hairlineStrong, width: 1.2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,

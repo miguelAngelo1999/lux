@@ -1299,8 +1299,13 @@ class CertPromptRequest {
 }
 
 /// Result from POST /proxies/check-cert — reports whether SSL interception is present.
+/// [intercepted] is true ONLY when an untrusted MITM CA needs a trust prompt.
+/// [bumpDetected] is true whenever SSL bump is present (untrusted OR already
+/// trusted in the OS root store), so [issuer] can still be used to auto-name
+/// the proxy cleanly.
 class CertCheckResult {
   final bool intercepted;
+  final bool bumpDetected;
   final String issuer;
   final String subject;
   final String notBefore;
@@ -1311,6 +1316,7 @@ class CertCheckResult {
 
   const CertCheckResult({
     this.intercepted = false,
+    this.bumpDetected = false,
     this.issuer = '',
     this.subject = '',
     this.notBefore = '',
@@ -1320,8 +1326,11 @@ class CertCheckResult {
     this.error = '',
   });
 
+  bool get hasBumpCert => intercepted || bumpDetected;
+
   factory CertCheckResult.fromJson(Map<String, dynamic> json) => CertCheckResult(
         intercepted: json['intercepted'] as bool? ?? false,
+        bumpDetected: json['bumpDetected'] as bool? ?? false,
         issuer: json['issuer'] as String? ?? '',
         subject: json['subject'] as String? ?? '',
         notBefore: json['notBefore'] as String? ?? '',

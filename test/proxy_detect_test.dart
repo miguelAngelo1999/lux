@@ -7,6 +7,7 @@ import 'package:lux/core/core_manager.dart';
 import 'package:lux/l10n/app_localizations.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/pages/proxies_page.dart';
+import 'package:lux/theme.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:provider/provider.dart';
@@ -206,11 +207,25 @@ void main() {
       expect(name, 'Acme Corp 3');
     });
 
-    test('defaults to Proxy 1 (never server IP) when not intercepted', () {
+    test('uses bump cert O= even when CA is already trusted (intercepted=false, bumpDetected=true)', () {
+      final cert = CertCheckResult.fromJson({
+        'intercepted': false,
+        'bumpDetected': true,
+        'issuer': 'O=Arautos do Evangelho, CN=Proxy Lumen Prophetae',
+      });
+      expect(cert.hasBumpCert, isTrue);
+      expect(
+        suggestDetectedProxyName(certResult: cert, existingNames: const []),
+        'Arautos do Evangelho',
+      );
+    });
+
+    test('defaults to Proxy 1 (never server IP) when neither intercepted nor bumpDetected', () {
       expect(
         suggestDetectedProxyName(
           certResult: const CertCheckResult(
             intercepted: false,
+            bumpDetected: false,
             issuer: 'O=DigiCert Inc, CN=DigiCert Global G2',
           ),
           existingNames: const [],
@@ -524,6 +539,76 @@ void main() {
       expect(core.addedPayloads, hasLength(2));
       expect(core.addedPayloads[1]['pacUrl'], 'http://10.60.0.1:80/wpad.dat');
       expect(core.addedPayloads[1]['name'], 'Proxy 2');
+    });
+
+    testWidgets('uses trusted bump cert org name without showing untrusted SSL prompt', (tester) async {
+      tester.view.physicalSize = const Size(1280, 860);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final appState = AppStateModel(ThemeMode.dark, const Locale('en'));
+      final core = _FakeDetectCoreManager(
+        appState: appState,
+        proxies: [],
+        detectResult: const DetectProxyResult(
+          pacUrl: 'http://wpad/wpad.dat',
+          source: 'wpad-dns',
+          proxies: [
+            DetectedProxy(
+              host: '10.8.0.1',
+              port: '8082',
+              type: 'http',
+              pacUrl: 'http://wpad/wpad.dat',
+            ),
+          ],
+          message: '',
+        ),
+        certResult: const CertCheckResult(
+          intercepted: false,
+          bumpDetected: true,
+          issuer: 'O=Acme Corp, CN=Acme Proxy CA',
+        ),
+      );
+
+      await tester.pumpWidget(_wrapProxiesPage(appState: appState, coreManager: core));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Detect Proxy'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add Proxy'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      final nameField = tester.widget<TextField>(find.byType(TextField));
+      expect(nameField.controller!.text, 'Acme Corp');
+
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      // Should NOT pop the untrusted SSL Interception dialog since CA is already trusted
+      expect(find.text('SSL Interception Detected'), findsNothing);
+      expect(core.addedPayloads, hasLength(1));
+      expect(core.addedPayloads.first['name'], 'Acme Corp');
+    });
+  });
+
+  group('Modal theme matches Obsidian Dark & Porcelain Light', () {
+    test('dialogTheme uses crisp Obsidian / Porcelain surfaces, hairline border, and compact title', () {
+      final dark = AppTheme.dark;
+      final light = AppTheme.light;
+
+      expect(dark.dialogTheme.backgroundColor, const Color(0xFF141A26));
+      expect(dark.dialogTheme.surfaceTintColor, Colors.transparent);
+      expect(dark.dialogTheme.titleTextStyle?.fontSize, 16);
+      expect(dark.inputDecorationTheme.filled, isTrue);
+      expect(dark.inputDecorationTheme.fillColor, const Color(0xFF0D111A));
+
+      expect(light.dialogTheme.backgroundColor, const Color(0xFFFFFFFF));
+      expect(light.dialogTheme.surfaceTintColor, Colors.transparent);
+      expect(light.dialogTheme.titleTextStyle?.fontSize, 16);
+      expect(light.inputDecorationTheme.filled, isTrue);
+      expect(light.inputDecorationTheme.fillColor, const Color(0xFFF8FAFC));
     });
   });
 }

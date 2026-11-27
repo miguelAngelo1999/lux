@@ -1315,8 +1315,13 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
             }
 
             return AlertDialog(
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              contentPadding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+              actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               title: Row(
                 children: [
+                  Icon(Icons.radar_rounded, size: 18, color: tokens.cobalt),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: TText(
                       isPurePacResult ? 'Detected PAC Script' : 'Detected Proxies',
@@ -1352,9 +1357,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                       children: [
                         if (pacOptions.isNotEmpty) ...[
                           Material(
-                            color: tokens.cardBg,
+                            color: Theme.of(ctx).brightness == Brightness.dark
+                                ? const Color(0xFF0E131D)
+                                : const Color(0xFFF8FAFC),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(10),
                               side: BorderSide(color: tokens.hairline),
                             ),
                             clipBehavior: Clip.antiAlias,
@@ -1804,9 +1811,11 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
 
 /// Extracts a human-friendly organization/CA name from an SSL bump cert's
 /// issuer DN (`O=` preferred, then `CN=`), rejecting empty, generic, or raw
-/// IP/host values. Returns `null` when no usable name is available.
+/// IP/host values. Works for BOTH untrusted MITM certs (`intercepted == true`)
+/// and already-trusted corporate bump CAs (`bumpDetected == true`).
+/// Returns `null` when no bump cert or usable name is available.
 String? _extractBumpCertName(CertCheckResult? certResult) {
-  if (certResult == null || !certResult.intercepted) return null;
+  if (certResult == null || !certResult.hasBumpCert) return null;
   final issuer = certResult.issuer.trim();
   if (issuer.isEmpty) return null;
 
@@ -1960,49 +1969,91 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
+    final subtitle = widget.proxy.isPacOnly
+        ? tl(context, 'PAC-only (dynamic routing)')
+        : widget.proxy.displayName;
     return AlertDialog(
-      title: Text(
-        widget.proxy.isPacOnly
-            ? tl(context, 'Credentials for PAC proxy')
-            : '${tl(context, 'Credentials')}: ${widget.proxy.displayName}',
+      titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+      contentPadding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      title: Row(
+        children: [
+          Icon(Icons.key_rounded, size: 18, color: tokens.cobalt),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TText(
+                  widget.proxy.isPacOnly
+                      ? 'Credentials for PAC proxy'
+                      : 'Credentials',
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: luxMonoStyle(
+                    fontSize: 11.5,
+                    color: tokens.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       content: SizedBox(
         width: 380,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
               controller: _usernameCtrl,
               autofocus: true,
+              style: TextStyle(fontSize: 13, color: tokens.textPrimary),
               decoration: InputDecoration(
                 labelText: tl(context, 'Username'),
-                isDense: true,
-                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person_outline_rounded,
+                    size: 16, color: tokens.textMuted),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _passwordCtrl,
               obscureText: true,
+              style: TextStyle(fontSize: 13, color: tokens.textPrimary),
               decoration: InputDecoration(
                 labelText: tl(context, 'Password'),
-                isDense: true,
-                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock_outline_rounded,
+                    size: 16, color: tokens.textMuted),
               ),
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _passwordMode,
+              isExpanded: true,
+              dropdownColor: Theme.of(context).dialogTheme.backgroundColor,
+              style: TextStyle(fontSize: 13, color: tokens.textPrimary),
               decoration: InputDecoration(
                 labelText: tl(context, 'Password type'),
-                isDense: true,
-                border: const OutlineInputBorder(),
               ),
               items: const [
-                DropdownMenuItem(value: 'persistent', child: TText('Persistent (saved)')),
-                DropdownMenuItem(value: 'timed', child: TText('Timed (expires)')),
-                DropdownMenuItem(value: 'one-time', child: TText('One-time (cleared after use)')),
+                DropdownMenuItem(
+                  value: 'persistent',
+                  child: TText('Persistent (saved)', overflow: TextOverflow.ellipsis),
+                ),
+                DropdownMenuItem(
+                  value: 'timed',
+                  child: TText('Timed (expires)', overflow: TextOverflow.ellipsis),
+                ),
+                DropdownMenuItem(
+                  value: 'one-time',
+                  child: TText('One-time (cleared after use)', overflow: TextOverflow.ellipsis),
+                ),
               ],
               onChanged: (v) => setState(() => _passwordMode = v!),
             ),
@@ -2011,18 +2062,17 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
               TextField(
                 controller: _ttlCtrl,
                 keyboardType: TextInputType.number,
+                style: TextStyle(fontSize: 13, color: tokens.textPrimary),
                 decoration: InputDecoration(
                   labelText: tl(context, 'Expires after (minutes)'),
-                  isDense: true,
-                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (v) => _ttlMinutes = int.tryParse(v) ?? 60,
               ),
             ],
-            const SizedBox(height: 8),
-            const TText(
+            const SizedBox(height: 10),
+            TText(
               'Leave empty if the proxy does not require authentication.',
-              style: TextStyle(fontSize: 11),
+              style: TextStyle(fontSize: 11.5, color: tokens.textMuted),
             ),
           ],
         ),
@@ -2091,18 +2141,32 @@ class _NameProxyDialogState extends State<_NameProxyDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     return AlertDialog(
-      title: const TText('Name this proxy'),
-      content: TextField(
-        controller: _nameCtrl,
-        decoration: InputDecoration(
-          labelText: tl(context, 'Proxy name'),
-          hintText: tl(context, 'e.g. Office, School, Home'),
-          errorText: _nameError,
+      titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+      contentPadding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      title: Row(
+        children: [
+          Icon(Icons.label_outline_rounded, size: 18, color: tokens.cobalt),
+          const SizedBox(width: 8),
+          const Expanded(child: TText('Name this proxy')),
+        ],
+      ),
+      content: SizedBox(
+        width: 360,
+        child: TextField(
+          controller: _nameCtrl,
+          style: TextStyle(fontSize: 13, color: tokens.textPrimary),
+          decoration: InputDecoration(
+            labelText: tl(context, 'Proxy name'),
+            hintText: tl(context, 'e.g. Office, School, Home'),
+            errorText: _nameError,
+          ),
+          autofocus: true,
+          onChanged: _validate,
+          onSubmitted: (_) => _submit(),
         ),
-        autofocus: true,
-        onChanged: _validate,
-        onSubmitted: (_) => _submit(),
       ),
       actions: [
         TextButton(
