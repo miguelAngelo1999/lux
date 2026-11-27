@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lux/core/core_config.dart'
     show shouldSkipUpdateCheck, writeLastUpdateCheckAt, writePendingUpdateVersion;
 import 'package:lux/model/app.dart';
@@ -39,6 +40,7 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> with WindowListener {
   String curProxyInfo = "";
   int _selectedTab = 0;
+  String? _settingsInitialFilter;
 
   static const _tabs = [
     AppSidebarTab(glyph: LuxGlyph.proxies, label: 'Proxies'),
@@ -61,20 +63,16 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     await Future.delayed(const Duration(seconds: 15));
     if (!mounted) return;
 
-    // Skip if checked within the last 24 hours
     if (await shouldSkipUpdateCheck(minHours: 24)) return;
 
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
         final info = await checkForUpdate();
-        // Record the check time regardless of outcome so we don't hammer the server
         await writeLastUpdateCheckAt();
         if (info == null || !info.hasUpdate) return;
         if (!mounted) return;
-        // Persist so settings tile shows badge even if snackbar is missed
         await writePendingUpdateVersion(info.latestVersion);
-        // System notification too, so it is seen when the window is hidden.
-        // No payload: the app updates in place, it must not open a web page.
+        if (!mounted) return;
         unawaited(notifier.show(
             'Lux ${info.latestVersion} is available. Open Lux to update.'));
         await showUpdateDialog(context, info);
@@ -112,6 +110,17 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     setState(() => curProxyInfo = info);
   }
 
+  void _selectTab(int index, {String? settingsFilter}) {
+    setState(() {
+      _selectedTab = index;
+      if (index == 4) {
+        _settingsInitialFilter = settingsFilter;
+      } else {
+        _settingsInitialFilter = null;
+      }
+    });
+  }
+
   Widget _buildPage() {
     switch (_selectedTab) {
       case 0:
@@ -122,13 +131,20 @@ class _DashboardState extends State<Dashboard> with WindowListener {
           dashboardUrl: widget.urlStr,
         );
       case 1:
-        return RulesPage(coreManager: widget.coreManager);
+        return RulesPage(
+          coreManager: widget.coreManager,
+          onOpenBypassCidrs: () => _selectTab(4, settingsFilter: 'tun'),
+        );
       case 2:
         return ConnectionsPage(coreManager: widget.coreManager);
       case 3:
         return LogPage(coreManager: widget.coreManager);
       case 4:
-        return SettingsPage(coreManager: widget.coreManager);
+        return SettingsPage(
+          coreManager: widget.coreManager,
+          dashboardUrl: widget.urlStr,
+          initialCategory: _settingsInitialFilter,
+        );
       default:
         return const SizedBox();
     }
@@ -139,38 +155,64 @@ class _DashboardState extends State<Dashboard> with WindowListener {
     final tokens = LuxTokens.of(context);
     final tier =
         context.select<AppStateModel, WindowSurfaceTier>((m) => m.surfaceTier);
+    final isMac = Platform.isMacOS;
 
-    return Scaffold(
-      backgroundColor:
-          tier.isTranslucent ? Colors.transparent : tokens.canvasOpaque,
-      body: Row(
-        children: [
-          AppSidebar(
-            tabs: _tabs,
-            selectedIndex: _selectedTab,
-            onSelected: (i) => setState(() => _selectedTab = i),
-            coreManager: widget.coreManager,
-          ),
-          Expanded(
-            child: Container(
-              color: tokens.canvasFor(tier),
-              child: Column(
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        SingleActivator(LogicalKeyboardKey.comma, meta: isMac, control: !isMac):
+            () => _selectTab(4),
+        SingleActivator(LogicalKeyboardKey.digit1, meta: isMac, control: !isMac):
+            () => _selectTab(0),
+        SingleActivator(LogicalKeyboardKey.digit2, meta: isMac, control: !isMac):
+            () => _selectTab(1),
+        SingleActivator(LogicalKeyboardKey.digit3, meta: isMac, control: !isMac):
+            () => _selectTab(2),
+        SingleActivator(LogicalKeyboardKey.digit4, meta: isMac, control: !isMac):
+            () => _selectTab(3),
+        SingleActivator(LogicalKeyboardKey.digit5, meta: isMac, control: !isMac):
+            () => _selectTab(4),
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor:
+              tier.isTranslucent ? Colors.transparent : tokens.canvasOpaque,
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final compactSidebar = constraints.maxWidth < 700;
+              return Row(
                 children: [
-                  DragToMoveArea(
-                    child: AppHeaderBar(
-                      coreManager: widget.coreManager,
-                      urlStr: widget.urlStr,
-                      curProxyInfo: curProxyInfo,
-                      onCurProxyInfoChange: onCurProxyInfoChange,
+                  AppSidebar(
+                    tabs: _tabs,
+                    selectedIndex: _selectedTab,
+                    onSelected: (i) => _selectTab(i),
+                    coreManager: widget.coreManager,
+                    compact: compactSidebar,
+                  ),
+                  Expanded(
+                    child: Container(
+                      color: tokens.canvasFor(tier),
+                      child: Column(
+                        children: [
+                          DragToMoveArea(
+                            child: AppHeaderBar(
+                              coreManager: widget.coreManager,
+                              urlStr: widget.urlStr,
+                              curProxyInfo: curProxyInfo,
+                              onCurProxyInfoChange: onCurProxyInfoChange,
+                            ),
+                          ),
+                          WindowsServiceBanner(coreManager: widget.coreManager),
+                          Expanded(child: _buildPage()),
+                        ],
+                      ),
                     ),
                   ),
-                  WindowsServiceBanner(coreManager: widget.coreManager),
-                  Expanded(child: _buildPage()),
                 ],
-              ),
-            ),
+              );
+            },
           ),
-        ],
+        ),
       ),
     );
   }

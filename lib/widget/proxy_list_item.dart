@@ -1188,254 +1188,294 @@ class _ProxyListItemState extends State<ProxyListItem> {
         ? item.name
         : '${item.server ?? ''}:${item.port ?? ''}';
 
-    final headerRow = InkWell(
-      onTap: widget.onSelect == null ? null : () => widget.onSelect!(item.id),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        child: Row(children: [
-          // Leading radio (inherits ancestor RadioGroup for keyboard support).
-          Transform.scale(
-            scale: 0.85,
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: Radio<String>(value: item.id),
-            ),
-          ),
-          const SizedBox(width: 6),
-          // Name + metadata row
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Flexible(
-                    child: Text(
-                      titleText,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-                        color: tokens.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (selected) ...[
-                    const SizedBox(width: 7),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: tokens.emerald.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        tl(context, 'Active'),
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w500,
-                          color: tokens.emerald,
+    final headerRow = LayoutBuilder(
+      builder: (context, constraints) {
+        final compactRow = constraints.maxWidth < 470;
+        final ultraCompact = constraints.maxWidth < 410;
+        return InkWell(
+          onTap:
+              widget.onSelect == null ? null : () => widget.onSelect!(item.id),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            child: Row(children: [
+              // Leading radio (inherits ancestor RadioGroup for keyboard support).
+              Transform.scale(
+                scale: 0.85,
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Radio<String>(value: item.id),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Name + metadata row
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Flexible(
+                        child: Text(
+                          titleText,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight:
+                                selected ? FontWeight.w500 : FontWeight.w400,
+                            color: tokens.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                  ],
-                ]),
-                const SizedBox(height: 3),
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5.5, vertical: 1.5),
-                    decoration: BoxDecoration(
-                      color: tokens.subtlePillBg,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: tokens.hairline, width: 0.5),
-                    ),
-                    child: Text(
-                      _typeLabel(item.type),
-                      style: luxMonoStyle(
-                        fontSize: 9.5,
-                        color: tokens.textSecondary,
-                      ),
-                    ),
-                  ),
-                  if (item.server != null && item.server!.isNotEmpty) ...[
-                    const SizedBox(width: 7),
-                    Flexible(
-                      child: Text(
-                        '${item.server}:${item.port}',
-                        style: luxMonoStyle(
-                          fontSize: 10.5,
-                          color: tokens.textMuted,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                  if (_supportsCredentials &&
-                      subtitleUsername.isNotEmpty &&
-                      !_credentialsExpanded) ...[
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: InkWell(
-                          key: Key('subtitle-username-${item.id}'),
-                          borderRadius: BorderRadius.circular(6),
-                          onTap: _toggleCredentialsExpanded,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: tokens.subtlePillBg,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                LuxIcon(
-                                  LuxGlyph.person,
-                                  size: 11,
-                                  color: tokens.textMuted,
-                                ),
-                                const SizedBox(width: 3),
-                                Flexible(
-                                  child: Text(
-                                    subtitleUsername,
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w400,
-                                      color: tokens.textSecondary,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
+                      if (selected) ...[
+                        const SizedBox(width: 7),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: tokens.emerald.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            tl(context, 'Active'),
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w500,
+                              color: tokens.emerald,
                             ),
                           ),
                         ),
+                      ],
+                    ]),
+                    const SizedBox(height: 3),
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5.5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: tokens.subtlePillBg,
+                          borderRadius: BorderRadius.circular(4),
+                          border:
+                              Border.all(color: tokens.hairline, width: 0.5),
+                        ),
+                        child: Text(
+                          _typeLabel(item.type),
+                          style: luxMonoStyle(
+                            fontSize: 9.5,
+                            color: tokens.textSecondary,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ]),
-                if (_errorMessage.isNotEmpty &&
-                    (_state == TestState.unreachable ||
-                        _state == TestState.authError ||
-                        _state == TestState.certError)) ...[
-                  const SizedBox(height: 3),
-                  Tooltip(
-                    message: _errorMessage,
-                    child: Text(
-                      _errorMessage,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w400,
-                        color: _state == TestState.certError
-                            ? tokens.amber
-                            : tokens.danger,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          // ── Trailing action cluster: bounded, do NOT select the row ──
-          if (widget.coreManager != null) ...[
-            _resultChip(context),
-            const SizedBox(width: 6),
-            if (_state == TestState.certError) ...[
-              SizedBox(
-                height: 26,
-                child: OutlinedButton(
-                  onPressed: _promptCertTrust,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 26),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    side: BorderSide(color: tokens.amber.withValues(alpha: 0.7), width: 0.75),
-                    foregroundColor: tokens.amber,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                  ),
-                  child: Text(
-                    tl(context, 'Trust'),
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 5),
-            ],
-            if ((item.pacUrl ?? '').isNotEmpty) ...[
-              SizedBox(
-                height: 26,
-                child: OutlinedButton(
-                  onPressed: _openPacRules,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 7),
-                    minimumSize: const Size(0, 26),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    side: BorderSide(color: tokens.hairlineStrong, width: 0.75),
-                    foregroundColor: tokens.textSecondary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      LuxIcon(LuxGlyph.route, size: 11.5, color: tokens.textSecondary),
-                      const SizedBox(width: 4),
-                      Text(
-                        tl(context, 'PAC'),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+                      if (item.server != null && item.server!.isNotEmpty) ...[
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text(
+                            '${item.server}:${item.port}',
+                            style: luxMonoStyle(
+                              fontSize: 10.5,
+                              color: tokens.textMuted,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                      if (_supportsCredentials &&
+                          subtitleUsername.isNotEmpty &&
+                          !_credentialsExpanded) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: InkWell(
+                              key: Key('subtitle-username-${item.id}'),
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: _toggleCredentialsExpanded,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: tokens.subtlePillBg,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    LuxIcon(
+                                      LuxGlyph.person,
+                                      size: 11,
+                                      color: tokens.textMuted,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Flexible(
+                                      child: Text(
+                                        subtitleUsername,
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w400,
+                                          color: tokens.textSecondary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ]),
+                    if (_errorMessage.isNotEmpty &&
+                        (_state == TestState.unreachable ||
+                            _state == TestState.authError ||
+                            _state == TestState.certError)) ...[
+                      const SizedBox(height: 3),
+                      Tooltip(
+                        message: _errorMessage,
+                        child: Text(
+                          _errorMessage,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w400,
+                            color: _state == TestState.certError
+                                ? tokens.amber
+                                : tokens.danger,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 5),
-            ],
-            if (_supportsCredentials) ...[
-              _credentialsToggleButton(context),
-              const SizedBox(width: 5),
-            ],
-            SizedBox(
-              height: 26,
-              child: OutlinedButton(
-                onPressed: _state == TestState.testing ? null : _testDelay,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 26),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  side: BorderSide(color: tokens.hairlineStrong, width: 0.75),
-                  foregroundColor: tokens.textPrimary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LuxIcon(LuxGlyph.bolt, size: 11, color: tokens.cobalt),
-                    const SizedBox(width: 3),
-                    Text(
-                      tl(context, 'Test'),
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
-                    ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(width: 2),
-          ],
-          ProxyItemActionMenu(
-            onClick: widget.onChange,
-            controller: menuController,
-            id: item.id,
-            type: item.type,
-            passwordLocked: item.passwordLocked,
-            hasPac: (item.pacUrl ?? '').isNotEmpty,
+              // ── Trailing action cluster: bounded, do NOT select the row ──
+              if (widget.coreManager != null) ...[
+                _resultChip(context),
+                const SizedBox(width: 6),
+                if (_state == TestState.certError) ...[
+                  SizedBox(
+                    height: 26,
+                    child: OutlinedButton(
+                      onPressed: _promptCertTrust,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 26),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        side: BorderSide(
+                            color: tokens.amber.withValues(alpha: 0.7),
+                            width: 0.75),
+                        foregroundColor: tokens.amber,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(7)),
+                      ),
+                      child: Text(
+                        tl(context, 'Trust'),
+                        style: const TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w400),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                ],
+                if ((item.pacUrl ?? '').isNotEmpty) ...[
+                  Tooltip(
+                    message: tl(context, 'PAC'),
+                    child: SizedBox(
+                      height: 26,
+                      width: ultraCompact ? 28 : null,
+                      child: OutlinedButton(
+                        onPressed: _openPacRules,
+                        style: OutlinedButton.styleFrom(
+                          padding: ultraCompact
+                              ? EdgeInsets.zero
+                              : const EdgeInsets.symmetric(horizontal: 7),
+                          minimumSize: const Size(0, 26),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          side: BorderSide(
+                              color: tokens.hairlineStrong, width: 0.75),
+                          foregroundColor: tokens.textSecondary,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            LuxIcon(LuxGlyph.route,
+                                size: 11.5, color: tokens.textSecondary),
+                            if (!ultraCompact) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                tl(context, 'PAC'),
+                                style: const TextStyle(
+                                    fontSize: 11, fontWeight: FontWeight.w400),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                ],
+                if (_supportsCredentials) ...[
+                  _credentialsToggleButton(context),
+                  const SizedBox(width: 5),
+                ],
+                Tooltip(
+                  message: tl(context, 'Test'),
+                  child: SizedBox(
+                    height: 26,
+                    width: compactRow ? 28 : null,
+                    child: OutlinedButton(
+                      onPressed:
+                          _state == TestState.testing ? null : _testDelay,
+                      style: OutlinedButton.styleFrom(
+                        padding: compactRow
+                            ? EdgeInsets.zero
+                            : const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 26),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        side: BorderSide(
+                            color: tokens.hairlineStrong, width: 0.75),
+                        foregroundColor: tokens.textPrimary,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(7)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          LuxIcon(LuxGlyph.bolt,
+                              size: 11.5, color: tokens.cobalt),
+                          if (!compactRow) ...[
+                            const SizedBox(width: 3),
+                            Text(
+                              tl(context, 'Test'),
+                              style: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w400),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 2),
+              ],
+              ProxyItemActionMenu(
+                onClick: widget.onChange,
+                controller: menuController,
+                id: item.id,
+                type: item.type,
+                passwordLocked: item.passwordLocked,
+                hasPac: (item.pacUrl ?? '').isNotEmpty,
+              ),
+            ]),
           ),
-        ]),
-      ),
+        );
+      },
     );
 
     return Semantics(

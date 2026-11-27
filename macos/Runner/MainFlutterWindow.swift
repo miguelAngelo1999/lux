@@ -23,6 +23,7 @@ class MainFlutterWindow: NSWindow {
   private var quickEditPanel: NSPanel?
   private var windowBackdropView: NSVisualEffectView?
   private var sidebarBackdropView: NSView?
+  private var sidebarWidthConstraint: NSLayoutConstraint?
   private var flutterVC: FlutterViewController?
   private var accessibilityObserver: NSObjectProtocol?
 
@@ -32,13 +33,23 @@ class MainFlutterWindow: NSWindow {
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+    self.minSize = NSSize(width: 640, height: 480)
+
+    // Native unified toolbar positions macOS traffic lights at (19, 19),
+    // vertically centered with our 52px header bar and nestled cleanly inside
+    // the inset Liquid Glass sidebar pill without touching its rounded border.
+    if #available(macOS 11.0, *) {
+      let toolbar = NSToolbar(identifier: "LuxUnifiedToolbar")
+      self.toolbar = toolbar
+      self.toolbarStyle = .unified
+    }
 
     // Configure native macOS glass/vibrancy surface with graceful fallback
     // for macOS 12-15 (NSVisualEffectView) and Reduce Transparency (opaque).
     setupWindowSurface(for: flutterViewController)
 
     // Window surface channel: reports live capability tier to Flutter and
-    // syncs NSAppearance when the user picks Light/Dark/System in Lux.
+    // syncs NSAppearance / sidebar glass width.
     let surfChannel = FlutterMethodChannel(
       name: "lux_window_surface",
       binaryMessenger: flutterViewController.engine.binaryMessenger
@@ -56,6 +67,12 @@ class MainFlutterWindow: NSWindow {
         let mode = (call.arguments as? [String: Any])?["mode"] as? String ?? "system"
         DispatchQueue.main.async {
           self.applyWindowAppearance(mode)
+        }
+        result(nil)
+      case "setSidebarWidth":
+        let width = (call.arguments as? [String: Any])?["width"] as? Double ?? 180.0
+        DispatchQueue.main.async {
+          self.updateSidebarBackdropWidth(CGFloat(width))
         }
         result(nil)
       default:
@@ -264,14 +281,16 @@ class MainFlutterWindow: NSWindow {
     if #available(macOS 26.0, *) {
       let glass = PassThroughGlassEffectView(frame: .zero)
       glass.style = .regular
-      glass.cornerRadius = 14
+      glass.cornerRadius = 16
       glass.translatesAutoresizingMaskIntoConstraints = false
       wrapper.addSubview(glass, positioned: .below, relativeTo: flutterMetalView)
+      let widthConstraint = glass.widthAnchor.constraint(equalToConstant: 164)
+      self.sidebarWidthConstraint = widthConstraint
       NSLayoutConstraint.activate([
         glass.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 8),
         glass.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 8),
         glass.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -8),
-        glass.widthAnchor.constraint(equalToConstant: 164),
+        widthConstraint,
       ])
       sidebarView = glass
     } else {
@@ -281,17 +300,28 @@ class MainFlutterWindow: NSWindow {
       vibrancy.state = .followsWindowActiveState
       vibrancy.translatesAutoresizingMaskIntoConstraints = false
       wrapper.addSubview(vibrancy, positioned: .below, relativeTo: flutterMetalView)
+      let widthConstraint = vibrancy.widthAnchor.constraint(equalToConstant: 176)
+      self.sidebarWidthConstraint = widthConstraint
       NSLayoutConstraint.activate([
         vibrancy.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
         vibrancy.topAnchor.constraint(equalTo: wrapper.topAnchor),
         vibrancy.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
-        vibrancy.widthAnchor.constraint(equalToConstant: 176),
+        widthConstraint,
       ])
       sidebarView = vibrancy
     }
     self.sidebarBackdropView = sidebarView
 
     refreshSurfaceTransparency()
+  }
+
+  private func updateSidebarBackdropWidth(_ totalSidebarWidth: CGFloat) {
+    if #available(macOS 26.0, *) {
+      // Liquid Glass pill is inset 8px on left and right.
+      sidebarWidthConstraint?.constant = max(120, totalSidebarWidth - 16)
+    } else {
+      sidebarWidthConstraint?.constant = max(120, totalSidebarWidth)
+    }
   }
 
   private func refreshSurfaceTransparency() {

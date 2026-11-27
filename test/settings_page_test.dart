@@ -74,31 +74,39 @@ void main() {
     await TranslationCache.load();
   });
 
-  group('settings sidebar', () {
-    testWidgets('every category is offered', (tester) async {
+  group('settings filter pills', () {
+    testWidgets('every category pill is offered alongside All', (tester) async {
       await pumpSettings(tester, FakeCore());
       for (final label in [
+        'All',
+        'Updates',
         'General',
         'Network',
         'DNS',
         'TUN / Mixed',
         'Privacy',
-        'Updates',
         'Advanced',
       ]) {
         expect(find.text(label), findsWidgets, reason: '$label missing');
       }
     });
 
-    testWidgets('selecting a category swaps the content', (tester) async {
+    testWidgets('selecting a category pill filters to only that section',
+        (tester) async {
       await pumpSettings(tester, FakeCore());
-      // General is selected on open, so a DNS-only row should not be present.
-      expect(find.text('Fake IP'), findsNothing);
+      // All is selected on open, so General rows are immediately visible.
+      expect(find.text('Auto Launch'), findsWidgets);
 
-      await tester.tap(find.text('DNS').last);
+      await tester.tap(find.byKey(const Key('settings-filter-dns')));
       await tester.pumpAndSettle();
       expect(find.text('Fake IP'), findsWidgets);
       expect(find.text('Hijack DNS'), findsWidgets);
+      expect(find.text('Auto Launch'), findsNothing);
+
+      // Tapping All restores the full single-pane view.
+      await tester.tap(find.byKey(const Key('settings-filter-all')));
+      await tester.pumpAndSettle();
+      expect(find.text('Auto Launch'), findsWidgets);
     });
   });
 
@@ -173,6 +181,7 @@ void main() {
   // of bug rather than waiting for someone to notice a missing control.
   group('layout holds at different window widths', () {
     for (final size in const [
+      Size(640, 480),
       Size(700, 600),
       Size(900, 700),
       Size(1400, 900),
@@ -182,11 +191,11 @@ void main() {
         await pumpSettings(tester, FakeCore(), size: size);
         expect(tester.takeException(), isNull);
 
-        for (final category in ['Network', 'DNS', 'Privacy', 'Advanced']) {
-          await tester.tap(find.text(category).last);
+        for (final id in ['updates', 'general', 'network', 'tun', 'dns', 'privacy', 'advanced']) {
+          await tester.tap(find.byKey(Key('settings-filter-$id')));
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull,
-              reason: '$category overflows at ${size.width}');
+              reason: '$id overflows at ${size.width}');
         }
       });
     }

@@ -103,6 +103,7 @@ flutter:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
   assets:
+    - assets/logo.png
     - assets/app_icon.ico
     - assets/tray.png
     - assets/tray.icns

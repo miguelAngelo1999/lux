@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:lux/util/t_text.dart';
 import 'package:flutter/services.dart';
 import 'package:lux/core/core_manager.dart';
+import 'package:lux/theme.dart';
+import 'package:lux/util/t_text.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class LogEntry {
@@ -21,15 +22,16 @@ class LogEntry {
       );
 
   Color levelColor(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     switch (level) {
       case 'error':
-        return Colors.red;
+        return tokens.danger;
       case 'warning':
-        return Colors.orange;
+        return tokens.amber;
       case 'debug':
-        return Colors.grey;
+        return tokens.textMuted;
       default:
-        return Theme.of(context).colorScheme.onSurface;
+        return tokens.textPrimary;
     }
   }
 }
@@ -51,14 +53,13 @@ class _LogPageState extends State<LogPage> {
   final _scrollCtrl = ScrollController();
   final _logFocusNode = FocusNode();
   bool _connected = false;
+  bool _paused = false;
   String? _error;
 
-  /// Held so dispose can cancel it. A bare Future.delayed keeps this State
-  /// reachable until it fires and then reconnects a page nobody is looking at.
   Timer? _retry;
   StreamSubscription<dynamic>? _sub;
 
-  final _levels = ['debug', 'info', 'warning', 'error'];
+  static const _levels = ['debug', 'info', 'warning', 'error'];
 
   @override
   void initState() {
@@ -78,10 +79,6 @@ class _LogPageState extends State<LogPage> {
   Future<void> _connect() async {
     try {
       final channel = await widget.coreManager.getLogChannel();
-      // web_socket_channel 3.x requires awaiting ready before listening.
-      // Without it the handshake may still be in flight, the subscription
-      // attaches to a socket that is not open, and frames are dropped with no
-      // error -- the log simply stays empty.
       await channel.ready;
       if (!mounted) {
         await channel.sink.close();
@@ -96,12 +93,10 @@ class _LogPageState extends State<LogPage> {
       _sub = channel.stream.listen(
         (raw) {
           try {
-            // Log endpoint sends an array of JSON-encoded log strings
             final batch = json.decode(raw as String) as List<dynamic>;
             for (final item in batch) {
               try {
                 final data = json.decode(item as String) as Map<String, dynamic>;
-                // Convert ms timestamp to ISO string
                 final ts = data['time'];
                 final timeStr = ts is int
                     ? DateTime.fromMillisecondsSinceEpoch(ts).toIso8601String()
@@ -119,12 +114,13 @@ class _LogPageState extends State<LogPage> {
                 }
               } catch (_) {}
             }
-            // Auto-scroll
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_scrollCtrl.hasClients) {
-                _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-              }
-            });
+            if (!_paused) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_scrollCtrl.hasClients) {
+                  _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+                }
+              });
+            }
           } catch (_) {}
         },
         onError: (e) {
@@ -186,6 +182,19 @@ class _LogPageState extends State<LogPage> {
     }
   }
 
+  String _shortLevel(String level) {
+    switch (level) {
+      case 'warning':
+        return 'WARN';
+      case 'error':
+        return 'ERR';
+      case 'debug':
+        return 'DBG';
+      default:
+        return 'INFO';
+    }
+  }
+
   @override
   void dispose() {
     _retry?.cancel();
@@ -197,175 +206,385 @@ class _LogPageState extends State<LogPage> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final filtered = _filtered;
-    return Column(
-      children: [
-        // Toolbar
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            children: [
-              // Connection status dot
-              Icon(Icons.circle,
-                  size: 8,
-                  color: _connected ? Colors.green : Colors.orange),
-              const SizedBox(width: 6),
-              DropdownButton<String>(
-                value: _levelFilter,
-                isDense: true,
-                underline: const SizedBox(),
-                items: _levels
-                    .map((l) => DropdownMenuItem(
-                          value: l,
-                          child: Text(l.toUpperCase(),
-                              style: const TextStyle(fontSize: 12)),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _levelFilter = v);
-                },
+  Widget _toolbarIconButton({
+    required LuxTokens tokens,
+    required LuxGlyph glyph,
+    required String tooltip,
+    required VoidCallback onTap,
+    bool active = false,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: active
+                  ? tokens.cobalt.withValues(alpha: 0.14)
+                  : tokens.cardBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: active
+                    ? tokens.cobalt.withValues(alpha: 0.45)
+                    : tokens.hairlineStrong,
+                width: 0.75,
               ),
-              const SizedBox(width: 8),
-              // Quick-filter button for denied requests
-              FilterChip(
-                label: const Text('Denied', style: TextStyle(fontSize: 11)),
-                selected: _searchText == '[deny]',
-                onSelected: (on) {
-                  setState(() {
-                    if (on) {
-                      _searchCtrl.text = '[DENY]';
-                    } else {
-                      _searchCtrl.text = '';
-                    }
-                  });
-                },
-                selectedColor: Colors.orange.withAlpha(60),
-                checkmarkColor: Colors.orange,
-                side: BorderSide(
-                    color: _searchText == '[deny]'
-                        ? Colors.orange
-                        : Colors.grey.withAlpha(80)),
-                padding: EdgeInsets.zero,
-                labelPadding:
-                    const EdgeInsets.symmetric(horizontal: 4),
-                visualDensity: VisualDensity.compact,
+            ),
+            child: Center(
+              child: LuxIcon(
+                glyph,
+                size: 13,
+                color: active ? tokens.cobalt : tokens.textSecondary,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: tl(context, 'Search logs...'),
-                    isDense: true,
-                    prefixIcon: Icon(Icons.search, size: 16),
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  ),
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: tl(context, 'Clear logs'),
-                icon: const Icon(Icons.delete_outline, size: 18),
-                onPressed: () => setState(() => _logs.clear()),
-              ),
-              IconButton(
-                tooltip: tl(context, 'Copy all'),
-                icon: const Icon(Icons.copy, size: 18),
-                onPressed: () {
-                  final text = filtered
-                      .map((e) =>
-                          '[${_formatTime(e.time)}] [${e.level.toUpperCase()}] ${e.message}')
-                      .join('\n');
-                  Clipboard.setData(ClipboardData(text: text));
-                },
-              ),
-            ],
+            ),
           ),
         ),
-        const Divider(height: 1),
-        Expanded(
-          child: _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TText('Connection error:', style: TextStyle(color: Colors.red, fontSize: 12)),
-                      const SizedBox(height: 4),
-                      SelectableText(_error!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                      const SizedBox(height: 8),
-                      TextButton(onPressed: () { setState(() => _error = null); _connect(); }, child: const TText('Retry')),
-                    ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
+    final filtered = _filtered;
+    final denyActive = _searchText == '[deny]';
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 540;
+              return Row(
+                children: [
+                  Container(
+                    width: 6.5,
+                    height: 6.5,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _connected ? tokens.emerald : tokens.amber,
+                    ),
                   ),
-                )
-              : filtered.isEmpty
-              ? Center(
-                  child: Text(
-                    _connected ? tl(context, 'Waiting for logs...') : tl(context, 'Connecting...'),
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                )
-              : SelectableRegion(
-                  focusNode: _logFocusNode,
-                  selectionControls: materialTextSelectionControls,
-                  child: ListView.builder(
-                  controller: _scrollCtrl,
-                  itemCount: filtered.length,
-                  itemBuilder: (ctx, i) {
-                    final e = filtered[i];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 1),
+                  const SizedBox(width: 8),
+                  if (compact)
+                    Container(
+                      height: 30,
+                      padding: const EdgeInsets.symmetric(horizontal: 7),
+                      decoration: BoxDecoration(
+                        color: tokens.cardBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border:
+                            Border.all(color: tokens.hairline, width: 0.75),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _levelFilter,
+                          isDense: true,
+                          items: _levels
+                              .map((l) => DropdownMenuItem(
+                                    value: l,
+                                    child: Text(
+                                      _shortLevel(l),
+                                      style: luxMonoStyle(
+                                        fontSize: 10.5,
+                                        color: tokens.textPrimary,
+                                      ),
+                                    ),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => _levelFilter = v);
+                          },
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: tokens.subtlePillBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border:
+                            Border.all(color: tokens.hairline, width: 0.75),
+                      ),
                       child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox(
-                            width: 68,
-                            child: Text(
-                              _formatTime(e.time),
-                              style: const TextStyle(
-                                  fontSize: 11, color: Colors.grey),
+                          for (final l in _levels)
+                            InkWell(
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: () => setState(() => _levelFilter = l),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _levelFilter == l
+                                      ? tokens.cardBg
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: _levelFilter == l
+                                        ? tokens.hairlineStrong
+                                        : Colors.transparent,
+                                    width: 0.75,
+                                  ),
+                                ),
+                                child: Text(
+                                  _shortLevel(l),
+                                  style: luxMonoStyle(
+                                    fontSize: 10,
+                                    fontWeight: _levelFilter == l
+                                        ? FontWeight.w500
+                                        : FontWeight.w400,
+                                    color: _levelFilter == l
+                                        ? tokens.textPrimary
+                                        : tokens.textMuted,
+                                  ),
+                                ),
+                              ),
                             ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(width: 6),
+                  Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(7),
+                      onTap: () {
+                        setState(() {
+                          _searchCtrl.text = denyActive ? '' : '[DENY]';
+                        });
+                      },
+                      child: Container(
+                        height: 30,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: denyActive
+                              ? tokens.amber.withValues(alpha: 0.14)
+                              : tokens.cardBg,
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                            color: denyActive
+                                ? tokens.amber.withValues(alpha: 0.5)
+                                : tokens.hairline,
+                            width: 0.75,
                           ),
-                          Container(
-                            width: 54,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color:
-                                  e.levelColor(ctx).withAlpha(30),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Text(
-                              e.level.toUpperCase(),
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  color: e.levelColor(ctx),
-                                  fontWeight: FontWeight.bold),
-                            ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Denied',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight:
+                                denyActive ? FontWeight.w500 : FontWeight.w400,
+                            color: denyActive
+                                ? tokens.amber
+                                : tokens.textSecondary,
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              e.message,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: (e.message.contains('[DENY]') ||
-                                          e.message.contains('[PROXY_DENIED]'))
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                  color: e.levelColor(ctx)),
-                            ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: SizedBox(
+                      height: 30,
+                      child: TextField(
+                        controller: _searchCtrl,
+                        style:
+                            TextStyle(fontSize: 12, color: tokens.textPrimary),
+                        decoration: InputDecoration(
+                          hintText: tl(context, 'Search logs...'),
+                          hintStyle:
+                              TextStyle(fontSize: 11.5, color: tokens.textMuted),
+                          isDense: true,
+                          filled: true,
+                          fillColor: tokens.cardBg,
+                          prefixIcon: Padding(
+                            padding: const EdgeInsets.only(left: 9, right: 5),
+                            child: LuxIcon(LuxGlyph.search,
+                                size: 13, color: tokens.textMuted),
+                          ),
+                          prefixIconConstraints:
+                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                                color: tokens.hairline, width: 0.75),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide:
+                                BorderSide(color: tokens.cobalt, width: 1.0),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  _toolbarIconButton(
+                    tokens: tokens,
+                    glyph: _paused ? LuxGlyph.play : LuxGlyph.pause,
+                    tooltip: _paused
+                        ? tl(context, 'Resume auto-scroll')
+                        : tl(context, 'Pause auto-scroll'),
+                    active: _paused,
+                    onTap: () => setState(() => _paused = !_paused),
+                  ),
+                  const SizedBox(width: 4),
+                  _toolbarIconButton(
+                    tokens: tokens,
+                    glyph: LuxGlyph.trash,
+                    tooltip: tl(context, 'Clear logs'),
+                    onTap: () => setState(() => _logs.clear()),
+                  ),
+                  const SizedBox(width: 4),
+                  _toolbarIconButton(
+                    tokens: tokens,
+                    glyph: LuxGlyph.copy,
+                    tooltip: tl(context, 'Copy all'),
+                    onTap: () {
+                      final text = filtered
+                          .map((e) =>
+                              '[${_formatTime(e.time)}] [${e.level.toUpperCase()}] ${e.message}')
+                          .join('\n');
+                      Clipboard.setData(ClipboardData(text: text));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(tl(context, 'Logs copied')),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: tokens.cardBg,
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(color: tokens.hairline, width: 0.75),
+              ),
+              child: _error != null
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TText(
+                            'Connection error:',
+                            style: TextStyle(color: tokens.danger, fontSize: 12),
+                          ),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            _error!,
+                            style: luxMonoStyle(
+                                fontSize: 11, color: tokens.textMuted),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _error = null);
+                              _connect();
+                            },
+                            child: const TText('Retry'),
                           ),
                         ],
                       ),
-                    );
-                  },
-                )),
+                    )
+                  : filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            _connected
+                                ? tl(context, 'Waiting for logs...')
+                                : tl(context, 'Connecting...'),
+                            style:
+                                TextStyle(fontSize: 12, color: tokens.textMuted),
+                          ),
+                        )
+                      : SelectableRegion(
+                          focusNode: _logFocusNode,
+                          selectionControls: materialTextSelectionControls,
+                          child: ListView.builder(
+                            controller: _scrollCtrl,
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            itemCount: filtered.length,
+                            itemBuilder: (ctx, i) {
+                              final e = filtered[i];
+                              final lvlColor = e.levelColor(ctx);
+                              final isDeny = e.message.contains('[DENY]') ||
+                                  e.message.contains('[PROXY_DENIED]');
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 2),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      width: 62,
+                                      child: Text(
+                                        _formatTime(e.time),
+                                        style: luxMonoStyle(
+                                          fontSize: 10.5,
+                                          color: tokens.textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      width: 42,
+                                      alignment: Alignment.center,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: lvlColor.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        _shortLevel(e.level),
+                                        style: luxMonoStyle(
+                                          fontSize: 9.5,
+                                          color: lvlColor,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        e.message,
+                                        style: luxMonoStyle(
+                                          fontSize: 11,
+                                          fontWeight: isDeny
+                                              ? FontWeight.w500
+                                              : FontWeight.w400,
+                                          color: isDeny
+                                              ? tokens.amber
+                                              : lvlColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+            ),
+          ),
         ),
       ],
     );

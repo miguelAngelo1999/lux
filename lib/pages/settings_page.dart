@@ -10,6 +10,7 @@ import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/error.dart';
 import 'package:lux/model/app.dart';
+import 'package:lux/theme.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/util/telemetry.dart' as telem;
 import 'package:lux/util/updater.dart'
@@ -21,23 +22,29 @@ import 'package:lux/util/updater.dart'
         updateStateNotifier,
         UpdateState,
         UpdateInfo;
+import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/setting_tiles.dart';
-import 'package:version/version.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:version/version.dart';
 import 'package:window_manager/window_manager.dart';
 
-/// Settings with a category sidebar and live search.
-///
-/// Rows are declared as data (a [SettingRow] carrying a title, search keywords
-/// and a builder) rather than inlined into one long build method. Search then
-/// filters across every category without threading a query through nested
-/// widgets, and a category is just a list of rows.
-///
-/// Load balancing and SSL/MITM are deliberately absent: both were unreliable and
-/// have been dropped rather than carried over.
+/// Single-pane Settings styled after macOS System Settings:
+/// - No double sidebar — full content width with grouped hairline cards.
+/// - Top sticky live search + horizontal category filter pills (`All` shows
+///   every group in one smooth scroll; tapping any pill focuses that section).
+/// - Updates sit right at the top of `All` so checking/installing takes 1 click.
 class SettingsPage extends StatefulWidget {
   final CoreManager coreManager;
-  const SettingsPage({super.key, required this.coreManager});
+  final String dashboardUrl;
+  final String? initialCategory;
+
+  const SettingsPage({
+    super.key,
+    required this.coreManager,
+    this.dashboardUrl = '',
+    this.initialCategory,
+  });
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -45,13 +52,14 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> with WindowListener {
   Setting? _setting;
-  bool _isLoading = true;
   bool _isReconnecting = false;
   bool _isSaving = false;
   Timer? _recoveryTimer;
   List<String> _interfaces = [];
 
-  int _selected = 0;
+  /// `'all'` renders every category card in one scrollable page; any other id
+  /// filters to that single category.
+  String _selectedCategory = 'all';
   String _query = '';
   final _searchCtrl = TextEditingController();
 
@@ -62,22 +70,26 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   bool _checkingUpdate = false;
   bool _enablingWindowsService = false;
   String _appVersion = '';
-  String _pendingUpdateVersion = ''; // non-empty when an update was found but not yet installed
+  String _pendingUpdateVersion = '';
   UpdateInfo? _cachedUpdateInfo;
 
   static const _categories = [
-    (id: 'general', icon: Icons.tune, label: 'General'),
-    (id: 'network', icon: Icons.wifi, label: 'Network'),
-    (id: 'dns', icon: Icons.dns, label: 'DNS'),
-    (id: 'tun', icon: Icons.hub, label: 'TUN / Mixed'),
-    (id: 'privacy', icon: Icons.privacy_tip_outlined, label: 'Privacy'),
-    (id: 'updates', icon: Icons.system_update_alt, label: 'Updates'),
-    (id: 'advanced', icon: Icons.settings_suggest, label: 'Advanced'),
+    (id: 'updates', glyph: LuxGlyph.download, label: 'Updates'),
+    (id: 'general', glyph: LuxGlyph.settings, label: 'General'),
+    (id: 'network', glyph: LuxGlyph.globe, label: 'Network'),
+    (id: 'tun', glyph: LuxGlyph.route, label: 'TUN / Mixed'),
+    (id: 'dns', glyph: LuxGlyph.shield, label: 'DNS'),
+    (id: 'privacy', glyph: LuxGlyph.lock, label: 'Privacy'),
+    (id: 'advanced', glyph: LuxGlyph.bolt, label: 'Advanced'),
   ];
 
   @override
   void initState() {
     super.initState();
+    if (widget.initialCategory != null &&
+        _categories.any((c) => c.id == widget.initialCategory)) {
+      _selectedCategory = widget.initialCategory!;
+    }
     windowManager.addListener(this);
     _load();
     _searchCtrl.addListener(
@@ -85,8 +97,17 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   @override
+  void didUpdateWidget(covariant SettingsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialCategory != oldWidget.initialCategory &&
+        widget.initialCategory != null &&
+        _categories.any((c) => c.id == widget.initialCategory)) {
+      setState(() => _selectedCategory = widget.initialCategory!);
+    }
+  }
+
+  @override
   void onWindowFocus() {
-    // Reloading mid-edit would discard what the user is typing.
     if (!_isSaving) _load();
   }
 
@@ -129,11 +150,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       final uuid = await readOrCreateTelemetryUuid();
       final rawVersion = await getAppVersionString();
       var pending = await readPendingUpdateVersion();
-      // Clear a STALE pending version: after the app updates, the persisted
-      // "pending" still points at the version we just installed (or older),
-      // which made the tile show "Update available" with an Update button that
-      // did nothing (checkForUpdate finds nothing newer and returns silently).
-      // Compare against the raw numeric version.
       if (pending != null && pending.isNotEmpty) {
         if (!_isNewerThanCurrent(pending, rawVersion)) {
           await writePendingUpdateVersion(null);
@@ -148,19 +164,14 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         _telemetryUuid = uuid;
         _appVersion = rawVersion;
         _pendingUpdateVersion = pending ?? '';
-        _isLoading = false;
         _isReconnecting = false;
       });
     } catch (e) {
       if (!mounted) return;
       if (_isConnectionError(e)) {
-        setState(() {
-          _isLoading = false;
-          _isReconnecting = true;
-        });
+        setState(() => _isReconnecting = true);
         _attemptCoreRecoveryAndReload();
       } else {
-        setState(() => _isLoading = false);
         _notify('Could not load settings: $e', isError: true);
       }
     }
@@ -179,7 +190,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         setState(() {
           _setting = setting;
           _interfaces = ifaces;
-          _isLoading = false;
           _isReconnecting = false;
         });
       } catch (_) {
@@ -190,10 +200,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     });
   }
 
-  /// True if [candidate] is a strictly newer semver than [current]. Used to
-  /// decide whether a persisted "pending update" is still real or is stale
-  /// (already installed). Falls back to string inequality if either can't be
-  /// parsed, so a malformed value never wrongly suppresses a real update.
   bool _isNewerThanCurrent(String candidate, String current) {
     try {
       return Version.parse(candidate).compareTo(Version.parse(current)) > 0;
@@ -211,15 +217,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       if (!mounted) return;
       if (e is CoreElevationCancelledError) {
         _notify(tl(context, e.message), isError: true);
-        // Re-read so the dropdown reflects the reverted mode (e.g. System).
         await _load();
       } else if (_isConnectionError(e)) {
         _notify(tl(context, 'Reconnecting to Lux core...'), isError: false);
         _attemptCoreRecoveryAndReload();
       } else {
         _notify('Could not save: $e', isError: true);
-        // Re-read so the UI shows what is actually stored rather than the value we
-        // failed to write.
         await _load();
       }
     } finally {
@@ -245,8 +248,83 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     final isTun = s.mode == ProxyMode.tun || s.mode == ProxyMode.mixed;
 
     switch (categoryId) {
+      case 'updates':
+        return [
+          SettingRow(
+            title: 'Check for Updates',
+            keywords: ['version', 'upgrade', 'appcast'],
+            build: (ctx) => _updateHeroRow(ctx),
+          ),
+          SettingRow(
+            title: 'Latest updates',
+            keywords: ['latest', 'insider', 'beta', 'early', 'pre-release', 'test'],
+            build: (ctx) => FutureBuilder<bool>(
+              future: readBetaUpdatesEnabled(),
+              builder: (ctx, snap) {
+                final isLatest = snap.data ?? false;
+                return switchTile(
+                  title: 'Latest updates',
+                  subtitle: isLatest
+                      ? 'Latest updates active. You receive the newest builds early, plus all stable releases.'
+                      : 'Get the latest builds as soon as they are ready, before the regular stable release.',
+                  value: isLatest,
+                  onChanged: (v) async {
+                    final statusMsg = v
+                        ? tl(context, 'Latest updates enabled')
+                        : tl(context, 'Latest updates disabled');
+                    final upToDateMsg = tl(context, 'You are up to date');
+                    setState(() => _checkingUpdate = true);
+                    try {
+                      await writeBetaUpdatesEnabled(v);
+                      await clearLastUpdateCheckAt();
+                      _notify(statusMsg);
+                      await _load();
+                      final info = await checkForUpdate();
+                      _cachedUpdateInfo = info;
+                      if (!mounted) return;
+                      if (info != null && info.hasUpdate) {
+                        await writePendingUpdateVersion(info.latestVersion);
+                        if (!mounted) return;
+                        setState(() {
+                          _pendingUpdateVersion = info.latestVersion;
+                          _checkingUpdate = false;
+                        });
+                        await showUpdateConfirmDialog(context, info);
+                      } else {
+                        await writePendingUpdateVersion(null);
+                        if (!mounted) return;
+                        setState(() {
+                          _pendingUpdateVersion = '';
+                          _checkingUpdate = false;
+                        });
+                        _notify(upToDateMsg);
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        _notify('Update check failed: $e', isError: true);
+                      }
+                    } finally {
+                      if (mounted) setState(() => _checkingUpdate = false);
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+        ];
+
       case 'general':
         return [
+          SettingRow(
+            title: 'Theme',
+            keywords: ['dark', 'light', 'appearance', 'obsidian', 'porcelain'],
+            build: (ctx) => _themeTile(ctx),
+          ),
+          SettingRow(
+            title: 'Language',
+            keywords: ['idioma', 'locale', 'translation', 'portuguese', 'i18n'],
+            build: (ctx) => _languageTile(ctx),
+          ),
           SettingRow(
             title: 'Auto Launch',
             keywords: ['startup', 'login', 'boot'],
@@ -280,16 +358,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   : (v) => _save(s.copyWith(sensitiveInfoMode: v)),
             ),
           ),
-          SettingRow(
-            title: 'Language',
-            keywords: ['idioma', 'locale', 'translation', 'portuguese', 'i18n'],
-            build: (ctx) => _languageTile(ctx),
-          ),
-          SettingRow(
-            title: 'Theme',
-            keywords: ['dark', 'light', 'appearance'],
-            build: (ctx) => _themeTile(ctx),
-          ),
           if (widget.coreManager.isWindows)
             SettingRow(
               title: 'Background Service',
@@ -315,12 +383,54 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           SettingRow(
             title: 'Proxy Mode',
             keywords: ['tun', 'system', 'mixed'],
-            build: (_) => dropdownTile<ProxyMode>(
+            build: (ctx) => segmentedTile<ProxyMode>(
+              context: ctx,
               title: 'Proxy Mode',
+              subtitle: _proxyModeExplanation(s.mode),
               value: s.mode,
-              options: const [ProxyMode.system, ProxyMode.tun, ProxyMode.mixed],
+              options: const [ProxyMode.system, ProxyMode.mixed, ProxyMode.tun],
               label: getModeLabel,
               onChanged: saving ? null : (v) => _save(s.copyWith(mode: v)),
+            ),
+          ),
+          SettingRow(
+            title: 'Auto-switch proxy',
+            keywords: [
+              'auto',
+              'switch',
+              'home',
+              'office',
+              'network',
+              'detect',
+              'bypass',
+              'captive',
+              'portal',
+              'airport',
+              'hotel',
+            ],
+            build: (ctx) => FutureBuilder<bool>(
+              future: readAutoSwitchEnabled(),
+              builder: (ctx, snap) => switchTile(
+                title: 'Auto-switch proxy',
+                subtitle:
+                    'When the selected proxy stops working, Lux tries other '
+                    'proxies, then direct. Captive Wi-Fi sign-in assist always '
+                    'works automatically.',
+                value: snap.data ?? false,
+                onChanged: (v) async {
+                  final enabledMsg = tl(context, 'Auto-switch enabled');
+                  final disabledMsg = tl(context, 'Auto-switch disabled');
+                  await writeAutoSwitchEnabled(v);
+                  await widget.coreManager.setNetSwitchEnabled(v);
+                  if (v) {
+                    final lastId = await readLastUserProxyId();
+                    await widget.coreManager.syncNetSwitchConfig(lastId);
+                  }
+                  if (!mounted) return;
+                  _notify(v ? enabledMsg : disabledMsg);
+                  setState(() {});
+                },
+              ),
             ),
           ),
           SettingRow(
@@ -358,45 +468,64 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               onChanged: saving ? null : (v) => _save(s.copyWith(allowLan: v)),
             ),
           ),
-          SettingRow(
-            title: 'Auto-switch proxy',
-            keywords: [
-              'auto',
-              'switch',
-              'home',
-              'office',
-              'network',
-              'detect',
-              'bypass',
-              'captive',
-              'portal',
-              'airport',
-              'hotel',
-            ],
-            build: (ctx) => FutureBuilder<bool>(
-              future: readAutoSwitchEnabled(),
-              builder: (ctx, snap) => switchTile(
-                title: 'Auto-switch proxy',
-                subtitle:
-                    'When the selected proxy stops working, Lux tries other '
-                    'proxies, then direct. Off by default. Captive Wi-Fi '
-                    'sign-in assist always works automatically.',
-                value: snap.data ?? false,
-                onChanged: (v) async {
-                  await writeAutoSwitchEnabled(v);
-                  await widget.coreManager.setNetSwitchEnabled(v);
-                  if (v) {
-                    // Sync persisted lastUserProxyId into lux_core on enable
-                    final lastId = await readLastUserProxyId();
-                    await widget.coreManager.syncNetSwitchConfig(lastId);
-                  }
-                  _notify(v
-                      ? tl(context, 'Auto-switch enabled')
-                      : tl(context, 'Auto-switch disabled'));
-                  if (mounted) setState(() {});
-                },
-              ),
+        ];
+
+      case 'tun':
+        if (!isTun) {
+          return [
+            SettingRow(
+              title: 'TUN settings unavailable',
+              build: (ctx) {
+                final tokens = LuxTokens.of(ctx);
+                return Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: TText(
+                    'These settings apply to TUN and Mixed mode. Switch Proxy '
+                    'Mode to Mixed or TUN to enable them.',
+                    style: TextStyle(fontSize: 12, color: tokens.textMuted),
+                  ),
+                );
+              },
             ),
+          ];
+        }
+        return [
+          SettingRow(
+            title: 'Block QUIC',
+            keywords: ['http3', 'udp', '443', 'youtube'],
+            build: (_) => switchTile(
+              title: 'Block QUIC',
+              subtitle: 'Disable HTTP/3 (fixes YouTube and some sites)',
+              value: s.blockQuic ?? false,
+              onChanged: saving ? null : (v) => _save(s.copyWith(blockQuic: v)),
+            ),
+          ),
+          SettingRow(
+            title: 'Find Process',
+            keywords: ['process rules', 'app', 'connections'],
+            build: (_) => switchTile(
+              title: 'Find Process',
+              subtitle:
+                  'Identify which app made each connection (shows in Connections)',
+              value: s.shouldFindProcess ?? false,
+              onChanged: saving
+                  ? null
+                  : (v) => _save(s.copyWith(shouldFindProcess: v)),
+            ),
+          ),
+          SettingRow(
+            title: 'Bypass CIDRs',
+            keywords: [
+              'bypass',
+              'cidr',
+              'subnets',
+              'ip',
+              'lan',
+              'route',
+              'exclude',
+              'tun'
+            ],
+            build: (ctx) => _bypassCidrsTile(ctx, s),
           ),
         ];
 
@@ -436,53 +565,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
         ];
 
-      case 'tun':
-        if (!isTun) {
-          return [
-            SettingRow(
-              title: 'TUN settings unavailable',
-              build: (ctx) => const Padding(
-                padding: EdgeInsets.all(12),
-                child: TText(
-                  'These settings apply to TUN and Mixed mode. Change Proxy Mode '
-                  'under Network to enable them.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ),
-            ),
-          ];
-        }
-        return [
-          SettingRow(
-            title: 'Block QUIC',
-            keywords: ['http3', 'udp', '443', 'youtube'],
-            build: (_) => switchTile(
-              title: 'Block QUIC',
-              subtitle: 'Disable HTTP/3 (fixes YouTube and some sites)',
-              value: s.blockQuic ?? false,
-              onChanged: saving ? null : (v) => _save(s.copyWith(blockQuic: v)),
-            ),
-          ),
-          SettingRow(
-            title: 'Find Process',
-            keywords: ['process rules', 'app', 'connections'],
-            build: (_) => switchTile(
-              title: 'Find Process',
-              subtitle:
-                  'Identify which app made each connection (shows in Connections)',
-              value: s.shouldFindProcess ?? false,
-              onChanged: saving
-                  ? null
-                  : (v) => _save(s.copyWith(shouldFindProcess: v)),
-            ),
-          ),
-          SettingRow(
-            title: 'Bypass CIDRs',
-            keywords: ['bypass', 'cidr', 'subnets', 'ip', 'lan', 'route', 'exclude', 'tun'],
-            build: (ctx) => _bypassCidrsTile(ctx, s),
-          ),
-        ];
-
       case 'privacy':
         return [
           SettingRow(
@@ -511,225 +593,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
         ];
 
-      case 'updates':
-        return [
-          SettingRow(
-            title: 'Check for Updates',
-            keywords: ['version', 'upgrade', 'appcast'],
-            build: (ctx) => ValueListenableBuilder<UpdateState>(
-              valueListenable: updateStateNotifier,
-              builder: (ctx, updateState, _) {
-                final isDownloading = updateState.isDownloading;
-                final hasPending = _pendingUpdateVersion.isNotEmpty ||
-                    (updateState.updateInfo != null && updateState.updateInfo!.hasUpdate);
-                final targetVersion = _pendingUpdateVersion.isNotEmpty
-                    ? _pendingUpdateVersion
-                    : (updateState.updateInfo?.latestVersion ?? '');
-
-                if (hasPending || isDownloading) {
-                  final progress = updateState.progress;
-                  final pct = progress != null ? (progress * 100).toInt() : null;
-                  final statusText = updateState.status;
-
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    title: Row(children: [
-                      TText(isDownloading ? 'Updating...' : 'Update available'),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withAlpha(40),
-                          border: Border.all(color: Colors.orange.withAlpha(150)),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          targetVersion,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.orange,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ]),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(height: 2),
-                        Text(
-                          '$_appVersion → $targetVersion',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        if (isDownloading) ...[
-                          const SizedBox(height: 6),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(3),
-                            child: LinearProgressIndicator(
-                              value: (progress == null || progress < 0.02) ? null : progress,
-                              minHeight: 5,
-                              backgroundColor: Colors.grey.withAlpha(50),
-                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            statusText.isNotEmpty
-                                ? statusText
-                                : (pct != null ? 'Downloading… $pct%' : 'Downloading…'),
-                            style: const TextStyle(fontSize: 11, color: Colors.orange),
-                          ),
-                        ],
-                      ],
-                    ),
-                    trailing: _checkingUpdate
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : isDownloading
-                            ? FilledButton.icon(
-                                icon: const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                label: Text(pct != null ? '$pct%' : tl(context, 'Updating...')),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.orange,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  textStyle: const TextStyle(fontSize: 12),
-                                ),
-                                onPressed: () {
-                                  if (updateState.updateInfo != null) {
-                                    showUpdateProgressDialog(context, updateState.updateInfo!);
-                                  }
-                                },
-                              )
-                            : FilledButton.icon(
-                                icon: const Icon(Icons.download, size: 15),
-                                label: const TText('Update'),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.orange,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  textStyle: const TextStyle(fontSize: 12),
-                                ),
-                                onPressed: () async {
-                                  UpdateInfo? info = _cachedUpdateInfo;
-                                  if (info == null ||
-                                      !info.hasUpdate ||
-                                      info.latestVersion != targetVersion) {
-                                    setState(() => _checkingUpdate = true);
-                                    try {
-                                      info = await checkForUpdate();
-                                      _cachedUpdateInfo = info;
-                                    } finally {
-                                      if (mounted) setState(() => _checkingUpdate = false);
-                                    }
-                                  }
-                                  if (!mounted) return;
-                                  if (info == null || !info.hasUpdate) {
-                                    await writePendingUpdateVersion(null);
-                                    if (mounted) {
-                                      setState(() => _pendingUpdateVersion = '');
-                                      _notify(tl(context, 'You are up to date'));
-                                    }
-                                    return;
-                                  }
-                                  final updateInfo = info;
-                                  await writePendingUpdateVersion(updateInfo.latestVersion);
-                                  if (mounted) {
-                                    setState(() => _pendingUpdateVersion = updateInfo.latestVersion);
-                                  }
-                                  if (!mounted) return;
-                                  await startUpdate(context, updateInfo, showDialog: true);
-                                },
-                              ),
-                  );
-                }
-
-                return actionTile(
-                  context: ctx,
-                  title: 'Check for Updates',
-                  subtitle: 'Current version $_appVersion',
-                  buttonLabel: 'Check',
-                  icon: Icons.refresh,
-                  busy: _checkingUpdate,
-                  onPressed: _checkingUpdate ? null : _runUpdateCheck,
-                );
-              },
-            ),
-          ),
-          SettingRow(
-            title: 'Latest updates',
-            keywords: ['latest', 'insider', 'beta', 'early', 'pre-release', 'test'],
-            build: (ctx) => FutureBuilder<bool>(
-              future: readBetaUpdatesEnabled(),
-              builder: (ctx, snap) {
-                final isLatest = snap.data ?? false;
-                return switchTile(
-                  title: 'Latest updates',
-                  subtitle: isLatest
-                      ? 'Latest updates active. You receive the newest builds early, plus all stable releases.'
-                      : 'Get the latest builds as soon as they are ready, before the regular stable release.',
-                  value: isLatest,
-                  onChanged: (v) async {
-                    final statusMsg = v
-                        ? tl(context, 'Latest updates enabled')
-                        : tl(context, 'Latest updates disabled');
-                    setState(() => _checkingUpdate = true);
-                    try {
-                      await writeBetaUpdatesEnabled(v);
-                      await clearLastUpdateCheckAt();
-                      _notify(statusMsg);
-                      await _load();
-                      final info = await checkForUpdate();
-                      _cachedUpdateInfo = info;
-                      if (!mounted) return;
-                      if (info != null && info.hasUpdate) {
-                        await writePendingUpdateVersion(info.latestVersion);
-                        if (mounted) {
-                          setState(() {
-                            _pendingUpdateVersion = info.latestVersion;
-                            _checkingUpdate = false;
-                          });
-                          await showUpdateConfirmDialog(context, info);
-                        }
-                      } else {
-                        // No newer build on this channel — clear any stale badge.
-                        await writePendingUpdateVersion(null);
-                        if (mounted) {
-                          setState(() {
-                            _pendingUpdateVersion = '';
-                            _checkingUpdate = false;
-                          });
-                          _notify(tl(context, 'You are up to date'));
-                        }
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        _notify('Update check failed: $e', isError: true);
-                      }
-                    } finally {
-                      if (mounted) setState(() => _checkingUpdate = false);
-                    }
-                  },
-                );
-              },
-            ),
-          ),
-          SettingRow(
-            title: 'Update Server',
-            keywords: ['appcast', 'url', 'custom'],
-            build: (ctx) => _appcastTile(ctx),
-          ),
-        ];
-
       case 'advanced':
         return [
           SettingRow(
@@ -737,7 +600,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             keywords: ['fallback', 'url-test', 'latency'],
             build: (_) => switchTile(
               title: 'Enable Auto Mode',
-              subtitle: 'Automatically test proxies and select the best one',
+              subtitle:
+                  'Core-level latency probing (url-test / fallback) across proxies',
               value: s.autoModeEnabled,
               onChanged: saving
                   ? null
@@ -774,40 +638,298 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             ),
           SettingRow(
             title: 'Configuration file',
-            keywords: ['config', 'config.json', 'import', 'export', 'edit', 'backup', 'restore'],
-            build: (ctx) => ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              title: const TText('Configuration file'),
-              subtitle: const TText(
-                'Export a backup, import one, or edit config.json directly.',
-                style: TextStyle(fontSize: 11),
-              ),
-              trailing: Wrap(
-                spacing: 4,
-                children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.upload_file, size: 15),
-                    label: const TText('Export', style: TextStyle(fontSize: 12)),
-                    onPressed: _exportConfig,
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.edit_note, size: 15),
-                    label: const TText('Edit', style: TextStyle(fontSize: 12)),
-                    onPressed: _editConfig,
-                  ),
-                ],
+            keywords: [
+              'config',
+              'config.json',
+              'import',
+              'export',
+              'edit',
+              'backup',
+              'restore'
+            ],
+            build: (ctx) => _configFileRow(ctx),
+          ),
+          SettingRow(
+            title: 'Update Server',
+            keywords: ['appcast', 'url', 'custom', 'updates'],
+            build: (ctx) => _appcastTile(ctx),
+          ),
+          if (widget.dashboardUrl.isNotEmpty)
+            SettingRow(
+              title: 'Web Dashboard',
+              keywords: ['web', 'browser', 'dashboard', 'debug', 'advanced'],
+              build: (ctx) => actionTile(
+                context: ctx,
+                title: 'Web Dashboard',
+                subtitle: 'Open the built-in browser dashboard (advanced)',
+                buttonLabel: 'Open',
+                glyph: LuxGlyph.externalLink,
+                onPressed: () => launchUrl(Uri.parse(widget.dashboardUrl)),
               ),
             ),
-          ),
         ];
     }
     return [];
   }
 
+  String _proxyModeExplanation(ProxyMode mode) {
+    switch (mode) {
+      case ProxyMode.system:
+        return 'Sets system HTTP/HTTPS proxy — browsers & standard apps.';
+      case ProxyMode.mixed:
+        return 'System proxy plus TUN capture for all apps (recommended).';
+      case ProxyMode.tun:
+        return 'Virtual network interface capturing all system traffic.';
+    }
+  }
+
+  Widget _updateHeroRow(BuildContext context) {
+    final tokens = LuxTokens.of(context);
+    return ValueListenableBuilder<UpdateState>(
+      valueListenable: updateStateNotifier,
+      builder: (ctx, updateState, _) {
+        final isDownloading = updateState.isDownloading;
+        final hasPending = _pendingUpdateVersion.isNotEmpty ||
+            (updateState.updateInfo != null &&
+                updateState.updateInfo!.hasUpdate);
+        final targetVersion = _pendingUpdateVersion.isNotEmpty
+            ? _pendingUpdateVersion
+            : (updateState.updateInfo?.latestVersion ?? '');
+
+        if (hasPending || isDownloading) {
+          final progress = updateState.progress;
+          final pct = progress != null ? (progress * 100).toInt() : null;
+          final statusText = updateState.status;
+
+          return ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            title: Row(children: [
+              TText(
+                isDownloading ? 'Updating...' : 'Update available',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: tokens.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: tokens.amber.withValues(alpha: 0.14),
+                  border: Border.all(
+                      color: tokens.amber.withValues(alpha: 0.45), width: 0.75),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  targetVersion,
+                  style: luxMonoStyle(
+                    fontSize: 10.5,
+                    color: tokens.amber,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ]),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 2),
+                Text(
+                  '$_appVersion → $targetVersion',
+                  style: luxMonoStyle(fontSize: 11, color: tokens.textMuted),
+                ),
+                if (isDownloading) ...[
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: (progress == null || progress < 0.02)
+                          ? null
+                          : progress,
+                      minHeight: 4,
+                      backgroundColor: tokens.subtlePillBg,
+                      valueColor: AlwaysStoppedAnimation<Color>(tokens.amber),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    statusText.isNotEmpty
+                        ? statusText
+                        : (pct != null ? 'Downloading… $pct%' : 'Downloading…'),
+                    style: TextStyle(fontSize: 11, color: tokens.amber),
+                  ),
+                ],
+              ],
+            ),
+            trailing: _checkingUpdate
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 1.8, color: tokens.cobalt),
+                  )
+                : isDownloading
+                    ? FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: tokens.amber,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 11),
+                          minimumSize: const Size(0, 29),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7)),
+                        ),
+                        onPressed: () {
+                          if (updateState.updateInfo != null) {
+                            showUpdateProgressDialog(
+                                context, updateState.updateInfo!);
+                          }
+                        },
+                        child: Text(
+                          pct != null ? '$pct%' : tl(context, 'Updating...'),
+                          style: const TextStyle(fontSize: 11.5),
+                        ),
+                      )
+                    : FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: tokens.amber,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 11),
+                          minimumSize: const Size(0, 29),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7)),
+                        ),
+                        onPressed: () async {
+                          final upToDateMsg = tl(context, 'You are up to date');
+                          UpdateInfo? info = _cachedUpdateInfo;
+                          if (info == null ||
+                              !info.hasUpdate ||
+                              info.latestVersion != targetVersion) {
+                            setState(() => _checkingUpdate = true);
+                            try {
+                              info = await checkForUpdate();
+                              _cachedUpdateInfo = info;
+                            } finally {
+                              if (mounted) {
+                                setState(() => _checkingUpdate = false);
+                              }
+                            }
+                          }
+                          if (!mounted) return;
+                          if (info == null || !info.hasUpdate) {
+                            await writePendingUpdateVersion(null);
+                            if (!mounted) return;
+                            setState(() => _pendingUpdateVersion = '');
+                            _notify(upToDateMsg);
+                            return;
+                          }
+                          final updateInfo = info;
+                          await writePendingUpdateVersion(
+                              updateInfo.latestVersion);
+                          if (!mounted || !context.mounted) return;
+                          setState(() =>
+                              _pendingUpdateVersion = updateInfo.latestVersion);
+                          await startUpdate(context, updateInfo,
+                              showDialog: true);
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            LuxIcon(LuxGlyph.download,
+                                size: 12.5, color: Colors.white),
+                            SizedBox(width: 5),
+                            TText('Update', style: TextStyle(fontSize: 11.5)),
+                          ],
+                        ),
+                      ),
+          );
+        }
+
+        return actionTile(
+          context: ctx,
+          title: 'Check for Updates',
+          subtitle: 'Current version $_appVersion',
+          buttonLabel: 'Check',
+          glyph: LuxGlyph.refresh,
+          busy: _checkingUpdate,
+          onPressed: _checkingUpdate ? null : _runUpdateCheck,
+        );
+      },
+    );
+  }
+
+  Widget _configFileRow(BuildContext context) {
+    final tokens = LuxTokens.of(context);
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      title: TText(
+        'Configuration file',
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w400,
+          color: tokens.textPrimary,
+        ),
+      ),
+      subtitle: TText(
+        'Export a backup, import one, or edit config.json directly.',
+        style: TextStyle(fontSize: 11, color: tokens.textMuted),
+      ),
+      trailing: Wrap(
+        spacing: 6,
+        children: [
+          OutlinedButton(
+            onPressed: _exportConfig,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: tokens.textPrimary,
+              side: BorderSide(color: tokens.hairlineStrong, width: 0.75),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              minimumSize: const Size(0, 29),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(7)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LuxIcon(LuxGlyph.upload, size: 12, color: tokens.textSecondary),
+                const SizedBox(width: 5),
+                const TText('Export', style: TextStyle(fontSize: 11.5)),
+              ],
+            ),
+          ),
+          OutlinedButton(
+            onPressed: _editConfig,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: tokens.textPrimary,
+              side: BorderSide(color: tokens.hairlineStrong, width: 0.75),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              minimumSize: const Size(0, 29),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(7)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LuxIcon(LuxGlyph.edit, size: 12, color: tokens.textSecondary),
+                const SizedBox(width: 5),
+                const TText('Edit', style: TextStyle(fontSize: 11.5)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Config import / export / edit ──────────────────────────────────────────
 
-  /// Export: write config.json to the app support dir and show the path (with
-  /// a copy-to-clipboard action).
   Future<void> _exportConfig() async {
     try {
       final content = await widget.coreManager.exportConfig();
@@ -835,8 +957,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     }
   }
 
-  /// Edit: load config.json into a scrollable text field. Save calls import.
-  /// The same dialog handles "import" — the user can paste an entire config in.
   Future<void> _editConfig() async {
     String content;
     try {
@@ -851,7 +971,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Row(children: [
-          Icon(Icons.edit_note, size: 20),
+          LuxIcon(LuxGlyph.edit, size: 17),
           SizedBox(width: 8),
           TText('Edit config.json'),
         ]),
@@ -873,8 +993,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   maxLines: null,
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
-                  style: const TextStyle(
-                      fontSize: 11, fontFamily: 'monospace'),
+                  style: luxMonoStyle(fontSize: 11),
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.all(8),
@@ -899,7 +1018,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     );
 
     if (save != true) return;
-    // Validate JSON client-side first for a friendlier error.
     try {
       jsonDecode(ctrl.text);
     } catch (e) {
@@ -910,7 +1028,6 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       await widget.coreManager.importConfig(ctrl.text);
       if (!mounted) return;
       _notify('Config applied. Restart the connection if needed.');
-      // Refresh proxies list — imported config may have new proxies
       Provider.of<AppStateModel>(context, listen: false).bumpProxyList();
     } catch (e) {
       final msg = e is DioException
@@ -925,30 +1042,38 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   // ── Individual complex rows ────────────────────────────────────────────────
 
   Widget _windowsServiceTile(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     final limited =
         context.select<AppStateModel, bool>((m) => m.windowsLimitedMode);
-    final statusColor = limited ? Colors.amber.shade800 : Colors.green.shade700;
+    final statusColor = limited ? tokens.amber : tokens.emerald;
 
     return ListTile(
       key: const Key('settings_windows_service_tile'),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       title: Row(
         children: [
-          const TText('Background Service',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          TText(
+            'Background Service',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: tokens.textPrimary,
+            ),
+          ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
             decoration: BoxDecoration(
-              color: statusColor.withAlpha(30),
-              border: Border.all(color: statusColor.withAlpha(130)),
-              borderRadius: BorderRadius.circular(4),
+              color: statusColor.withValues(alpha: 0.14),
+              border: Border.all(
+                  color: statusColor.withValues(alpha: 0.45), width: 0.75),
+              borderRadius: BorderRadius.circular(5),
             ),
             child: TText(
               limited ? 'Limited' : 'Active',
               style: TextStyle(
                 fontSize: 10.5,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
                 color: statusColor,
               ),
             ),
@@ -961,7 +1086,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           limited
               ? 'Limited mode: browsers and standard desktop apps work normally, but Microsoft Store / UWP apps (such as iCloud and Microsoft Store) and Mixed / TUN modes require one-time admin setup.'
               : 'Active — Microsoft Store / UWP apps and Mixed / TUN modes are enabled with no repeat UAC prompts.',
-          style: const TextStyle(fontSize: 11.5),
+          style: TextStyle(fontSize: 11, color: tokens.textMuted),
         ),
       ),
       trailing: limited
@@ -996,8 +1121,9 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                     },
               style: FilledButton.styleFrom(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                textStyle: const TextStyle(fontSize: 12),
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                minimumSize: const Size(0, 29),
+                textStyle: const TextStyle(fontSize: 11.5),
               ),
               child: _enablingWindowsService
                   ? const SizedBox(
@@ -1010,67 +1136,109 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                     )
                   : const TText('Enable now'),
             )
-          : Icon(Icons.check_circle_outline,
-              size: 18, color: Colors.green.shade600),
+          : LuxIcon(LuxGlyph.check, size: 16, color: tokens.emerald),
     );
   }
 
   Widget _bypassCidrsTile(BuildContext context, Setting s) {
+    final tokens = LuxTokens.of(context);
     final cidrs = s.bypassCidrs;
     final saving = _isSaving;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TText('Bypass CIDRs',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                    SizedBox(height: 2),
+                    Row(
+                      children: [
+                        TText(
+                          'Bypass CIDRs',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w400,
+                            color: tokens.textPrimary,
+                          ),
+                        ),
+                        if (cidrs.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: tokens.subtlePillBg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: tokens.hairline, width: 0.75),
+                            ),
+                            child: Text(
+                              '${cidrs.length}',
+                              style: luxMonoStyle(
+                                fontSize: 10,
+                                color: tokens.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
                     TText(
                       'Subnets routed outside the TUN tunnel (DIRECT). Proxy IPs are auto-bypassed.',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(fontSize: 11, color: tokens.textMuted),
                     ),
                   ],
                 ),
               ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.add, size: 14),
-                label: const TText('Add Subnet', style: TextStyle(fontSize: 12)),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  minimumSize: const Size(0, 30),
-                ),
+              const SizedBox(width: 10),
+              OutlinedButton(
                 onPressed: saving ? null : () => _showAddBypassCidrDialog(s),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: tokens.textPrimary,
+                  side: BorderSide(color: tokens.hairlineStrong, width: 0.75),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(0, 29),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(7)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LuxIcon(LuxGlyph.plus,
+                        size: 12, color: tokens.textSecondary),
+                    const SizedBox(width: 5),
+                    const TText('Add Subnet', style: TextStyle(fontSize: 11.5)),
+                  ],
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           if (cidrs.isEmpty)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(80),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: Theme.of(context).dividerColor.withAlpha(40),
-                ),
+                color: tokens.subtlePillBg,
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(color: tokens.hairline, width: 0.75),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 14, color: Colors.grey),
-                  SizedBox(width: 8),
+                  LuxIcon(LuxGlyph.alertCircle,
+                      size: 13, color: tokens.textMuted),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: TText(
                       'No custom bypass CIDRs configured. Upstream proxies and DIRECT rules are automatically excluded.',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(fontSize: 11, color: tokens.textMuted),
                     ),
                   ),
                 ],
@@ -1081,18 +1249,39 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               spacing: 6,
               runSpacing: 6,
               children: cidrs.map((cidr) {
-                return Chip(
-                  label: Text(cidr, style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
-                  padding: EdgeInsets.zero,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                  deleteIcon: const Icon(Icons.close, size: 13),
-                  onDeleted: saving
-                      ? null
-                      : () {
-                          final updated = List<String>.from(cidrs)..remove(cidr);
-                          _save(s.copyWith(bypassCidrs: updated));
-                        },
+                return Container(
+                  padding: const EdgeInsets.fromLTRB(8, 3, 4, 3),
+                  decoration: BoxDecoration(
+                    color: tokens.subtlePillBg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: tokens.hairline, width: 0.75),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        cidr,
+                        style: luxMonoStyle(
+                            fontSize: 11, color: tokens.textPrimary),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: saving
+                            ? null
+                            : () {
+                                final updated = List<String>.from(cidrs)
+                                  ..remove(cidr);
+                                _save(s.copyWith(bypassCidrs: updated));
+                              },
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: LuxIcon(LuxGlyph.close,
+                              size: 11, color: tokens.textMuted),
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               }).toList(),
             ),
@@ -1105,7 +1294,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     final ctrl = TextEditingController();
     String? errorText;
 
-    const presets = ['192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12', '100.64.0.0/10'];
+    const presets = [
+      '192.168.0.0/16',
+      '10.0.0.0/8',
+      '172.16.0.0/12',
+      '100.64.0.0/10'
+    ];
 
     final added = await showDialog<String>(
       context: context,
@@ -1113,7 +1307,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.add_road, size: 20),
+              LuxIcon(LuxGlyph.route, size: 18),
               SizedBox(width: 8),
               TText('Add Bypass CIDR'),
             ],
@@ -1132,19 +1326,21 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 TextField(
                   controller: ctrl,
                   autofocus: true,
-                  style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+                  style: luxMonoStyle(fontSize: 12.5),
                   decoration: InputDecoration(
                     hintText: 'e.g. 192.168.1.0/24 or 10.0.0.1',
                     errorText: errorText,
                     border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     isDense: true,
                   ),
                   onSubmitted: (_) {
                     final val = ctrl.text.trim();
                     final validated = _validateAndNormalizeCidr(val);
                     if (validated == null) {
-                      setDialogState(() => errorText = 'Invalid IPv4 CIDR or IP address');
+                      setDialogState(
+                          () => errorText = 'Invalid IPv4 CIDR or IP address');
                     } else if (s.bypassCidrs.contains(validated)) {
                       setDialogState(() => errorText = 'CIDR already added');
                     } else {
@@ -1153,7 +1349,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   },
                 ),
                 const SizedBox(height: 12),
-                const TText('Presets:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                const TText('Presets:',
+                    style: TextStyle(fontSize: 11, color: Colors.grey)),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
@@ -1161,7 +1358,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   children: presets.map((p) {
                     final already = s.bypassCidrs.contains(p);
                     return ActionChip(
-                      label: Text(p, style: const TextStyle(fontSize: 10, fontFamily: 'monospace')),
+                      label: Text(p, style: luxMonoStyle(fontSize: 10.5)),
                       padding: EdgeInsets.zero,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
@@ -1187,7 +1384,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 final val = ctrl.text.trim();
                 final validated = _validateAndNormalizeCidr(val);
                 if (validated == null) {
-                  setDialogState(() => errorText = 'Invalid IPv4 CIDR or IP address');
+                  setDialogState(
+                      () => errorText = 'Invalid IPv4 CIDR or IP address');
                 } else if (s.bypassCidrs.contains(validated)) {
                   setDialogState(() => errorText = 'CIDR already added');
                 } else {
@@ -1275,10 +1473,12 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   Widget _themeTile(BuildContext context) {
     final mode = context.select<AppStateModel, ThemeMode>((m) => m.theme);
-    return dropdownTile<ThemeMode>(
+    return segmentedTile<ThemeMode>(
+      context: context,
       title: 'Theme',
+      subtitle: 'Porcelain Light, Obsidian Dark, or follow system',
       value: mode,
-      options: const [ThemeMode.system, ThemeMode.light, ThemeMode.dark],
+      options: const [ThemeMode.light, ThemeMode.dark, ThemeMode.system],
       label: (m) => switch (m) {
         ThemeMode.light => 'Light',
         ThemeMode.dark => 'Dark',
@@ -1294,6 +1494,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   }
 
   Widget _telemetryTile(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1317,19 +1518,19 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           },
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
           child: TText(
             telem.telemetryLevelDescription(_telemetryLevel),
-            style: const TextStyle(fontSize: 11, color: Colors.grey),
+            style: TextStyle(fontSize: 11, color: tokens.textMuted),
           ),
         ),
         if (!telem.telemetryConfigured)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
             child: Text(
               'No reporting endpoint is configured in this build, so nothing is '
               'sent regardless of this setting.',
-              style: TextStyle(fontSize: 11, color: Colors.orange),
+              style: TextStyle(fontSize: 11, color: tokens.amber),
             ),
           ),
       ],
@@ -1345,27 +1546,31 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         hint: 'leave empty for the default',
         subtitle: 'Appcast URL describing the newest build',
         onChanged: (v) async {
+          final savedMsg = tl(context, 'Update server saved');
           await writeCustomAppcastUrl(v.trim().isEmpty ? null : v.trim());
-          _notify(tl(context, 'Update server saved'));
-          if (mounted) setState(() {});
+          if (!mounted) return;
+          _notify(savedMsg);
+          setState(() {});
         },
       ),
     );
   }
 
   Future<void> _runUpdateCheck() async {
+    final upToDateMsg = tl(context, 'You are up to date');
     setState(() => _checkingUpdate = true);
     try {
       final info = await checkForUpdate();
       _cachedUpdateInfo = info;
       if (!mounted) return;
       if (info == null || !info.hasUpdate) {
-        await writePendingUpdateVersion(null); // clear any stale pending
+        await writePendingUpdateVersion(null);
+        if (!mounted) return;
         setState(() => _pendingUpdateVersion = '');
-        _notify(tl(context, 'You are up to date'));
+        _notify(upToDateMsg);
       } else {
-        // Persist so the tile shows the badge even after restart
         await writePendingUpdateVersion(info.latestVersion);
+        if (!mounted) return;
         setState(() => _pendingUpdateVersion = info.latestVersion);
         await showUpdateConfirmDialog(context, info);
       }
@@ -1380,6 +1585,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     if (_setting == null) {
       if (_isReconnecting) {
         return Center(
@@ -1388,56 +1594,62 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: CircularProgressIndicator(strokeWidth: 3),
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.2, color: tokens.cobalt),
                 ),
-                const SizedBox(height: 20),
-                const TText(
-                  'Reconnecting to Lux core...',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 18),
                 TText(
-                  'The core process is starting up or reconnecting.',
+                  'Reconnecting to Lux core...',
                   style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).textTheme.bodySmall?.color,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: tokens.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 20),
-                FilledButton.tonalIcon(
-                  onPressed: () {
-                    setState(() {
-                      _isLoading = true;
-                    });
-                    _load();
-                  },
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const TText('Retry'),
+                const SizedBox(height: 6),
+                TText(
+                  'The core process is starting up or reconnecting.',
+                  style: TextStyle(fontSize: 12.5, color: tokens.textMuted),
+                ),
+                const SizedBox(height: 18),
+                OutlinedButton(
+                  onPressed: _load,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      LuxIcon(LuxGlyph.refresh,
+                          size: 13.5, color: tokens.textPrimary),
+                      const SizedBox(width: 6),
+                      const TText('Retry'),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         );
       }
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
+
     final searching = _query.isNotEmpty;
 
     return Column(
       children: [
         if (_isReconnecting)
           Container(
-            color: Colors.amber.withOpacity(0.15),
+            color: tokens.amber.withValues(alpha: 0.14),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 1.8, color: tokens.amber),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
@@ -1453,145 +1665,192 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
               ],
             ),
           ),
-        _searchBar(),
-        const Divider(height: 1),
+        _topFilterBar(tokens),
+        Container(height: 0.75, color: tokens.hairline),
         Expanded(
-          child: searching ? _searchResults() : _sidebarAndContent(),
+          child: searching ? _searchResults(tokens) : _groupedSettingsList(),
         ),
       ],
     );
   }
 
-  Widget _searchBar() {
+  Widget _topFilterBar(LuxTokens tokens) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: SizedBox(
-              height: 32,
-              child: TextField(
-                controller: _searchCtrl,
-                decoration: InputDecoration(
-                  hintText: 'Search settings',
-                  prefixIcon: const Icon(Icons.search, size: 16),
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _query.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear, size: 14),
-                          onPressed: () => _searchCtrl.clear(),
-                        ),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 32,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    style: TextStyle(fontSize: 12, color: tokens.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: tl(context, 'Search settings'),
+                      hintStyle:
+                          TextStyle(fontSize: 12, color: tokens.textMuted),
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(left: 10, right: 6),
+                        child: LuxIcon(LuxGlyph.search,
+                            size: 13.5, color: tokens.textMuted),
+                      ),
+                      prefixIconConstraints:
+                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                      isDense: true,
+                      filled: true,
+                      fillColor: tokens.cardBg,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 7),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: tokens.hairline, width: 0.75),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: tokens.cobalt, width: 1.0),
+                      ),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 28, minHeight: 28),
+                              icon: LuxIcon(LuxGlyph.close,
+                                  size: 12, color: tokens.textMuted),
+                              onPressed: () => _searchCtrl.clear(),
+                            ),
+                    ),
+                  ),
                 ),
-                style: const TextStyle(fontSize: 12),
               ),
+              if (_isSaving)
+                Padding(
+                  padding: const EdgeInsets.only(left: 10),
+                  child: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: tokens.cobalt,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Horizontal category filter pills — replaces the cramped 2nd sidebar.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _filterPill(
+                  tokens: tokens,
+                  id: 'all',
+                  label: 'All',
+                ),
+                for (final c in _categories) ...[
+                  const SizedBox(width: 5),
+                  _filterPill(
+                    tokens: tokens,
+                    id: c.id,
+                    label: c.label,
+                  ),
+                ],
+              ],
             ),
           ),
-          if (_isSaving)
-            const Padding(
-              padding: EdgeInsets.only(left: 10),
-              child: SizedBox(
-                width: 15,
-                height: 15,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
         ],
       ),
     );
   }
 
-  /// Search spans every category, so a setting is findable without knowing which
-  /// section holds it. Each hit is labelled with its category.
-  Widget _searchResults() {
-    final results = <Widget>[];
+  Widget _filterPill({
+    required LuxTokens tokens,
+    required String id,
+    required String label,
+  }) {
+    final active = _selectedCategory == id && _query.isEmpty;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        key: Key('settings-filter-$id'),
+        borderRadius: BorderRadius.circular(7),
+        onTap: () {
+          if (_query.isNotEmpty) _searchCtrl.clear();
+          setState(() => _selectedCategory = id);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+          decoration: BoxDecoration(
+            color: active
+                ? tokens.cobalt.withValues(alpha: 0.14)
+                : tokens.subtlePillBg,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: active
+                  ? tokens.cobalt.withValues(alpha: 0.45)
+                  : tokens.hairline,
+              width: 0.75,
+            ),
+          ),
+          child: TText(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+              color: active ? tokens.cobalt : tokens.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _searchResults(LuxTokens tokens) {
+    final sections = <Widget>[];
     for (final c in _categories) {
       final hits = _rowsFor(c.id).where((r) => r.matches(_query)).toList();
       if (hits.isEmpty) continue;
-      results.add(Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: Row(
-          children: [
-            Icon(c.icon, size: 13, color: Colors.grey),
-            const SizedBox(width: 5),
-            TText(c.label,
-                style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          ],
-        ),
-      ));
-      results.addAll(hits.map((r) => r.build(context)));
+      sections.add(sectionHeader(context, c.label, glyph: c.glyph));
+      sections.add(settingCard(
+          context, hits.map((r) => r.build(context)).toList()));
     }
 
-    if (results.isEmpty) {
+    if (sections.isEmpty) {
       return Center(
-        child: TText('No settings match "$_query"',
-            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        child: TText(
+          'No settings match "$_query"',
+          style: TextStyle(fontSize: 12, color: tokens.textMuted),
+        ),
       );
     }
     return ListView(
-        padding: const EdgeInsets.only(bottom: 24), children: results);
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+      children: sections,
+    );
   }
 
-  Widget _sidebarAndContent() {
-    final category = _categories[_selected];
-    final rows = _rowsFor(category.id);
+  Widget _groupedSettingsList() {
+    final visibleCats = _selectedCategory == 'all'
+        ? _categories
+        : _categories.where((c) => c.id == _selectedCategory).toList();
 
-    return Row(
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 28),
       children: [
-        SizedBox(
-          width: 168,
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            itemCount: _categories.length,
-            itemBuilder: (ctx, i) {
-              final c = _categories[i];
-              final active = i == _selected;
-              return InkWell(
-                onTap: () => setState(() => _selected = i),
-                child: Container(
-                  height: 34,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  color: active
-                      ? Theme.of(ctx).colorScheme.primary.withValues(alpha: 0.12)
-                      : null,
-                  child: Row(
-                    children: [
-                      Icon(c.icon,
-                          size: 15,
-                          color: active
-                              ? Theme.of(ctx).colorScheme.primary
-                              : null),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TText(
-                          c.label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: active ? FontWeight.w600 : null,
-                            color: active
-                                ? Theme.of(ctx).colorScheme.primary
-                                : null,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+        for (final c in visibleCats) ...[
+          sectionHeader(context, c.label, glyph: c.glyph),
+          settingCard(
+            context,
+            _rowsFor(c.id).map((r) => r.build(context)).toList(),
           ),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
-            children: [
-              sectionHeader(context, category.label),
-              ...rows.map((r) => r.build(context)),
-            ],
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -1603,7 +1862,7 @@ String getModeLabel(ProxyMode m) {
       return 'TUN';
     case ProxyMode.system:
       return 'System';
-    default:
+    case ProxyMode.mixed:
       return 'Mixed';
   }
 }

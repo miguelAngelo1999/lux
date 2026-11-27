@@ -106,6 +106,35 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     }
   }
 
+  Future<void> _toggleAutoSwitch(bool enabled) async {
+    await writeAutoSwitchEnabled(enabled);
+    await widget.coreManager.setNetSwitchEnabled(enabled);
+    if (enabled) {
+      final lastId = await readLastUserProxyId();
+      await widget.coreManager.syncNetSwitchConfig(lastId);
+    }
+    if (!mounted) return;
+    setState(() {
+      _autoSwitchEnabled = enabled;
+      if (!enabled) {
+        _autoSwitchState = '';
+        _autoSwitchProxyName = '';
+        _autoSwitching = false;
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(enabled
+            ? tl(context, 'Auto-switch enabled')
+            : tl(context, 'Auto-switch disabled')),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    if (enabled) {
+      unawaited(_triggerAutoSwitch());
+    }
+  }
+
   Future<void> _triggerAutoSwitch() async {
     if (_autoSwitching) return;
     setState(() => _autoSwitching = true);
@@ -745,114 +774,206 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
     final appState = context.watch<AppStateModel>();
     return Column(
       children: [
-        // Combined Hero Status Card + Detect Proxy toolbar row
+        // Combined Hero Status Card + Auto-switch + Detect Proxy toolbar row
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Row(
-            children: [
-              Expanded(child: _buildStatusBanner(context, appState)),
-              if (_autoSwitchEnabled) ...[
-                const SizedBox(width: 6),
-                _autoSwitching
-                    ? SizedBox(
-                        width: 15,
-                        height: 15,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.4,
-                          color: tokens.cobalt,
-                        ),
-                      )
-                    : Tooltip(
-                        message: 'Check network and auto-select best proxy',
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(7),
-                          onTap: _triggerAutoSwitch,
-                          child: SizedBox(
-                            width: 30,
-                            height: 30,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compactDetect = constraints.maxWidth < 500;
+              return Row(
+                children: [
+                  Expanded(child: _buildStatusBanner(context, appState)),
+                  const SizedBox(width: 6),
+                  // 1-click Auto-switch quick control (toggle + re-probe)
+                  Tooltip(
+                    message: _autoSwitchEnabled
+                        ? tl(context, 'Auto-switch proxy (ON) — click to probe or disable')
+                        : tl(context, 'Auto-switch proxy (OFF) — click to enable'),
+                    child: _autoSwitching
+                        ? SizedBox(
+                            width: 34,
+                            height: 34,
                             child: Center(
-                              child: LuxIcon(
-                                LuxGlyph.swap,
-                                size: 14,
-                                color: tokens.textSecondary,
+                              child: SizedBox(
+                                width: 15,
+                                height: 15,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: tokens.cobalt,
+                                ),
+                              ),
+                            ),
+                          )
+                        : PopupMenuButton<String>(
+                            key: const Key('proxies-autoswitch-menu'),
+                            tooltip: '',
+                            padding: EdgeInsets.zero,
+                            onSelected: (action) {
+                              if (action == 'toggle') {
+                                _toggleAutoSwitch(!_autoSwitchEnabled);
+                              } else if (action == 'probe') {
+                                _triggerAutoSwitch();
+                              }
+                            },
+                            itemBuilder: (ctx) => [
+                              PopupMenuItem<String>(
+                                value: 'toggle',
+                                height: 34,
+                                child: Row(
+                                  children: [
+                                    LuxIcon(
+                                      LuxGlyph.swap,
+                                      size: 13.5,
+                                      color: _autoSwitchEnabled
+                                          ? tokens.cobalt
+                                          : tokens.textSecondary,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TText(
+                                        _autoSwitchEnabled
+                                            ? 'Disable Auto-switch'
+                                            : 'Enable Auto-switch',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (_autoSwitchEnabled)
+                                PopupMenuItem<String>(
+                                  value: 'probe',
+                                  height: 34,
+                                  child: Row(
+                                    children: [
+                                      LuxIcon(
+                                        LuxGlyph.refresh,
+                                        size: 13.5,
+                                        color: tokens.textSecondary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Expanded(
+                                        child: TText(
+                                          'Check network now',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: _autoSwitchEnabled
+                                    ? tokens.cobalt.withValues(alpha: 0.12)
+                                    : tokens.cardBg,
+                                borderRadius: BorderRadius.circular(9),
+                                border: Border.all(
+                                  color: _autoSwitchEnabled
+                                      ? tokens.cobalt.withValues(alpha: 0.4)
+                                      : tokens.hairlineStrong,
+                                  width: 0.75,
+                                ),
+                              ),
+                              child: Center(
+                                child: LuxIcon(
+                                  LuxGlyph.swap,
+                                  size: 14,
+                                  color: _autoSwitchEnabled
+                                      ? tokens.cobalt
+                                      : tokens.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                  if (_autoSwitchEnabled && _autoSwitchState.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    _AutoSwitchChip(
+                        state: _autoSwitchState,
+                        proxyName: _autoSwitchProxyName),
+                  ],
+                  const SizedBox(width: 6),
+                  _isDetecting
+                      ? SizedBox(
+                          width: compactDetect ? 74 : 114,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                compactDetect
+                                    ? '${(_detectProgress * 100).round()}%'
+                                    : '${tl(context, 'Detecting')} ${(_detectProgress * 100).round()}%',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: tokens.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: _detectProgress,
+                                  minHeight: 2.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Tooltip(
+                          message: tl(context, 'Detect Proxy'),
+                          child: SizedBox(
+                            height: 34,
+                            width: compactDetect ? 34 : null,
+                            child: OutlinedButton(
+                              key: const Key('proxies-detect-button'),
+                              onPressed: _detectProxies,
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: tokens.cardBg,
+                                foregroundColor: tokens.textPrimary,
+                                padding: compactDetect
+                                    ? EdgeInsets.zero
+                                    : const EdgeInsets.symmetric(horizontal: 11),
+                                minimumSize: const Size(0, 34),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                side: BorderSide(
+                                  color: tokens.hairlineStrong,
+                                  width: 0.75,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  LuxIcon(
+                                    LuxGlyph.radar,
+                                    size: 13.5,
+                                    color: tokens.textSecondary,
+                                  ),
+                                  if (!compactDetect) ...[
+                                    const SizedBox(width: 6),
+                                    const TText(
+                                      'Detect Proxy',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                           ),
                         ),
-                      ),
-                if (_autoSwitchState.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  _AutoSwitchChip(
-                      state: _autoSwitchState,
-                      proxyName: _autoSwitchProxyName),
                 ],
-              ],
-              const SizedBox(width: 8),
-              _isDetecting
-                  ? SizedBox(
-                      width: 118,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '${tl(context, 'Detecting')} ${(_detectProgress * 100).round()}%',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: tokens.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(2),
-                            child: LinearProgressIndicator(
-                              value: _detectProgress,
-                              minHeight: 2.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : SizedBox(
-                      height: 34,
-                      child: OutlinedButton(
-                        key: const Key('proxies-detect-button'),
-                        onPressed: _detectProxies,
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: tokens.cardBg,
-                          foregroundColor: tokens.textPrimary,
-                          padding: const EdgeInsets.symmetric(horizontal: 11),
-                          minimumSize: const Size(0, 34),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          side: BorderSide(
-                            color: tokens.hairlineStrong,
-                            width: 0.75,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            LuxIcon(
-                              LuxGlyph.radar,
-                              size: 13.5,
-                              color: tokens.textSecondary,
-                            ),
-                            const SizedBox(width: 6),
-                            const TText(
-                              'Detect Proxy',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-            ],
+              );
+            },
           ),
         ),
         Expanded(

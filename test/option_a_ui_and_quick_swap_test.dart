@@ -171,12 +171,86 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
         expect(find.byKey(const Key('sidebar-telemetry')), findsOneWidget);
+        expect(find.byKey(const Key('sidebar-mode-switcher')), findsOneWidget);
+        expect(find.byKey(const Key('sidebar-update-pill')), findsOneWidget);
+        expect(find.byKey(const Key('sidebar-theme-toggle')), findsOneWidget);
+        expect(find.byKey(const Key('sidebar-privacy-toggle')), findsOneWidget);
 
         await tester.tap(find.byKey(const Key('sidebar-tab-rules')));
         await tester.pumpAndSettle();
         expect(selected, 1);
+
+        // 1-click Theme toggle flips Light <-> Dark live.
+        final beforeTheme = appState.theme;
+        await tester.tap(find.byKey(const Key('sidebar-theme-toggle')));
+        await tester.pumpAndSettle();
+        expect(appState.theme, isNot(beforeTheme));
       }
     }
+  });
+
+  testWidgets(
+      'Narrow 640x480 minimum window collapses labels cleanly without overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(640, 480);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final appState = AppStateModel(ThemeMode.dark, const Locale('pt'))
+      ..updateSurfaceTier(WindowSurfaceTier.liquidGlass)
+      ..updateIsStarted(true);
+    final core = _FakeShellCore(appState);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: appState,
+        child: MaterialApp(
+          themeMode: ThemeMode.dark,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('en'), Locale('pt')],
+          home: Builder(
+            builder: (context) {
+              initTr(context);
+              return Scaffold(
+                body: Row(
+                  children: [
+                    AppSidebar(
+                      tabs: const [
+                        AppSidebarTab(glyph: LuxGlyph.proxies, label: 'Proxies'),
+                        AppSidebarTab(glyph: LuxGlyph.rules, label: 'Rules'),
+                        AppSidebarTab(glyph: LuxGlyph.settings, label: 'Settings'),
+                      ],
+                      selectedIndex: 0,
+                      onSelected: (_) {},
+                      coreManager: core,
+                      compact: true,
+                    ),
+                    Expanded(
+                      child: ProxiesPage(
+                        coreManager: core,
+                        curProxyInfo: 'Congregatio House',
+                        onCurProxyInfoChange: (_) {},
+                        dashboardUrl: 'http://127.0.0.1:9999',
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('proxies-detect-button')), findsOneWidget);
+    expect(find.byKey(const Key('proxies-autoswitch-menu')), findsOneWidget);
   });
 
   testWidgets(

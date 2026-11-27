@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:lux/theme.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
+import 'package:lux/widget/lux_icons.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Rules list, addressed by rule id throughout.
@@ -31,7 +33,13 @@ List<String> applyReorder(List<String> ids, int oldIndex, int newIndex) {
 
 class RulesPage extends StatefulWidget {
   final CoreManager coreManager;
-  const RulesPage({super.key, required this.coreManager});
+  final VoidCallback? onOpenBypassCidrs;
+
+  const RulesPage({
+    super.key,
+    required this.coreManager,
+    this.onOpenBypassCidrs,
+  });
 
   @override
   State<RulesPage> createState() => _RulesPageState();
@@ -408,24 +416,25 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     }
   }
 
-  Color _policyColor(String policy) {
+  Color _policyColor(BuildContext context, String policy) {
+    final tokens = LuxTokens.of(context);
     switch (policy) {
       case 'PROXY':
-        return Colors.blue;
+        return tokens.cobalt;
       case 'DIRECT':
-        return Colors.green;
+        return tokens.emerald;
       case 'REJECT':
-        return Colors.red;
+        return tokens.danger;
       default:
-        // A named proxy.
-        return Colors.orange;
+        return tokens.amber;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final tokens = LuxTokens.of(context);
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
 
     final visibleCount = _rules.where(_matchesSearch).length;
@@ -433,60 +442,66 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
 
     return Column(
       children: [
-        _toolbar(visibleCount, brokenCount),
-        const Divider(height: 1),
-        if (_search.isNotEmpty) _createFromSearchBanner(visibleCount),
+        _toolbar(tokens, visibleCount, brokenCount),
+        Container(height: 0.75, color: tokens.hairline),
+        if (_search.isNotEmpty) _createFromSearchBanner(tokens, visibleCount),
         Expanded(
           child: _rules.isEmpty
-              ? const Center(child: TText('No rules yet'))
+              ? Center(
+                  child: TText(
+                    'No rules yet',
+                    style: TextStyle(fontSize: 12.5, color: tokens.textMuted),
+                  ),
+                )
               : ListView(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  children: _buildGroupSections(),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+                  children: _buildGroupSections(tokens),
                 ),
         ),
       ],
     );
   }
 
-  /// Shown under the search bar whenever a term is typed: a one-tap "create a
-  /// rule using this term as the payload" action. Emphasized (and labeled "no
-  /// matches") when the search finds nothing, so searching for a domain that
-  /// isn't ruled yet flows straight into creating a rule for it.
-  Widget _createFromSearchBanner(int visibleCount) {
+  Widget _createFromSearchBanner(LuxTokens tokens, int visibleCount) {
     final term = _searchCtrl.text.trim();
     if (term.isEmpty) return const SizedBox.shrink();
     final noMatches = visibleCount == 0;
     return Material(
       color: noMatches
-          ? Theme.of(context).colorScheme.primary.withAlpha(24)
+          ? tokens.cobalt.withValues(alpha: 0.08)
           : Colors.transparent,
       child: InkWell(
         onTap: () => _showAddEdit(initialPayload: term),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              Icon(Icons.add_circle_outline,
-                  size: 16, color: Theme.of(context).colorScheme.primary),
+              LuxIcon(LuxGlyph.plus, size: 14, color: tokens.cobalt),
               const SizedBox(width: 8),
               Expanded(
                 child: Text.rich(
                   TextSpan(children: [
                     TextSpan(text: tl(context, 'Create rule for ')),
                     TextSpan(
-                        text: '"$term"',
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                      text: '"$term"',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: tokens.textPrimary,
+                      ),
+                    ),
                     if (noMatches)
                       TextSpan(
-                          text: '  (${tl(context, 'no matches')})',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context).hintColor)),
+                        text: '  (${tl(context, 'no matches')})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: tokens.textMuted,
+                        ),
+                      ),
                   ]),
-                  style: const TextStyle(fontSize: 12),
+                  style: TextStyle(fontSize: 12, color: tokens.textSecondary),
                 ),
               ),
-              const Icon(Icons.chevron_right, size: 16),
+              LuxIcon(LuxGlyph.chevronRight, size: 14, color: tokens.textMuted),
             ],
           ),
         ),
@@ -494,106 +509,262 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     );
   }
 
-  Widget _toolbar(int visibleCount, int brokenCount) {
+  Widget _toolbar(LuxTokens tokens, int visibleCount, int brokenCount) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 32,
-              child: TextField(
-                controller: _searchCtrl,
-                decoration: InputDecoration(
-                  hintText: tl(context, 'Search rules'),
-                  prefixIcon: const Icon(Icons.search, size: 16),
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _search.isEmpty
-                      ? null
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Create a rule using the current search term as the
-                            // payload — fast path for "I searched for a domain,
-                            // it's not there, make a rule for it".
-                            IconButton(
-                              tooltip: tl(context, 'Create rule for this term'),
-                              icon: const Icon(Icons.add_circle_outline, size: 16),
-                              onPressed: () {
-                                final term = _searchCtrl.text.trim();
-                                if (term.isEmpty) return;
-                                _showAddEdit(initialPayload: term);
-                              },
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 500;
+          return Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 32,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    style: TextStyle(fontSize: 12, color: tokens.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: tl(context, 'Search rules'),
+                      hintStyle:
+                          TextStyle(fontSize: 12, color: tokens.textMuted),
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(left: 10, right: 6),
+                        child: LuxIcon(LuxGlyph.search,
+                            size: 13.5, color: tokens.textMuted),
+                      ),
+                      prefixIconConstraints:
+                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                      isDense: true,
+                      filled: true,
+                      fillColor: tokens.cardBg,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 7),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: tokens.hairline, width: 0.75),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: tokens.cobalt, width: 1.0),
+                      ),
+                      suffixIcon: _search.isEmpty
+                          ? null
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip:
+                                      tl(context, 'Create rule for this term'),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 28, minHeight: 28),
+                                  icon: LuxIcon(LuxGlyph.plus,
+                                      size: 13, color: tokens.cobalt),
+                                  onPressed: () {
+                                    final term = _searchCtrl.text.trim();
+                                    if (term.isEmpty) return;
+                                    _showAddEdit(initialPayload: term);
+                                  },
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 28, minHeight: 28),
+                                  icon: LuxIcon(LuxGlyph.close,
+                                      size: 12, color: tokens.textMuted),
+                                  onPressed: () => _searchCtrl.clear(),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.clear, size: 14),
-                              onPressed: () => _searchCtrl.clear(),
-                            ),
-                          ],
-                        ),
+                    ),
+                  ),
                 ),
-                style: const TextStyle(fontSize: 12),
               ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text('$visibleCount of ${_rules.length}',
-              style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          if (brokenCount > 0) ...[
-            const SizedBox(width: 10),
-            Tooltip(
-              message: '$brokenCount rule(s) reference a proxy that no longer '
-                  'exists and cannot match',
-              child: Row(children: [
-                const Icon(Icons.error_outline, size: 14, color: Colors.red),
-                const SizedBox(width: 3),
-                Text('$brokenCount broken',
-                    style: const TextStyle(fontSize: 11, color: Colors.red)),
-              ]),
-            ),
-          ],
-          const SizedBox(width: 10),
-          FilledButton.icon(
-            onPressed: () => _showAddEdit(),
-            icon: const Icon(Icons.add, size: 15),
-            label: const TText('Add', style: TextStyle(fontSize: 12)),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              minimumSize: const Size(0, 32),
-            ),
-          ),
-        ],
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: tokens.subtlePillBg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: tokens.hairline, width: 0.75),
+                ),
+                child: Text(
+                  '$visibleCount of ${_rules.length}',
+                  style: luxMonoStyle(
+                      fontSize: 10.5, color: tokens.textSecondary),
+                ),
+              ),
+              if (brokenCount > 0) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message:
+                      '$brokenCount rule(s) reference a proxy that no longer '
+                      'exists and cannot match',
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: tokens.danger.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: tokens.danger.withValues(alpha: 0.35),
+                          width: 0.75),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        LuxIcon(LuxGlyph.alertCircle,
+                            size: 12, color: tokens.danger),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$brokenCount broken',
+                          style: TextStyle(fontSize: 10.5, color: tokens.danger),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (widget.onOpenBypassCidrs != null) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: tl(context, 'Bypass CIDRs'),
+                  child: SizedBox(
+                    height: 32,
+                    width: compact ? 32 : null,
+                    child: OutlinedButton(
+                      key: const Key('rules-bypass-cidrs-button'),
+                      onPressed: widget.onOpenBypassCidrs,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: tokens.cardBg,
+                        foregroundColor: tokens.textPrimary,
+                        padding: compact
+                            ? EdgeInsets.zero
+                            : const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        side: BorderSide(
+                            color: tokens.hairlineStrong, width: 0.75),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          LuxIcon(LuxGlyph.route,
+                              size: 12.5, color: tokens.textSecondary),
+                          if (!compact) ...[
+                            const SizedBox(width: 5),
+                            const TText('Bypass CIDRs',
+                                style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w400)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 6),
+              Tooltip(
+                message: tl(context, 'Add Rule'),
+                child: SizedBox(
+                  height: 32,
+                  width: compact ? 32 : null,
+                  child: FilledButton(
+                    onPressed: () => _showAddEdit(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: compact
+                          ? EdgeInsets.zero
+                          : const EdgeInsets.symmetric(horizontal: 11),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const LuxIcon(LuxGlyph.plus,
+                            size: 12.5, color: Colors.white),
+                        if (!compact) ...[
+                          const SizedBox(width: 5),
+                          const TText('Add',
+                              style: TextStyle(
+                                  fontSize: 11.5, fontWeight: FontWeight.w500)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  List<Widget> _buildGroupSections() {
+  List<Widget> _buildGroupSections(LuxTokens tokens) {
     final sections = <Widget>[];
     final ordered = [..._groups]..sort((a, b) => a.order.compareTo(b.order));
 
     for (final g in ordered) {
       final rules = _rulesIn(g.id);
-      // While searching, hide groups with nothing to show.
       if (rules.isEmpty && _search.isNotEmpty) continue;
-      sections.add(_groupHeader(g, rules.length));
-      if (!_collapsed.contains(g.id)) {
-        sections.add(_groupBody(g.id, rules, groupEnabled: g.enabled));
-      }
+      sections.add(_groupCard(tokens, g: g, rules: rules));
+      sections.add(const SizedBox(height: 10));
     }
 
-    // Rules with no group are evaluated last, so show them last.
     final ungrouped = _rulesIn('');
     if (ungrouped.isNotEmpty) {
-      sections.add(_ungroupedHeader(ungrouped.length));
-      if (!_collapsed.contains('')) {
-        sections.add(_groupBody('', ungrouped, groupEnabled: true));
-      }
+      sections.add(_groupCard(tokens, g: null, rules: ungrouped));
     }
     return sections;
   }
 
-  Widget _groupHeader(RuleGroup g, int count) {
+  Widget _groupCard(
+    LuxTokens tokens, {
+    required RuleGroup? g,
+    required List<CustomizedRuleItem> rules,
+  }) {
+    final groupId = g?.id ?? '';
+    final collapsed = _collapsed.contains(groupId);
+    final groupEnabled = g?.enabled ?? true;
+
+    return Material(
+      color: tokens.cardBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(11),
+        side: BorderSide(color: tokens.hairline, width: 0.75),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (g != null)
+            _groupHeader(tokens, g, rules.length)
+          else
+            _ungroupedHeader(tokens, rules.length),
+          if (!collapsed) ...[
+            Container(height: 0.75, color: tokens.hairline),
+            _groupBody(tokens, groupId, rules, groupEnabled: groupEnabled),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _groupHeader(LuxTokens tokens, RuleGroup g, int count) {
     final collapsed = _collapsed.contains(g.id);
     final busy = _busy.contains('group:${g.id}');
     return InkWell(
@@ -601,39 +772,50 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
         collapsed ? _collapsed.remove(g.id) : _collapsed.add(g.id);
       }),
       child: Container(
-        height: 34,
+        height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: tokens.subtlePillBg,
         child: Row(
           children: [
-            Icon(collapsed ? Icons.chevron_right : Icons.expand_more, size: 17),
-            const SizedBox(width: 4),
+            LuxIcon(
+              collapsed ? LuxGlyph.chevronRight : LuxGlyph.chevronDown,
+              size: 13,
+              color: tokens.textMuted,
+            ),
+            const SizedBox(width: 6),
             Text(
               g.name,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: g.enabled ? null : Colors.grey,
+                fontWeight: FontWeight.w500,
+                color: g.enabled ? tokens.textPrimary : tokens.textMuted,
               ),
             ),
             const SizedBox(width: 6),
-            Text('$count',
-                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            Text(
+              '$count',
+              style: luxMonoStyle(fontSize: 10.5, color: tokens.textMuted),
+            ),
             const Spacer(),
             if (!g.enabled)
-              const Padding(
-                padding: EdgeInsets.only(right: 6),
-                child: TText('group off',
-                    style: TextStyle(fontSize: 10, color: Colors.grey)),
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: TText(
+                  'group off',
+                  style: TextStyle(fontSize: 10.5, color: tokens.textMuted),
+                ),
               ),
             busy
-                ? const SizedBox(
+                ? SizedBox(
                     width: 26,
                     child: Center(
                       child: SizedBox(
                         width: 12,
                         height: 12,
-                        child: CircularProgressIndicator(strokeWidth: 1.6),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: tokens.cobalt,
+                        ),
                       ),
                     ),
                   )
@@ -641,9 +823,12 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                     message: g.enabled
                         ? 'Disable every rule in this group'
                         : 'Enable this group',
-                    child: Switch(
-                      value: g.enabled,
-                      onChanged: (_) => _toggleGroup(g),
+                    child: Transform.scale(
+                      scale: 0.78,
+                      child: Switch(
+                        value: g.enabled,
+                        onChanged: (_) => _toggleGroup(g),
+                      ),
                     ),
                   ),
           ],
@@ -652,43 +837,59 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     );
   }
 
-  Widget _ungroupedHeader(int count) {
+  Widget _ungroupedHeader(LuxTokens tokens, int count) {
     final collapsed = _collapsed.contains('');
     return InkWell(
       onTap: () => setState(() {
         collapsed ? _collapsed.remove('') : _collapsed.add('');
       }),
       child: Container(
-        height: 34,
+        height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: tokens.subtlePillBg,
         child: Row(
           children: [
-            Icon(collapsed ? Icons.chevron_right : Icons.expand_more, size: 17),
-            const SizedBox(width: 4),
-            const TText('Ungrouped',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            LuxIcon(
+              collapsed ? LuxGlyph.chevronRight : LuxGlyph.chevronDown,
+              size: 13,
+              color: tokens.textMuted,
+            ),
             const SizedBox(width: 6),
-            Text('$count',
-                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            TText(
+              'Ungrouped',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: tokens.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$count',
+              style: luxMonoStyle(fontSize: 10.5, color: tokens.textMuted),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _groupBody(String groupId, List<CustomizedRuleItem> rules,
-      {required bool groupEnabled}) {
+  Widget _groupBody(
+    LuxTokens tokens,
+    String groupId,
+    List<CustomizedRuleItem> rules, {
+    required bool groupEnabled,
+  }) {
     if (rules.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(24, 8, 0, 8),
-        child: TText('No rules in this group',
-            style: TextStyle(fontSize: 11, color: Colors.grey)),
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 10, 12, 10),
+        child: TText(
+          'No rules in this group',
+          style: TextStyle(fontSize: 11, color: tokens.textMuted),
+        ),
       );
     }
 
-    // Reordering while a search filter is active would be misleading, since the
-    // visible order is not the stored order.
     final canReorder = _search.isEmpty;
 
     return ReorderableListView.builder(
@@ -697,32 +898,20 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       buildDefaultDragHandles: false,
       itemCount: rules.length,
       onReorder: (o, n) => canReorder ? _reorder(groupId, o, n) : null,
-      itemBuilder: (ctx, i) => _ruleRow(rules[i], groupEnabled: groupEnabled, index: i),
+      itemBuilder: (ctx, i) =>
+          _ruleRow(tokens, rules[i], groupEnabled: groupEnabled, index: i),
     );
   }
 
-  /// Width of the trailing action column.
-  ///
-  /// Must fit three [_rowAction] buttons. A fixed 84 here was too narrow for
-  /// Material's default 48x48 icon buttons, so the row overflowed by 60px and
-  /// the delete button was laid out beyond the row's right edge, where it could
-  /// not be clicked at all.
   static const double _actionsWidth = 100;
 
-  /// Compact row action sized to the 38px row.
-  ///
-  /// 32x32 rather than Material's 48x48 default: the row cannot be 48 tall
-  /// without halving the number of rules visible at once. 32 still clears the
-  /// 24x24 minimum WCAG 2.2 asks for pointer targets, and every button carries a
-  /// tooltip so the affordance is not icon-only.
   Widget _rowAction({
-    required IconData icon,
+    required Widget icon,
     required String tooltip,
     required VoidCallback onPressed,
-    double iconSize = 14,
   }) {
     return IconButton(
-      icon: Icon(icon, size: iconSize),
+      icon: icon,
       tooltip: tooltip,
       onPressed: onPressed,
       padding: EdgeInsets.zero,
@@ -736,62 +925,62 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
     );
   }
 
-  Widget _ruleRow(CustomizedRuleItem rule, {required bool groupEnabled, required int index}) {
-    // Key on the id: it survives edits and toggles, so Flutter never reuses one
-    // row's state for another rule.
+  Widget _ruleRow(
+    LuxTokens tokens,
+    CustomizedRuleItem rule, {
+    required bool groupEnabled,
+    required int index,
+  }) {
     final key = ValueKey(rule.id);
     final busy = _busy.contains(rule.id);
     final shadow = _shadows[rule.id];
     final inactive = rule.disabled || !groupEnabled || rule.isBroken;
     final canDrag = _search.isEmpty;
+    final pColor = _policyColor(context, rule.policy);
 
     return Container(
       key: key,
       height: 38,
       decoration: BoxDecoration(
-        color: inactive
-            ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.5)
-            : null,
+        color: inactive ? tokens.subtlePillBg.withValues(alpha: 0.45) : null,
         border: Border(
-          bottom:
-              BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+          bottom: BorderSide(color: tokens.hairline, width: 0.75),
         ),
       ),
       child: Row(
         children: [
-          // Drag handle on the left — only active when not searching
           if (canDrag)
             ReorderableDragStartListener(
               index: index,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(Icons.drag_indicator, size: 16, color: Colors.grey),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: Icon(Icons.drag_indicator,
+                    size: 14, color: tokens.textMuted),
               ),
             )
           else
             const SizedBox(width: 24),
-          SizedBox(
-            width: 6,
-            child: Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: rule.isBroken
-                    ? Colors.red
-                    : inactive
-                        ? Colors.grey.withValues(alpha: 0.4)
-                        : Theme.of(context).colorScheme.primary,
-              ),
+          Container(
+            width: 5.5,
+            height: 5.5,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: rule.isBroken
+                  ? tokens.danger
+                  : inactive
+                      ? tokens.textMuted.withValues(alpha: 0.4)
+                      : tokens.cobalt,
             ),
           ),
+          const SizedBox(width: 7),
           SizedBox(
-            width: 112,
+            width: 108,
             child: Text(
               rule.ruleType,
-              style: TextStyle(
-                fontSize: 11,
-                color: inactive ? Colors.grey : null,
+              style: luxMonoStyle(
+                fontSize: 10.5,
+                color: inactive ? tokens.textMuted : tokens.textSecondary,
+              ).copyWith(
                 decoration:
                     rule.disabled ? TextDecoration.lineThrough : null,
               ),
@@ -799,16 +988,16 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
             ),
           ),
           Expanded(
-            child: Tooltip
-                (
+            child: Tooltip(
               message: rule.slug.isEmpty ? rule.payload : rule.slug,
               child: Text(
                 rule.ruleType == 'DNS-MAP' && rule.payload.contains(';')
                     ? '${rule.payload.split(';')[0]} → ${rule.payload.split(';')[1]}'
                     : rule.payload,
-                style: TextStyle(
+                style: luxMonoStyle(
                   fontSize: 11,
-                  color: inactive ? Colors.grey : null,
+                  color: inactive ? Colors.grey : tokens.textPrimary,
+                ).copyWith(
                   decoration:
                       rule.disabled ? TextDecoration.lineThrough : null,
                 ),
@@ -819,53 +1008,69 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
           if (rule.network.isNotEmpty)
             Container(
               margin: const EdgeInsets.only(right: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
               decoration: BoxDecoration(
-                color: Colors.blueGrey.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(3),
+                color: tokens.subtlePillBg,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: tokens.hairline, width: 0.5),
               ),
-              child: Text(rule.network.toUpperCase(),
-                  style: const TextStyle(fontSize: 9)),
+              child: Text(
+                rule.network.toUpperCase(),
+                style: luxMonoStyle(fontSize: 9, color: tokens.textSecondary),
+              ),
             ),
           if (rule.isBroken)
             Tooltip(
               message: rule.broken,
-              child: const Padding(
-                padding: EdgeInsets.only(right: 5),
-                child: Icon(Icons.error_outline, size: 14, color: Colors.red),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 5),
+                child: LuxIcon(LuxGlyph.alertCircle,
+                    size: 13.5, color: tokens.danger),
               ),
             ),
           if (shadow != null)
             Tooltip(
               message: 'Never matches: ${shadow.reason}. '
                   'Shadowed by ${shadow.shadowedBySlug}.',
-              child: const Padding(
-                padding: EdgeInsets.only(right: 5),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 5),
                 child: Icon(Icons.visibility_off_outlined,
-                    size: 14, color: Colors.amber),
+                    size: 14, color: tokens.amber),
               ),
             ),
-          Container(
-            width: 96,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              rule.policy,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: inactive ? Colors.grey : _policyColor(rule.policy),
+          SizedBox(
+            width: 94,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (inactive ? tokens.textMuted : pColor)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  rule.policy,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    color: inactive ? tokens.textMuted : pColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           if (busy)
-            const SizedBox(
+            SizedBox(
               width: _actionsWidth,
               child: Center(
                 child: SizedBox(
                   width: 13,
                   height: 13,
-                  child: CircularProgressIndicator(strokeWidth: 1.6),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 1.5, color: tokens.cobalt),
                 ),
               ),
             )
@@ -876,20 +1081,28 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   _rowAction(
-                    icon: rule.disabled
-                        ? Icons.toggle_off_outlined
-                        : Icons.toggle_on,
-                    iconSize: 19,
-                    tooltip: rule.disabled ? tl(context, 'Enable') : tl(context, 'Disable'),
+                    icon: Icon(
+                      rule.disabled
+                          ? Icons.toggle_off_outlined
+                          : Icons.toggle_on,
+                      size: 18,
+                      color:
+                          rule.disabled ? tokens.textMuted : tokens.cobalt,
+                    ),
+                    tooltip: rule.disabled
+                        ? tl(context, 'Enable')
+                        : tl(context, 'Disable'),
                     onPressed: () => _toggle(rule),
                   ),
                   _rowAction(
-                    icon: Icons.edit_outlined,
+                    icon: LuxIcon(LuxGlyph.edit,
+                        size: 13, color: tokens.textSecondary),
                     tooltip: tl(context, 'Edit'),
                     onPressed: () => _showAddEdit(item: rule),
                   ),
                   _rowAction(
-                    icon: Icons.delete_outline,
+                    icon: LuxIcon(LuxGlyph.trash,
+                        size: 13, color: tokens.textSecondary),
                     tooltip: tl(context, 'Delete'),
                     onPressed: () => _confirmDelete(rule),
                   ),

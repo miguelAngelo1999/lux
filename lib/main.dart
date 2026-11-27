@@ -67,7 +67,8 @@ void main(List<String> args) async {
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = WindowOptions(
-      size: const Size(800, 650),
+      size: const Size(860, 660),
+      minimumSize: const Size(640, 480),
       center: true,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden,
@@ -75,6 +76,7 @@ void main(List<String> args) async {
     );
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setMinimumSize(const Size(640, 480));
       if (Platform.isMacOS) {
         await windowManager.setTitleBarStyle(
           TitleBarStyle.hidden,

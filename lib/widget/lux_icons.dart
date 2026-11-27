@@ -36,6 +36,20 @@ enum LuxGlyph {
   home,
   swap,
   shieldAlert,
+  sun,
+  moon,
+  refresh,
+  download,
+  search,
+  trash,
+  copy,
+  close,
+  pause,
+  play,
+  edit,
+  upload,
+  chevronRight,
+  xCircle,
 }
 
 class LuxIcon extends StatelessWidget {
@@ -72,47 +86,57 @@ class LuxIcon extends StatelessWidget {
   }
 }
 
-/// Clean thin-stroke prism triangle brand mark matching the Stitch redesign.
+/// Authentic Lux brand mark: uses the bundled `assets/logo.png` icon (dark
+/// slate rounded square with teal X), with a matching vector fallback for
+/// headless tests.
 class LuxLogoMark extends StatelessWidget {
   final double size;
   final Color? color;
 
-  const LuxLogoMark({super.key, this.size = 16, this.color});
+  const LuxLogoMark({super.key, this.size = 20, this.color});
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? Theme.of(context).colorScheme.primary;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(painter: _LuxLogoPainter(color: c)),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.24),
+      child: Image.asset(
+        'assets/logo.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, __, ___) => SizedBox(
+          width: size,
+          height: size,
+          child: CustomPaint(painter: _LuxLogoFallbackPainter()),
+        ),
+      ),
     );
   }
 }
 
-class _LuxLogoPainter extends CustomPainter {
-  final Color color;
-  _LuxLogoPainter({required this.color});
-
+class _LuxLogoFallbackPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width / 24.0;
-    final p = Paint()
-      ..color = color
+    final bg = Paint()..color = const Color(0xFF232736);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        Radius.circular(5.5 * s),
+      ),
+      bg,
+    );
+    final xPaint = Paint()
+      ..color = const Color(0xFF56B4C4)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    final path = Path()
-      ..moveTo(12 * s, 3.2 * s)
-      ..lineTo(20.6 * s, 19.2 * s)
-      ..lineTo(3.4 * s, 19.2 * s)
-      ..close();
-    canvas.drawPath(path, p);
+      ..strokeWidth = 2.4 * s
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(6.8 * s, 6.8 * s), Offset(17.2 * s, 17.2 * s), xPaint);
+    canvas.drawLine(Offset(17.2 * s, 6.8 * s), Offset(6.8 * s, 17.2 * s), xPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _LuxLogoPainter old) => old.color != color;
+  bool shouldRepaint(covariant _LuxLogoFallbackPainter old) => false;
 }
 
 class _LuxGlyphPainter extends CustomPainter {
@@ -444,14 +468,26 @@ class _LuxGlyphPainter extends CustomPainter {
         canvas.drawPath(head, p);
 
       case LuxGlyph.route:
-        canvas.drawCircle(pt(6.5, 17.5), 2.1 * s, p);
-        canvas.drawCircle(pt(17.5, 6.5), 2.1 * s, p);
-        final path = Path()
-          ..moveTo(8.6 * s, 17.5 * s)
-          ..lineTo(12 * s, 17.5 * s)
-          ..cubicTo(14.5 * s, 17.5 * s, 9.5 * s, 6.5 * s, 12 * s, 6.5 * s)
-          ..lineTo(15.4 * s, 6.5 * s);
-        canvas.drawPath(path, p);
+        // Clean split-branch routing fork (two arrows diverging upward).
+        final leftBranch = Path()
+          ..moveTo(12 * s, 19.5 * s)
+          ..lineTo(12 * s, 12.2 * s)
+          ..lineTo(6.2 * s, 6.4 * s);
+        canvas.drawPath(leftBranch, p);
+        final leftHead = Path()
+          ..moveTo(6.2 * s, 10.6 * s)
+          ..lineTo(6.2 * s, 6.4 * s)
+          ..lineTo(10.4 * s, 6.4 * s);
+        canvas.drawPath(leftHead, p);
+        final rightBranch = Path()
+          ..moveTo(12 * s, 12.2 * s)
+          ..lineTo(17.8 * s, 6.4 * s);
+        canvas.drawPath(rightBranch, p);
+        final rightHead = Path()
+          ..moveTo(13.6 * s, 6.4 * s)
+          ..lineTo(17.8 * s, 6.4 * s)
+          ..lineTo(17.8 * s, 10.6 * s);
+        canvas.drawPath(rightHead, p);
 
       case LuxGlyph.globe:
         canvas.drawCircle(pt(12, 12), 8.5 * s, p);
@@ -484,6 +520,146 @@ class _LuxGlyphPainter extends CustomPainter {
           ..lineTo(5 * s, 15 * s)
           ..lineTo(8.5 * s, 18.5 * s);
         canvas.drawPath(a2, p);
+
+      case LuxGlyph.sun:
+        canvas.drawCircle(pt(12, 12), 4.0 * s, p);
+        for (var i = 0; i < 8; i++) {
+          final a = i * math.pi / 4;
+          canvas.drawLine(
+            Offset((12 + math.cos(a) * 6.8) * s, (12 + math.sin(a) * 6.8) * s),
+            Offset((12 + math.cos(a) * 9.0) * s, (12 + math.sin(a) * 9.0) * s),
+            p,
+          );
+        }
+
+      case LuxGlyph.moon:
+        final moonPath = Path()
+          ..moveTo(18.8 * s, 14.5 * s)
+          ..arcToPoint(
+            pt(9.5, 5.2),
+            radius: Radius.circular(6.8 * s),
+            clockwise: true,
+          )
+          ..arcToPoint(
+            pt(18.8, 14.5),
+            radius: Radius.circular(8.2 * s),
+            largeArc: true,
+            clockwise: false,
+          )
+          ..close();
+        canvas.drawPath(moonPath, p);
+
+      case LuxGlyph.refresh:
+        canvas.drawArc(
+          Rect.fromCircle(center: pt(12, 12), radius: 7.4 * s),
+          -math.pi * 0.72,
+          math.pi * 1.48,
+          false,
+          p,
+        );
+        final head = Path()
+          ..moveTo(16.6 * s, 4.8 * s)
+          ..lineTo(18.8 * s, 8.2 * s)
+          ..lineTo(15.0 * s, 8.8 * s);
+        canvas.drawPath(head, p);
+
+      case LuxGlyph.download:
+        canvas.drawLine(pt(12, 4.5), pt(12, 15.2), p);
+        final head = Path()
+          ..moveTo(8.2 * s, 11.6 * s)
+          ..lineTo(12 * s, 15.4 * s)
+          ..lineTo(15.8 * s, 11.6 * s);
+        canvas.drawPath(head, p);
+        final tray = Path()
+          ..moveTo(5.2 * s, 16.5 * s)
+          ..lineTo(5.2 * s, 19 * s)
+          ..lineTo(18.8 * s, 19 * s)
+          ..lineTo(18.8 * s, 16.5 * s);
+        canvas.drawPath(tray, p);
+
+      case LuxGlyph.search:
+        canvas.drawCircle(pt(10.8, 10.8), 6.2 * s, p);
+        canvas.drawLine(pt(15.5, 15.5), pt(19.6, 19.6), p);
+
+      case LuxGlyph.trash:
+        canvas.drawLine(pt(5, 7), pt(19, 7), p);
+        canvas.drawLine(pt(9.2, 4.5), pt(14.8, 4.5), p);
+        final body = Path()
+          ..moveTo(6.8 * s, 7 * s)
+          ..lineTo(7.6 * s, 19 * s)
+          ..lineTo(16.4 * s, 19 * s)
+          ..lineTo(17.2 * s, 7 * s);
+        canvas.drawPath(body, p);
+        canvas.drawLine(pt(10.2, 10.5), pt(10.2, 15.8), p);
+        canvas.drawLine(pt(13.8, 10.5), pt(13.8, 15.8), p);
+
+      case LuxGlyph.copy:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect(9, 9, 10.5, 10.5), Radius.circular(2 * s)),
+          p,
+        );
+        final back = Path()
+          ..moveTo(6.5 * s, 15 * s)
+          ..lineTo(5.5 * s, 15 * s)
+          ..quadraticBezierTo(4.5 * s, 15 * s, 4.5 * s, 14 * s)
+          ..lineTo(4.5 * s, 5.5 * s)
+          ..quadraticBezierTo(4.5 * s, 4.5 * s, 5.5 * s, 4.5 * s)
+          ..lineTo(14 * s, 4.5 * s)
+          ..quadraticBezierTo(15 * s, 4.5 * s, 15 * s, 5.5 * s)
+          ..lineTo(15 * s, 6.5 * s);
+        canvas.drawPath(back, p);
+
+      case LuxGlyph.close:
+        canvas.drawLine(pt(6.5, 6.5), pt(17.5, 17.5), p);
+        canvas.drawLine(pt(17.5, 6.5), pt(6.5, 17.5), p);
+
+      case LuxGlyph.pause:
+        canvas.drawLine(pt(9, 6), pt(9, 18), p);
+        canvas.drawLine(pt(15, 6), pt(15, 18), p);
+
+      case LuxGlyph.play:
+        final tri = Path()
+          ..moveTo(7.5 * s, 5.5 * s)
+          ..lineTo(18.2 * s, 12 * s)
+          ..lineTo(7.5 * s, 18.5 * s)
+          ..close();
+        canvas.drawPath(tri, p);
+
+      case LuxGlyph.edit:
+        final pen = Path()
+          ..moveTo(15.8 * s, 5.2 * s)
+          ..lineTo(18.8 * s, 8.2 * s)
+          ..lineTo(8.5 * s, 18.5 * s)
+          ..lineTo(4.8 * s, 19.2 * s)
+          ..lineTo(5.5 * s, 15.5 * s)
+          ..close();
+        canvas.drawPath(pen, p);
+
+      case LuxGlyph.upload:
+        canvas.drawLine(pt(12, 15.5), pt(12, 4.8), p);
+        final head = Path()
+          ..moveTo(8.2 * s, 8.4 * s)
+          ..lineTo(12 * s, 4.6 * s)
+          ..lineTo(15.8 * s, 8.4 * s);
+        canvas.drawPath(head, p);
+        final tray = Path()
+          ..moveTo(5.2 * s, 16.5 * s)
+          ..lineTo(5.2 * s, 19 * s)
+          ..lineTo(18.8 * s, 19 * s)
+          ..lineTo(18.8 * s, 16.5 * s);
+        canvas.drawPath(tray, p);
+
+      case LuxGlyph.chevronRight:
+        final path = Path()
+          ..moveTo(9.2 * s, 6.5 * s)
+          ..lineTo(14.8 * s, 12 * s)
+          ..lineTo(9.2 * s, 17.5 * s);
+        canvas.drawPath(path, p);
+
+      case LuxGlyph.xCircle:
+        canvas.drawCircle(pt(12, 12), 8.6 * s, p);
+        canvas.drawLine(pt(9, 9), pt(15, 15), p);
+        canvas.drawLine(pt(15, 9), pt(9, 15), p);
     }
   }
 

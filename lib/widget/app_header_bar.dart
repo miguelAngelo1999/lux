@@ -9,7 +9,6 @@ import 'package:lux/widget/lux_icons.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
 import 'package:lux/widget/mode_fan_button.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -52,10 +51,6 @@ class _State extends State<AppHeaderBar> with WindowListener {
   /// Windows draws its own caption buttons because hiding the native title
   /// bar removes them, so the maximised state has to be tracked here.
   bool isMaximized = false;
-
-  void openWebDashboard() {
-    launchUrl(Uri.parse(widget.urlStr));
-  }
 
   Future<void> refreshData() async {
     if (!isLoadingSwitch) {
@@ -340,100 +335,100 @@ class _State extends State<AppHeaderBar> with WindowListener {
     return Container(
       height: 52,
       padding: EdgeInsets.only(
-        left: 16,
-        right: Platform.isWindows ? 4 : 16,
+        left: 14,
+        right: Platform.isWindows ? 4 : 14,
       ),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: tokens.hairline, width: 0.75)),
       ),
-      child: Row(
-        children: [
-          ModeFanButton(
-            modes: ruleList.rules,
-            selected: ruleList.selectedId,
-            labelOf: getRuleLabel,
-            descriptionOf: getRuleDescription,
-            iconOf: getRuleIcon,
-            glyphOf: getRuleGlyph,
-            enabled: !isLoadingRuleDropdown,
-            onSelected: (id) => handleSelectRule(id),
-          ),
-          const Spacer(),
-          // Quiet hairline "+ Add Proxy" capsule
-          Tooltip(
-            message: tr().addProxyTip,
-            child: InkWell(
-              key: const Key('header-add-proxy-button'),
-              borderRadius: BorderRadius.circular(8),
-              onTap: _handleAdd,
-              child: Container(
-                height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: tokens.cardBg,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: tokens.hairlineStrong, width: 0.75),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LuxIcon(LuxGlyph.plus, size: 13, color: tokens.textSecondary),
-                    const SizedBox(width: 6),
-                    TText(
-                      'Add Proxy',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: tokens.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Account for Windows caption buttons (~138px) when sizing controls.
+          final available =
+              constraints.maxWidth - (Platform.isWindows ? 144 : 0);
+          final showStatusLabel = available >= 485;
+          final showAddLabel = available >= 370;
+          final modeWidth = available >= 485
+              ? 162.0
+              : (available >= 370 ? 142.0 : 124.0);
+
+          return Row(
+            children: [
+              ModeFanButton(
+                modes: ruleList.rules,
+                selected: ruleList.selectedId,
+                labelOf: getRuleLabel,
+                descriptionOf: getRuleDescription,
+                iconOf: getRuleIcon,
+                glyphOf: getRuleGlyph,
+                enabled: !isLoadingRuleDropdown,
+                width: modeWidth,
+                onSelected: (id) => handleSelectRule(id),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Tooltip(
-            message: tl(context, 'Open web dashboard (advanced)'),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: openWebDashboard,
-              child: Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: tokens.cardBg,
+              const Spacer(),
+              // Quiet hairline "+ Add Proxy" capsule (collapses to "+" icon when narrow).
+              Tooltip(
+                message: tr().addProxyTip,
+                child: InkWell(
+                  key: const Key('header-add-proxy-button'),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: tokens.hairlineStrong, width: 0.75),
-                ),
-                child: Center(
-                  child: LuxIcon(
-                    LuxGlyph.externalLink,
-                    size: 13.5,
-                    color: tokens.textSecondary,
+                  onTap: _handleAdd,
+                  child: Container(
+                    height: 30,
+                    width: showAddLabel ? null : 30,
+                    padding: showAddLabel
+                        ? const EdgeInsets.symmetric(horizontal: 10)
+                        : EdgeInsets.zero,
+                    decoration: BoxDecoration(
+                      color: tokens.cardBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border:
+                          Border.all(color: tokens.hairlineStrong, width: 0.75),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        LuxIcon(LuxGlyph.plus,
+                            size: 13, color: tokens.textSecondary),
+                        if (showAddLabel) ...[
+                          const SizedBox(width: 6),
+                          TText(
+                            'Add Proxy',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: tokens.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(width: 0.75, height: 18, color: tokens.hairline),
-          const SizedBox(width: 12),
-          TText(
-            switchValue ? 'Connected' : 'Disconnected',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              color: switchValue ? tokens.textPrimary : tokens.textMuted,
-            ),
-          ),
-          const SizedBox(width: 8),
-          _buildMasterToggle(tokens, switchValue, isSwitchDisabled),
-          if (Platform.isWindows) ...[
-            const SizedBox(width: 6),
-            ..._windowsCaptionButtons(),
-          ],
-        ],
+              const SizedBox(width: 10),
+              Container(width: 0.75, height: 18, color: tokens.hairline),
+              const SizedBox(width: 10),
+              if (showStatusLabel) ...[
+                TText(
+                  switchValue ? 'Connected' : 'Disconnected',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: switchValue ? tokens.textPrimary : tokens.textMuted,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              _buildMasterToggle(tokens, switchValue, isSwitchDisabled),
+              if (Platform.isWindows) ...[
+                const SizedBox(width: 6),
+                ..._windowsCaptionButtons(),
+              ],
+            ],
+          );
+        },
       ),
     );
   }

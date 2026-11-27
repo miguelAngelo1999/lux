@@ -57,6 +57,13 @@ class WindowSurfaceBridge {
     } catch (_) {}
   }
 
+  static Future<void> syncSidebarWidth(double width) async {
+    if (!Platform.isMacOS) return;
+    try {
+      await _channel.invokeMethod<void>('setSidebarWidth', {'width': width});
+    } catch (_) {}
+  }
+
   static void listenTierChanges(void Function(WindowSurfaceTier tier) onTier) {
     if (!Platform.isMacOS) return;
     _channel.setMethodCallHandler((call) async {

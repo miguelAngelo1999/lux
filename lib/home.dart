@@ -17,6 +17,8 @@ import 'package:lux/util/app_log.dart';
 import 'package:lux/util/notifier.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/util/telemetry.dart' as telem;
+import 'package:lux/util/updater.dart'
+    show checkForUpdate, showUpdateConfirmDialog;
 import 'package:flutter/services.dart';
 import 'package:lux/util/process_manager.dart';
 import 'package:lux/widget/error/core_run_error_handler.dart';
@@ -989,6 +991,23 @@ class _HomeState extends State<Home>
       await windowManager.setSkipTaskbar(false);
       await windowManager.show();
       await windowManager.focus();
+    } else if (key == 'check_updates') {
+      await windowManager.setSkipTaskbar(false);
+      await windowManager.show();
+      await windowManager.focus();
+      try {
+        final info = await checkForUpdate();
+        if (!mounted) return;
+        if (info != null && info.hasUpdate) {
+          await writePendingUpdateVersion(info.latestVersion);
+          if (mounted) await showUpdateConfirmDialog(context, info);
+        } else {
+          await writePendingUpdateVersion(null);
+          if (mounted) notifier.show(tl(context, 'You are up to date'));
+        }
+      } catch (e) {
+        if (mounted) notifier.show('Update check failed: $e');
+      }
     } else if (key == 'connect') {
       final appState = Provider.of<AppStateModel>(context, listen: false);
       coreManager?.cancelNetworkTimers();
