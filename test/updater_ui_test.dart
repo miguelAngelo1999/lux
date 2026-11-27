@@ -255,6 +255,12 @@ void main() {
       expect(startedWith, isNotNull);
       expect(startedWith!.latestVersion, '1.50.114');
       expect(startedWith!.sha256, 'fresh-hash');
+
+      // Dialog visibility notifier stays true while open, false once dismissed.
+      expect(updateProgressDialogOpenNotifier.value, isTrue);
+      await tester.tap(find.text('Hide to background'));
+      await tester.pumpAndSettle();
+      expect(updateProgressDialogOpenNotifier.value, isFalse);
     });
 
     test('pickNewestUpdate picks newer stable release when beta is behind stable', () {

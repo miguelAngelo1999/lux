@@ -19,6 +19,7 @@ import 'package:lux/util/updater.dart'
         showUpdateConfirmDialog,
         showUpdateProgressDialog,
         startUpdate,
+        updateProgressDialogOpenNotifier,
         updateStateNotifier,
         UpdateState,
         UpdateInfo;
@@ -698,6 +699,9 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     return ValueListenableBuilder<UpdateState>(
       valueListenable: updateStateNotifier,
       builder: (ctx, updateState, _) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: updateProgressDialogOpenNotifier,
+          builder: (ctx, dialogOpen, _) {
         final isDownloading = updateState.isDownloading;
         final hasPending = _pendingUpdateVersion.isNotEmpty ||
             (updateState.updateInfo != null &&
@@ -752,7 +756,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                   '$_appVersion → $targetVersion',
                   style: luxMonoStyle(fontSize: 11, color: tokens.textMuted),
                 ),
-                if (isDownloading) ...[
+                if (isDownloading && !dialogOpen) ...[
                   const SizedBox(height: 6),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(3),
@@ -870,6 +874,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           glyph: LuxGlyph.refresh,
           busy: _checkingUpdate,
           onPressed: _checkingUpdate ? null : _runUpdateCheck,
+        );
+          },
         );
       },
     );

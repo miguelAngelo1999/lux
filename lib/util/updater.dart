@@ -323,6 +323,11 @@ class UpdateState {
 
 final updateStateNotifier = ValueNotifier<UpdateState>(const UpdateState());
 
+/// Tracks whether the modal [showUpdateProgressDialog] is currently visible so
+/// inline progress surfaces (e.g. Settings → Updates) stay hidden behind the
+/// dialog instead of showing duplicate progress bars simultaneously.
+final updateProgressDialogOpenNotifier = ValueNotifier<bool>(false);
+
 /// Shows a non-blocking snackbar notification that a new version is available.
 /// Tapping "Update" starts the download progress in a second snackbar.
 /// Does NOT block the interface — users can keep using Lux while it downloads.
@@ -446,6 +451,8 @@ Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) asy
   final hideLabel = _t(lang, 'Hide to background', 'Hide to background');
   final retryLabel = _t(lang, 'Retry', 'Retry');
 
+  updateProgressDialogOpenNotifier.value = true;
+  try {
   await showDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -459,7 +466,7 @@ Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) asy
           final isFailed = state.isFailed;
           final statusText = state.status.isNotEmpty
               ? state.status
-              : (pct != null ? 'Downloading… $pct%' : 'Updating…');
+              : _t(lang, 'Downloading update...', 'Downloading update...');
 
           return AlertDialog(
             title: Row(
@@ -561,6 +568,9 @@ Future<void> showUpdateProgressDialog(BuildContext context, UpdateInfo info) asy
       );
     },
   );
+  } finally {
+    updateProgressDialogOpenNotifier.value = false;
+  }
 }
 
 /// Optional test hooks so widget tests can exercise Retry without network I/O.
@@ -642,10 +652,8 @@ Future<void> startUpdate(
     updateInfo: info,
   );
 
-  _startInlineUpdate(context, info);
-
   if (showDialog && context.mounted) {
-    showUpdateProgressDialog(context, info);
+    unawaited(showUpdateProgressDialog(context, info));
   }
 
   try {
@@ -653,12 +661,12 @@ Future<void> startUpdate(
       context,
       info,
       onProgress: (p) {
-        final pct = (p * 100).toInt();
-        final downloadingLabel = _t(lang, 'Downloading update...', 'Downloading update...');
+        final downloadingLabel =
+            _t(lang, 'Downloading update...', 'Downloading update...');
         updateStateNotifier.value = UpdateState(
           stage: UpdateStage.downloading,
           progress: p,
-          status: '$downloadingLabel $pct%',
+          status: downloadingLabel,
           updateInfo: info,
         );
       },
@@ -683,35 +691,45 @@ Future<void> startUpdate(
 
     // downloadAndInstall only returns without process exit on failure
     if (updateStateNotifier.value.isDownloading) {
+      final failLabel = _t(lang, 'Download failed', 'Download failed');
       updateStateNotifier.value = UpdateState(
         stage: UpdateStage.failed,
-        status: _t(lang, 'Download failed', 'Download failed'),
+        status: failLabel,
         errorMessage: 'Download or installation did not complete.',
         updateInfo: info,
       );
+      if (!updateProgressDialogOpenNotifier.value && context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(
+            content: Text('Lux ${info.latestVersion}: $failLabel'),
+            action: SnackBarAction(
+              label: _t(lang, 'Retry', 'Retry'),
+              onPressed: () => retryUpdate(context, info, showDialog: true),
+            ),
+          ));
+      }
     }
   } catch (e) {
+    final failLabel = _t(lang, 'Download failed', 'Download failed');
     updateStateNotifier.value = UpdateState(
       stage: UpdateStage.failed,
-      status: _t(lang, 'Download failed', 'Download failed'),
+      status: failLabel,
       errorMessage: e.toString(),
       updateInfo: info,
     );
+    if (!updateProgressDialogOpenNotifier.value && context.mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(
+          content: Text('Lux ${info.latestVersion}: $failLabel'),
+          action: SnackBarAction(
+            label: _t(lang, 'Retry', 'Retry'),
+            onPressed: () => retryUpdate(context, info, showDialog: true),
+          ),
+        ));
+    }
   }
-}
-
-/// Starts the download and shows progress inside a persistent snackbar.
-void _startInlineUpdate(BuildContext context, UpdateInfo info) {
-  if (!context.mounted) return;
-  final messenger = ScaffoldMessenger.of(context);
-  messenger.hideCurrentSnackBar();
-  messenger.showSnackBar(
-    SnackBar(
-      content: _DownloadProgressBar(info: info),
-      duration: const Duration(hours: 1),
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-    ),
-  );
 }
 
 String _getLang(BuildContext context) {
@@ -797,68 +815,6 @@ String _t(String lang, String key, String fallback) {
     },
   };
   return strings[lang]?[key] ?? fallback;
-}
-
-class _DownloadProgressBar extends StatelessWidget {
-  final UpdateInfo info;
-  const _DownloadProgressBar({required this.info});
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<UpdateState>(
-      valueListenable: updateStateNotifier,
-      builder: (context, state, _) {
-        final displayInfo = state.updateInfo ?? info;
-        final failed = state.isFailed;
-        final progress = state.progress;
-        final status = state.status;
-        final pct = progress != null ? (progress * 100).toInt() : null;
-        final lang = _getLang(context);
-        final retryLabel = _t(lang, 'Retry', 'Retry');
-
-        return Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    failed
-                        ? (state.errorMessage ?? status)
-                        : 'Lux ${displayInfo.latestVersion}: ${status.isNotEmpty ? status : (pct != null ? "$pct%" : _t(lang, "Updating...", "Updating..."))}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  if (!failed && progress != null) ...[
-                    const SizedBox(height: 6),
-                    LinearProgressIndicator(
-                      value: (progress < 0.02) ? null : progress,
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
-                    ),
-                    if (status.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(status, style: const TextStyle(fontSize: 11, color: Colors.white70)),
-                    ],
-                  ],
-                ],
-              ),
-            ),
-            if (failed) ...[
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => retryUpdate(
-                  context,
-                  displayInfo,
-                  showDialog: false,
-                ),
-                child: Text(retryLabel, style: const TextStyle(color: Colors.orange)),
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
 }
 
 /// Verifies [file]'s SHA-256 against [info.sha256].
