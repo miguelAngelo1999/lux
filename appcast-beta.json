@@ -1,17 +1,17 @@
 {
-  "version": "1.50.132",
+  "version": "1.50.133",
   "channel": "beta",
-  "notes": "fix(ui): center search icons, scope floating toasts to main pane, add scroll edge fades",
+  "notes": "feat(telemetry): make opt-in usage reporting proxy-resilient, complete, and verifiable in Settings",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "544b29cf0ff074de737d4ab3e8154f7cd273dfe8c7ea293be23cd9a79540a0fd",
-    "size": 46032622,
-    "version": "1.50.132"
+    "sha256": "975d8f4bfb25baa0b96b502f6e3f2d7ca6e4bdd4be77b322efb65dd3c609f18b",
+    "size": 46087043,
+    "version": "1.50.133"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "48efd00cb43ef6dddbba8b9ab5f0d5bae425b03be73c9fa4e7ef686c4fcc7a58",
-    "size": 41822519,
-    "version": "1.50.132"
+    "sha256": "34fc7433fb63119e7333177defc6aa8cc27dbb45fa37398921c1f1ed82a95d7e",
+    "size": 41848652,
+    "version": "1.50.133"
   }
 }
