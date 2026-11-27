@@ -5,6 +5,7 @@ import 'package:lux/util/t_text.dart';
 import 'package:lux/core/core_config.dart';
 import 'package:lux/core/core_manager.dart';
 import 'package:lux/widget/lux_icons.dart';
+import 'package:lux/widget/lux_scroll_edge_fade.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Rules list, addressed by rule id throughout.
@@ -453,9 +454,11 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                     style: TextStyle(fontSize: 12.5, color: tokens.textMuted),
                   ),
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-                  children: _buildGroupSections(tokens),
+              : LuxScrollEdgeFade(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+                    children: _buildGroupSections(tokens),
+                  ),
                 ),
         ),
       ],
@@ -522,23 +525,25 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                   height: 32,
                   child: TextField(
                     controller: _searchCtrl,
+                    textAlignVertical: TextAlignVertical.center,
                     style: TextStyle(fontSize: 12, color: tokens.textPrimary),
                     decoration: InputDecoration(
                       hintText: tl(context, 'Search rules'),
                       hintStyle:
                           TextStyle(fontSize: 12, color: tokens.textMuted),
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.only(left: 10, right: 6),
+                      prefixIcon: Center(
                         child: LuxIcon(LuxGlyph.search,
                             size: 13.5, color: tokens.textMuted),
                       ),
                       prefixIconConstraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                          const BoxConstraints.tightFor(width: 32, height: 32),
+                      suffixIconConstraints: const BoxConstraints(
+                          minWidth: 30, minHeight: 32, maxHeight: 32),
                       isDense: true,
                       filled: true,
                       fillColor: tokens.cardBg,
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 7),
+                          horizontal: 10, vertical: 0),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide:

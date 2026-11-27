@@ -6,12 +6,14 @@ import 'package:lux/core/core_manager.dart';
 import 'package:lux/l10n/app_localizations.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/pages/proxies_page.dart';
+import 'package:lux/pages/settings_page.dart';
 import 'package:lux/theme.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/util/window_surface.dart';
 import 'package:lux/widget/app_sidebar.dart';
 import 'package:lux/widget/lux_icons.dart';
+import 'package:lux/widget/lux_scroll_edge_fade.dart';
 import 'package:provider/provider.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -315,6 +317,95 @@ void main() {
     expect(userField.controller!.text, 'joao.b');
     // Swapping to another user automatically opens the editable password field.
     expect(find.byKey(const Key('inline-password-p1')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Settings search icon is vertically centered, toasts stay out of sidebar, and scroll edge fade activates on overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(860, 620);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final appState = AppStateModel(ThemeMode.dark, const Locale('en'));
+    appState.updateSurfaceTier(WindowSurfaceTier.liquidGlass);
+    final core = _FakeShellCore(appState);
+    final contentMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: appState,
+        child: MaterialApp(
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: ThemeMode.dark,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('en')],
+          home: Builder(
+            builder: (ctx) {
+              initTr(ctx);
+              return Scaffold(
+                body: Row(
+                  children: [
+                    AppSidebar(
+                      tabs: const [
+                        AppSidebarTab(glyph: LuxGlyph.proxies, label: 'Proxies'),
+                        AppSidebarTab(
+                            glyph: LuxGlyph.settings, label: 'Settings'),
+                      ],
+                      selectedIndex: 1,
+                      onSelected: (_) {},
+                      coreManager: core,
+                      messengerKey: contentMessengerKey,
+                    ),
+                    Expanded(
+                      child: ScaffoldMessenger(
+                        key: contentMessengerKey,
+                        child: Scaffold(
+                          body: SettingsPage(coreManager: core),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Magnifying glass must be vertically dead-centered in the 32px search bar.
+    final fieldRect =
+        tester.getRect(find.byKey(const Key('settings-search-field')));
+    final iconRect =
+        tester.getRect(find.byKey(const Key('settings-search-icon')));
+    expect((iconRect.center.dy - fieldRect.center.dy).abs(), lessThanOrEqualTo(1.0));
+
+    // 2. Scroll edge fade ShaderMask is active because Settings overflows vertically.
+    expect(
+      find.descendant(
+        of: find.byType(LuxScrollEdgeFade),
+        matching: find.byType(ShaderMask),
+      ),
+      findsAtLeastNWidgets(1),
+    );
+
+    // 3. Toast triggered via right-pane messenger NEVER overlaps the sidebar.
+    contentMessengerKey.currentState!.showSnackBar(
+      const SnackBar(content: Text('You are up to date')),
+    );
+    await tester.pumpAndSettle();
+
+    final sidebarRect = tester.getRect(find.byType(AppSidebar));
+    final snackRect = tester.getRect(find.byType(SnackBar));
+    expect(snackRect.left, greaterThanOrEqualTo(sidebarRect.right));
+    expect(snackRect.overlaps(sidebarRect), isFalse);
     expect(tester.takeException(), isNull);
   });
 }

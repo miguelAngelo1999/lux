@@ -322,6 +322,8 @@ class _HomeState extends State<Home>
   String urlStr = "";
   String homeDir = "";
   CoreManager? coreManager;
+  final GlobalKey<ScaffoldMessengerState> _dashboardMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
   ValueNotifier<bool> isCoreReady = ValueNotifier<bool>(false);
   Widget? dashboardWidget;
   WebSocketChannel? eventChannel;
@@ -443,7 +445,8 @@ class _HomeState extends State<Home>
         ),
       );
       if (trust != true || !mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
+      final messenger =
+          _dashboardMessengerKey.currentState ?? ScaffoldMessenger.of(context);
       try {
         final ok = await coreManager!.trustCertFromPrompt(req);
         messenger.showSnackBar(SnackBar(
@@ -722,9 +725,12 @@ class _HomeState extends State<Home>
                 final name = data?['name'] as String? ?? 'another proxy';
                 telem.telemetryOp('proxy-switch', 'Switched to $name');
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  (_dashboardMessengerKey.currentState ??
+                          ScaffoldMessenger.of(context))
+                      .showSnackBar(
                     SnackBar(
-                      content: Text('Switched to $name (previous credentials expired)'),
+                      content: Text(
+                          'Switched to $name (previous credentials expired)'),
                       duration: const Duration(seconds: 5),
                     ),
                   );
@@ -1194,6 +1200,12 @@ class _HomeState extends State<Home>
         },
       );
     }
-    return Dashboard(homeDir, baseUrl, urlStr, coreManager!);
+    return Dashboard(
+      homeDir,
+      baseUrl,
+      urlStr,
+      coreManager!,
+      contentMessengerKey: _dashboardMessengerKey,
+    );
   }
 }

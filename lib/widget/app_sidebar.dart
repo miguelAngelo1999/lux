@@ -43,6 +43,7 @@ class AppSidebar extends StatefulWidget {
   final ValueChanged<int> onSelected;
   final CoreManager coreManager;
   final bool compact;
+  final GlobalKey<ScaffoldMessengerState>? messengerKey;
 
   const AppSidebar({
     super.key,
@@ -51,6 +52,7 @@ class AppSidebar extends StatefulWidget {
     required this.onSelected,
     required this.coreManager,
     this.compact = false,
+    this.messengerKey,
   });
 
   @override
@@ -161,6 +163,14 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
     });
   }
 
+  void _showToast(SnackBar snackBar) {
+    final messenger =
+        widget.messengerKey?.currentState ?? ScaffoldMessenger.maybeOf(context);
+    messenger
+      ?..clearSnackBars()
+      ..showSnackBar(snackBar);
+  }
+
   Future<void> _switchProxyMode(ProxyMode nextMode) async {
     if (_savingSetting || nextMode == _proxyMode) return;
     setState(() => _savingSetting = true);
@@ -179,9 +189,7 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
       final msg = e is CoreElevationCancelledError
           ? tl(context, e.message)
           : 'Could not switch mode: $e';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: Colors.red),
-      );
+      _showToast(SnackBar(content: Text(msg), backgroundColor: Colors.red));
       await _refreshSettingsAndVersion();
     } finally {
       if (mounted) setState(() => _savingSetting = false);
@@ -201,7 +209,7 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
         _setting = updated;
         _sensitiveInfo = next;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showToast(
         SnackBar(
           content: Text(next
               ? tl(context, 'Sensitive Info Mode enabled')
@@ -211,8 +219,9 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save: $e'), backgroundColor: Colors.red),
+        _showToast(
+          SnackBar(
+              content: Text('Could not save: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -262,8 +271,11 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
       await writePendingUpdateVersion(null);
       if (mounted) {
         setState(() => _pendingUpdateVersion = '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tl(context, 'You are up to date'))),
+        _showToast(
+          SnackBar(
+            content: Text(tl(context, 'You are up to date')),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
       return;
@@ -280,7 +292,7 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
         await writePendingUpdateVersion(null);
         if (!mounted) return;
         setState(() => _pendingUpdateVersion = '');
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showToast(
           SnackBar(
             content: Text(upToDateMsg),
             duration: const Duration(seconds: 2),
@@ -294,7 +306,7 @@ class _AppSidebarState extends State<AppSidebar> with WindowListener {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showToast(
           SnackBar(
             content: Text('Update check failed: $e'),
             backgroundColor: Colors.red,

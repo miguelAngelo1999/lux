@@ -8,6 +8,7 @@ import 'package:lux/const/const.dart';
 import 'package:lux/model/app.dart';
 import 'package:lux/tr.dart';
 import 'package:lux/widget/lux_icons.dart';
+import 'package:lux/widget/lux_scroll_edge_fade.dart';
 import 'package:lux/widget/password_peek_dialog.dart';
 import 'package:lux/widget/pac_rules_dialog.dart';
 import 'package:lux/widget/proxy_edit_dialog.dart';
@@ -985,30 +986,33 @@ class _ProxiesPageState extends State<ProxiesPage> with WindowListener {
                     child: TText('No proxies configured',
                         style: TextStyle(color: Colors.grey)),
                   )
-                : ListView.builder(
-                    itemCount: proxyListGroup.groups.length,
-                    itemBuilder: (context, index) {
-                      return ProxyListCard(
-                        proxyList: proxyListGroup.groups[index],
-                        key: Key(proxyListGroup.groups[index].id),
-                        isCollapsed:
-                            getIsCollapsed(proxyListGroup.groups[index]),
-                        onCollapse: () =>
-                            {handleCollapse(proxyListGroup.groups[index])},
-                        onItemChange: _handleItemChange,
-                        onSelect: handleSelectProxy,
-                        selectedId: proxyListGroup.selectedId,
-                        subscriptionList: subscriptionList,
-                        coreManager: widget.coreManager,
-                        onTestStatusChanged: (id, status) {
-                          if (!mounted) return;
-                          setState(() => _testStatuses[id] = status);
-                        },
-                        selectedController: _selectedItemController,
-                        onCredentialsSaved: refreshData,
-                        onPeekPassword: widget.onPeekPassword,
-                      );
-                    },
+                : LuxScrollEdgeFade(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      itemCount: proxyListGroup.groups.length,
+                      itemBuilder: (context, index) {
+                        return ProxyListCard(
+                          proxyList: proxyListGroup.groups[index],
+                          key: Key(proxyListGroup.groups[index].id),
+                          isCollapsed:
+                              getIsCollapsed(proxyListGroup.groups[index]),
+                          onCollapse: () =>
+                              {handleCollapse(proxyListGroup.groups[index])},
+                          onItemChange: _handleItemChange,
+                          onSelect: handleSelectProxy,
+                          selectedId: proxyListGroup.selectedId,
+                          subscriptionList: subscriptionList,
+                          coreManager: widget.coreManager,
+                          onTestStatusChanged: (id, status) {
+                            if (!mounted) return;
+                            setState(() => _testStatuses[id] = status);
+                          },
+                          selectedController: _selectedItemController,
+                          onCredentialsSaved: refreshData,
+                          onPeekPassword: widget.onPeekPassword,
+                        );
+                      },
+                    ),
                   ),
           ),
         ),

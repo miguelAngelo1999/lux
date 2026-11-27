@@ -321,6 +321,23 @@ abstract final class AppTheme {
           side: BorderSide(color: LuxTokens.light.hairline),
         ),
       ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        elevation: 2,
+        backgroundColor: const Color(0xF21E293B),
+        contentTextStyle: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w400,
+          color: Color(0xFFF8FAFC),
+        ),
+        actionTextColor: const Color(0xFF93C5FD),
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        dismissDirection: DismissDirection.horizontal,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: LuxTokens.light.hairlineStrong, width: 0.75),
+        ),
+      ),
       extensions: const <ThemeExtension<dynamic>>[LuxTokens.light],
     );
   }
@@ -428,6 +445,23 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: LuxTokens.dark.hairline),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        elevation: 3,
+        backgroundColor: const Color(0xF51A2233),
+        contentTextStyle: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w400,
+          color: LuxTokens.dark.textPrimary,
+        ),
+        actionTextColor: LuxTokens.dark.cobalt,
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        dismissDirection: DismissDirection.horizontal,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: LuxTokens.dark.hairlineStrong, width: 0.75),
         ),
       ),
       extensions: const <ThemeExtension<dynamic>>[LuxTokens.dark],

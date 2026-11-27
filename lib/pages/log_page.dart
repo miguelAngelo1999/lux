@@ -7,6 +7,7 @@ import 'package:lux/core/core_manager.dart';
 import 'package:lux/theme.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/widget/lux_icons.dart';
+import 'package:lux/widget/lux_scroll_edge_fade.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class LogEntry {
@@ -398,24 +399,26 @@ class _LogPageState extends State<LogPage> {
                       height: 30,
                       child: TextField(
                         controller: _searchCtrl,
+                        textAlignVertical: TextAlignVertical.center,
                         style:
                             TextStyle(fontSize: 12, color: tokens.textPrimary),
                         decoration: InputDecoration(
                           hintText: tl(context, 'Search logs...'),
-                          hintStyle:
-                              TextStyle(fontSize: 11.5, color: tokens.textMuted),
+                          hintStyle: TextStyle(
+                              fontSize: 11.5, color: tokens.textMuted),
                           isDense: true,
                           filled: true,
                           fillColor: tokens.cardBg,
-                          prefixIcon: Padding(
-                            padding: const EdgeInsets.only(left: 9, right: 5),
+                          prefixIcon: Center(
                             child: LuxIcon(LuxGlyph.search,
                                 size: 13, color: tokens.textMuted),
                           ),
-                          prefixIconConstraints:
-                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                          prefixIconConstraints: const BoxConstraints.tightFor(
+                              width: 30, height: 30),
+                          suffixIconConstraints: const BoxConstraints.tightFor(
+                              width: 28, height: 30),
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                              horizontal: 8, vertical: 0),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                             borderSide: BorderSide(
@@ -426,6 +429,16 @@ class _LogPageState extends State<LogPage> {
                             borderSide:
                                 BorderSide(color: tokens.cobalt, width: 1.0),
                           ),
+                          suffixIcon: _searchText.isEmpty
+                              ? null
+                              : IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints.tightFor(
+                                      width: 28, height: 30),
+                                  icon: LuxIcon(LuxGlyph.close,
+                                      size: 11.5, color: tokens.textMuted),
+                                  onPressed: () => _searchCtrl.clear(),
+                                ),
                         ),
                       ),
                     ),
@@ -519,11 +532,14 @@ class _LogPageState extends State<LogPage> {
                       : SelectableRegion(
                           focusNode: _logFocusNode,
                           selectionControls: materialTextSelectionControls,
-                          child: ListView.builder(
-                            controller: _scrollCtrl,
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            itemCount: filtered.length,
-                            itemBuilder: (ctx, i) {
+                          child: LuxScrollEdgeFade(
+                            startFade: 14,
+                            endFade: 22,
+                            child: ListView.builder(
+                              controller: _scrollCtrl,
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              itemCount: filtered.length,
+                              itemBuilder: (ctx, i) {
                               final e = filtered[i];
                               final lvlColor = e.levelColor(ctx);
                               final isDeny = e.message.contains('[DENY]') ||
@@ -582,6 +598,7 @@ class _LogPageState extends State<LogPage> {
                               );
                             },
                           ),
+                        ),
                         ),
             ),
           ),

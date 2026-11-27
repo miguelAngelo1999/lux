@@ -23,6 +23,7 @@ import 'package:lux/util/updater.dart'
         UpdateState,
         UpdateInfo;
 import 'package:lux/widget/lux_icons.dart';
+import 'package:lux/widget/lux_scroll_edge_fade.dart';
 import 'package:lux/widget/setting_tiles.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -232,12 +233,15 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
 
   void _notify(String message, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : null,
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: Duration(milliseconds: isError ? 4000 : 2500),
+          backgroundColor: isError ? Colors.red : null,
+        ),
+      );
   }
 
   // ── Rows by category ───────────────────────────────────────────────────────
@@ -1686,24 +1690,31 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 child: SizedBox(
                   height: 32,
                   child: TextField(
+                    key: const Key('settings-search-field'),
                     controller: _searchCtrl,
+                    textAlignVertical: TextAlignVertical.center,
                     style: TextStyle(fontSize: 12, color: tokens.textPrimary),
                     decoration: InputDecoration(
                       hintText: tl(context, 'Search settings'),
                       hintStyle:
                           TextStyle(fontSize: 12, color: tokens.textMuted),
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.only(left: 10, right: 6),
-                        child: LuxIcon(LuxGlyph.search,
-                            size: 13.5, color: tokens.textMuted),
+                      prefixIcon: Center(
+                        child: LuxIcon(
+                          LuxGlyph.search,
+                          key: const Key('settings-search-icon'),
+                          size: 13.5,
+                          color: tokens.textMuted,
+                        ),
                       ),
                       prefixIconConstraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                          const BoxConstraints.tightFor(width: 32, height: 32),
+                      suffixIconConstraints:
+                          const BoxConstraints.tightFor(width: 30, height: 32),
                       isDense: true,
                       filled: true,
                       fillColor: tokens.cardBg,
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 7),
+                          horizontal: 10, vertical: 0),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide:
@@ -1718,8 +1729,8 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                           ? null
                           : IconButton(
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 28),
+                              constraints: const BoxConstraints.tightFor(
+                                  width: 30, height: 32),
                               icon: LuxIcon(LuxGlyph.close,
                                   size: 12, color: tokens.textMuted),
                               onPressed: () => _searchCtrl.clear(),
@@ -1744,24 +1755,29 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
           ),
           const SizedBox(height: 8),
           // Horizontal category filter pills — replaces the cramped 2nd sidebar.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _filterPill(
-                  tokens: tokens,
-                  id: 'all',
-                  label: 'All',
-                ),
-                for (final c in _categories) ...[
-                  const SizedBox(width: 5),
+          LuxScrollEdgeFade(
+            axis: Axis.horizontal,
+            startFade: 14,
+            endFade: 24,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
                   _filterPill(
                     tokens: tokens,
-                    id: c.id,
-                    label: c.label,
+                    id: 'all',
+                    label: 'All',
                   ),
+                  for (final c in _categories) ...[
+                    const SizedBox(width: 5),
+                    _filterPill(
+                      tokens: tokens,
+                      id: c.id,
+                      label: c.label,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ],
@@ -1830,9 +1846,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         ),
       );
     }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-      children: sections,
+    return LuxScrollEdgeFade(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+        children: sections,
+      ),
     );
   }
 
@@ -1841,17 +1859,19 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         ? _categories
         : _categories.where((c) => c.id == _selectedCategory).toList();
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 28),
-      children: [
-        for (final c in visibleCats) ...[
-          sectionHeader(context, c.label, glyph: c.glyph),
-          settingCard(
-            context,
-            _rowsFor(c.id).map((r) => r.build(context)).toList(),
-          ),
+    return LuxScrollEdgeFade(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 2, 16, 28),
+        children: [
+          for (final c in visibleCats) ...[
+            sectionHeader(context, c.label, glyph: c.glyph),
+            settingCard(
+              context,
+              _rowsFor(c.id).map((r) => r.build(context)).toList(),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

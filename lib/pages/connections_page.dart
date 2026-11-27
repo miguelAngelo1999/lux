@@ -6,6 +6,7 @@ import 'package:lux/core/core_manager.dart';
 import 'package:lux/theme.dart';
 import 'package:lux/util/t_text.dart';
 import 'package:lux/widget/lux_icons.dart';
+import 'package:lux/widget/lux_scroll_edge_fade.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class ConnectionEntry {
@@ -225,6 +226,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                   height: 32,
                   child: TextField(
                     controller: _searchCtrl,
+                    textAlignVertical: TextAlignVertical.center,
                     style: TextStyle(fontSize: 12, color: tokens.textPrimary),
                     decoration: InputDecoration(
                       hintText: tl(context, 'Search connections...'),
@@ -233,15 +235,16 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                       isDense: true,
                       filled: true,
                       fillColor: tokens.cardBg,
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.only(left: 10, right: 6),
+                      prefixIcon: Center(
                         child: LuxIcon(LuxGlyph.search,
                             size: 13.5, color: tokens.textMuted),
                       ),
                       prefixIconConstraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
+                          const BoxConstraints.tightFor(width: 32, height: 32),
+                      suffixIconConstraints:
+                          const BoxConstraints.tightFor(width: 30, height: 32),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 7),
+                          horizontal: 10, vertical: 0),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide:
@@ -401,10 +404,14 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                                 ),
                               ),
                             )
-                          : ListView.builder(
-                              itemCount: filtered.length,
-                              itemExtent: 34,
-                              itemBuilder: (ctx, i) {
+                          : LuxScrollEdgeFade(
+                              startFade: 14,
+                              endFade: 24,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                itemCount: filtered.length,
+                                itemExtent: 34,
+                                itemBuilder: (ctx, i) {
                                 final c = filtered[i];
                                 return Container(
                                   decoration: BoxDecoration(
@@ -582,6 +589,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                                 );
                               },
                             ),
+                          ),
                     ),
                   ],
                 ),

@@ -29,9 +29,10 @@ class Dashboard extends StatefulWidget {
   final String urlStr;
   final String homeDir;
   final CoreManager coreManager;
+  final GlobalKey<ScaffoldMessengerState>? contentMessengerKey;
 
   const Dashboard(this.homeDir, this.baseUrl, this.urlStr, this.coreManager,
-      {super.key});
+      {super.key, this.contentMessengerKey});
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -41,6 +42,8 @@ class _DashboardState extends State<Dashboard> with WindowListener {
   String curProxyInfo = "";
   int _selectedTab = 0;
   String? _settingsInitialFilter;
+  late final GlobalKey<ScaffoldMessengerState> _contentMessengerKey =
+      widget.contentMessengerKey ?? GlobalKey<ScaffoldMessengerState>();
 
   static const _tabs = [
     AppSidebarTab(glyph: LuxGlyph.proxies, label: 'Proxies'),
@@ -188,23 +191,28 @@ class _DashboardState extends State<Dashboard> with WindowListener {
                     onSelected: (i) => _selectTab(i),
                     coreManager: widget.coreManager,
                     compact: compactSidebar,
+                    messengerKey: _contentMessengerKey,
                   ),
                   Expanded(
-                    child: Container(
-                      color: tokens.canvasFor(tier),
-                      child: Column(
-                        children: [
-                          DragToMoveArea(
-                            child: AppHeaderBar(
-                              coreManager: widget.coreManager,
-                              urlStr: widget.urlStr,
-                              curProxyInfo: curProxyInfo,
-                              onCurProxyInfoChange: onCurProxyInfoChange,
+                    child: ScaffoldMessenger(
+                      key: _contentMessengerKey,
+                      child: Scaffold(
+                        backgroundColor: tokens.canvasFor(tier),
+                        body: Column(
+                          children: [
+                            DragToMoveArea(
+                              child: AppHeaderBar(
+                                coreManager: widget.coreManager,
+                                urlStr: widget.urlStr,
+                                curProxyInfo: curProxyInfo,
+                                onCurProxyInfoChange: onCurProxyInfoChange,
+                              ),
                             ),
-                          ),
-                          WindowsServiceBanner(coreManager: widget.coreManager),
-                          Expanded(child: _buildPage()),
-                        ],
+                            WindowsServiceBanner(
+                                coreManager: widget.coreManager),
+                            Expanded(child: _buildPage()),
+                          ],
+                        ),
                       ),
                     ),
                   ),
