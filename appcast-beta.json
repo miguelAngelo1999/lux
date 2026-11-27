@@ -1,17 +1,17 @@
 {
-  "version": "1.50.131",
+  "version": "1.50.132",
   "channel": "beta",
-  "notes": "feat(ui): full desktop UI revamp \u2014 unified traffic lights, real logo, responsive chrome, single-pane Settings, and unified Rules/Connections/Logs",
+  "notes": "fix(ui): center search icons, scope floating toasts to main pane, add scroll edge fades",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "334c98f8fdaecfff2ba0b163b017318cd4523045b168041cb16d826239938d1e",
-    "size": 46020546,
-    "version": "1.50.131"
+    "sha256": "544b29cf0ff074de737d4ab3e8154f7cd273dfe8c7ea293be23cd9a79540a0fd",
+    "size": 46032622,
+    "version": "1.50.132"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "fe33a8dd11c3e929c398be360905839a0a7c66b74c273f78a838881432e4279b",
-    "size": 41818126,
-    "version": "1.50.131"
+    "sha256": "48efd00cb43ef6dddbba8b9ab5f0d5bae425b03be73c9fa4e7ef686c4fcc7a58",
+    "size": 41822519,
+    "version": "1.50.132"
   }
 }
