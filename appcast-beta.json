@@ -1,17 +1,17 @@
 {
-  "version": "1.50.130",
+  "version": "1.50.131",
   "channel": "beta",
-  "notes": "fix(macos): keep FlutterViewController attached as contentViewController so clicks reach Flutter",
+  "notes": "feat(ui): full desktop UI revamp \u2014 unified traffic lights, real logo, responsive chrome, single-pane Settings, and unified Rules/Connections/Logs",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "15a9973e7d00c179fbab3df607b3f5a50ff8cf460ba4974fc2c8014023d75849",
-    "size": 45854982,
-    "version": "1.50.130"
+    "sha256": "334c98f8fdaecfff2ba0b163b017318cd4523045b168041cb16d826239938d1e",
+    "size": 46020546,
+    "version": "1.50.131"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "414c4dccc2dad1055164a70af870ff5c133fb7de20298bb2709df8775da437e0",
-    "size": 41753152,
-    "version": "1.50.130"
+    "sha256": "fe33a8dd11c3e929c398be360905839a0a7c66b74c273f78a838881432e4279b",
+    "size": 41818126,
+    "version": "1.50.131"
   }
 }
