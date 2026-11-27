@@ -1,17 +1,17 @@
 {
-  "version": "1.50.127",
+  "version": "1.50.128",
   "channel": "beta",
   "notes": "feat(captive-portal): integrate captive Wi-Fi sign-in assist and hardened watchdog safety",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "bb0fac59282dd255e39336df47a7a89efc117a1cb3e530016617d49c7705daa0",
-    "size": 45814504,
-    "version": "1.50.127"
+    "sha256": "db7ee5bd956cabb2b53cbf56cae1adfe044253ed75e47f7864273d7aba4ca29f",
+    "size": 45814506,
+    "version": "1.50.128"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "0b78cc0596d23ec0b54b9135a1c92537e4f3311883f556e41c387c9ad007ab84",
-    "size": 41732553,
-    "version": "1.50.127"
+    "sha256": "c7ee0cdda9e9051a42ead7396a8a61510388dad80bf9dc0e5fd940b4227d5a04",
+    "size": 41743717,
+    "version": "1.50.128"
   }
 }
