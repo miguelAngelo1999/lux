@@ -1,17 +1,17 @@
 {
-  "version": "1.50.139",
+  "version": "1.50.140",
   "channel": "beta",
-  "notes": "feat(ui,detect): restyle modals for Obsidian/Porcelain theme and auto-name from trusted bump certs",
+  "notes": "feat(ui,net-switch): Simple/Advanced mode, Auto Home/Office labels, PAC failover & Stay connected backups",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "cb103396357cd1a0bf60b520594b7e884c171874d51599607a14eadf22a646e5",
-    "size": 46358010,
-    "version": "1.50.139"
+    "sha256": "4c788bf074ea15d8baa5cb57ec6980fb5dcca8fb1a8d9971ee749a4257a5d7da",
+    "size": 46462082,
+    "version": "1.50.140"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "19ddb236d9b9a748743f34fc1e14bf87bb38b12de81f325986a1ea31447887f1",
-    "size": 42052325,
-    "version": "1.50.139"
+    "sha256": "d4c29d4853580b9258f2a8f1a4010542e5ba94a753360d2b1e9a3d2a8d215c9b",
+    "size": 42132446,
+    "version": "1.50.140"
   }
 }
