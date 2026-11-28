@@ -1,17 +1,17 @@
 {
-  "version": "1.50.141",
+  "version": "1.50.142",
   "channel": "beta",
-  "notes": "feat(log): Proxy Denied filter & badges, 1-click rules from logs, and updated core checksum",
+  "notes": "feat: HTTPS Inspection (MITM) UI, URL rules, live Auto-Splice viewer & X-Lux-App settings",
   "macOS": {
     "url": "https://drive.usercontent.google.com/download?id=1eNi0j3mwEtpBQJmHmvg-AVn1vzaSbP8x&export=download&confirm=t",
-    "sha256": "aa8cb0de1a6a7bb6ca7b8818a8dacc404e1de932bef673513f6163ab5b348e8e",
-    "size": 46513347,
-    "version": "1.50.141"
+    "sha256": "ef2cbe26618494790537b50c1e0cb169d96f5ab051d346f98d62f593742491ad",
+    "size": 47052789,
+    "version": "1.50.142"
   },
   "windows": {
     "url": "https://drive.usercontent.google.com/download?id=1M-ZD53ltBLX8KzpexH_qSGj5Rzz7Q5LU&export=download&confirm=t",
-    "sha256": "c8fd94fc814ee19d97b4020bf145df1929a842b62edada12c8fef4c07740c16d",
-    "size": 42177587,
-    "version": "1.50.141"
+    "sha256": "417e59038bc2467a8301ed7c469505c7d77b41a18a4de22b0763383d561b170c",
+    "size": 42766245,
+    "version": "1.50.142"
   }
 }
