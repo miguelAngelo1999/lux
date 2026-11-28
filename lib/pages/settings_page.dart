@@ -77,6 +77,11 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
   String _pendingUpdateVersion = '';
   UpdateInfo? _cachedUpdateInfo;
 
+  MitmStatus? _mitmStatus;
+  MitmTelemetry? _mitmTelemetry;
+  bool _mitmBusy = false;
+  bool _showAutoSplices = false;
+
   static const _categories = [
     (id: 'updates', glyph: LuxGlyph.download, label: 'Updates'),
     (id: 'general', glyph: LuxGlyph.settings, label: 'General'),
@@ -150,6 +155,10 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
     try {
       final setting = await widget.coreManager.getSetting();
       final ifaces = await widget.coreManager.getSettingInterfaces();
+      MitmStatus? mitmStatus;
+      try {
+        mitmStatus = await widget.coreManager.getMitmStatus();
+      } catch (_) {}
       final level = await readTelemetryLevel();
       final parsedLevel = telem.telemetryLevelFromString(level);
       final uuid = parsedLevel == telem.TelemetryLevel.off
@@ -167,6 +176,7 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
       setState(() {
         _setting = setting;
         _interfaces = ifaces;
+        _mitmStatus = mitmStatus ?? _mitmStatus;
         _telemetryLevel = telem.telemetryLevelFromString(level);
         _telemetryUuid = uuid;
         _appVersion = rawVersion;
@@ -599,6 +609,62 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
                 subtitle: 'Allow other devices to connect via LAN',
                 value: s.allowLan,
                 onChanged: saving ? null : (v) => _save(s.copyWith(allowLan: v)),
+              ),
+            ),
+          if (advancedMode)
+            SettingRow(
+              title: 'HTTPS Inspection (MITM)',
+              keywords: [
+                'mitm',
+                'https',
+                'inspection',
+                'url',
+                'certificate',
+                'ca',
+                'autosplice',
+                'tls',
+                'decrypt',
+                'ssl',
+              ],
+              build: (ctx) => _mitmSectionTile(ctx),
+            ),
+          if (advancedMode)
+            SettingRow(
+              title: 'Send app identity to proxy',
+              keywords: [
+                'app',
+                'identity',
+                'header',
+                'x-lux-app',
+                'squid',
+                'openswg',
+                'hmac',
+                'connect',
+              ],
+              build: (_) => switchTile(
+                title: 'Send app identity to proxy',
+                subtitle:
+                    'Sends X-Lux-App headers on upstream proxy CONNECT only (never sent to websites).',
+                value: s.sendAppIdentity,
+                onChanged: saving
+                    ? null
+                    : (v) => _save(s.copyWith(sendAppIdentity: v)),
+              ),
+            ),
+          if (advancedMode && s.sendAppIdentity)
+            SettingRow(
+              title: 'App identity secret (HMAC)',
+              keywords: ['hmac', 'secret', 'x-lux-app', 'signature', 'openswg'],
+              build: (_) => textFieldTile(
+                title: 'App identity secret (HMAC)',
+                value: s.appIdentitySecret,
+                hint: 'Optional shared secret for OpenSWG / Squid',
+                subtitle:
+                    'Signs X-Lux-App CONNECT headers with HMAC-SHA256 to prevent spoofing.',
+                obscure: true,
+                onChanged: saving
+                    ? null
+                    : (v) => _save(s.copyWith(appIdentitySecret: v.trim())),
               ),
             ),
         ];
@@ -1610,6 +1676,569 @@ class _SettingsPageState extends State<SettingsPage> with WindowListener {
         Provider.of<AppStateModel>(context, listen: false)
             .updateLocale(Locale(v == 'system' ? 'en' : v));
       },
+    );
+  }
+
+  Future<void> _refreshMitmTelemetry() async {
+    try {
+      final tel = await widget.coreManager.getMitmTelemetry();
+      if (mounted) setState(() => _mitmTelemetry = tel);
+    } catch (_) {}
+  }
+
+  Future<void> _runMitmAction(
+    Future<MitmStatus> Function() action, {
+    String? successMessage,
+  }) async {
+    if (_mitmBusy) return;
+    setState(() => _mitmBusy = true);
+    try {
+      final st = await action();
+      if (!mounted) return;
+      setState(() => _mitmStatus = st);
+      if (_showAutoSplices) {
+        unawaited(_refreshMitmTelemetry());
+      }
+      if (successMessage != null) {
+        _notify(tl(context, successMessage));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _notify('${tl(context, 'HTTPS Inspection error')}: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _mitmBusy = false);
+    }
+  }
+
+  Widget _mitmSectionTile(BuildContext context) {
+    final tokens = LuxTokens.of(context);
+    final st = _mitmStatus ?? const MitmStatus();
+    final busy = _mitmBusy;
+
+    final statusColor = st.active
+        ? tokens.emerald
+        : st.enabled && !st.caTrusted
+            ? tokens.amber
+            : tokens.textMuted;
+    final statusLabel = st.active
+        ? tl(context, 'Active')
+        : st.enabled && !st.caTrusted
+            ? tl(context, 'CA Not Trusted')
+            : tl(context, 'Off');
+
+    final shortFp = st.caFingerprint.length > 23
+        ? '${st.caFingerprint.substring(0, 23)}…'
+        : st.caFingerprint;
+
+    return Padding(
+      key: const Key('settings-mitm-section'),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        TText(
+                          'HTTPS Inspection (MITM)',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            color: tokens.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6.5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(
+                              color: statusColor.withValues(alpha: 0.4),
+                              width: 0.75,
+                            ),
+                          ),
+                          child: Text(
+                            statusLabel,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    TText(
+                      'Opt-in local TLS inspection for full-URL rules (URL-PREFIX, URL-KEYWORD, URL-REGEX). Uses a unique per-device CA.',
+                      style: TextStyle(fontSize: 11, color: tokens.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Switch(
+                key: const Key('settings-mitm-enable-switch'),
+                value: st.enabled,
+                onChanged: busy
+                    ? null
+                    : (v) async {
+                        await _runMitmAction(
+                          () => widget.coreManager.updateMitmConfig(enabled: v),
+                          successMessage: v
+                              ? (st.caTrusted
+                                  ? 'HTTPS Inspection enabled'
+                                  : 'HTTPS Inspection enabled — install the Lux CA to activate')
+                              : 'HTTPS Inspection disabled',
+                        );
+                      },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Per-device Root CA trust bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: tokens.subtlePillBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tokens.hairline, width: 0.75),
+            ),
+            child: Row(
+              children: [
+                LuxIcon(
+                  st.caTrusted ? LuxGlyph.shield : LuxGlyph.shieldAlert,
+                  size: 14,
+                  color: st.caTrusted ? tokens.emerald : tokens.amber,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        st.caTrusted
+                            ? tl(context, 'Local MITM CA trusted by system')
+                            : st.caExists
+                                ? tl(context, 'Local MITM CA not installed in system store')
+                                : tl(context, 'Local MITM CA not generated yet'),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: tokens.textPrimary,
+                        ),
+                      ),
+                      if (shortFp.isNotEmpty)
+                        Text(
+                          'SHA-256: $shortFp${st.caNotAfter.isNotEmpty ? ' · exp ${st.caNotAfter}' : ''}',
+                          style: luxMonoStyle(
+                            fontSize: 10,
+                            color: tokens.textMuted,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (busy)
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: tokens.cobalt,
+                    ),
+                  )
+                else ...[
+                  if (!st.caTrusted)
+                    FilledButton(
+                      key: const Key('settings-mitm-install-ca-btn'),
+                      onPressed: () => _runMitmAction(
+                        () => widget.coreManager.installMitmCA(),
+                        successMessage: 'Local MITM CA installed and trusted',
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: tokens.cobalt,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: const Size(0, 28),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(7)),
+                      ),
+                      child: const TText('Install CA',
+                          style: TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w500)),
+                    )
+                  else
+                    OutlinedButton(
+                      key: const Key('settings-mitm-uninstall-ca-btn'),
+                      onPressed: () => _runMitmAction(
+                        () => widget.coreManager.uninstallMitmCA(),
+                        successMessage: 'Local MITM CA removed from system store',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: tokens.danger,
+                        side: BorderSide(
+                            color: tokens.danger.withValues(alpha: 0.4),
+                            width: 0.75),
+                        padding: const EdgeInsets.symmetric(horizontal: 9),
+                        minimumSize: const Size(0, 28),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(7)),
+                      ),
+                      child: const TText('Uninstall CA',
+                          style: TextStyle(fontSize: 11)),
+                    ),
+                  if (st.caExists) ...[
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: tl(context, 'Regenerate a new random per-device CA'),
+                      child: OutlinedButton(
+                        key: const Key('settings-mitm-regen-ca-btn'),
+                        onPressed: () => _runMitmAction(
+                          () => widget.coreManager
+                              .regenerateMitmCA(reinstall: false),
+                          successMessage:
+                              'New MITM CA generated — click Install CA to trust it',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: tokens.textSecondary,
+                          side: BorderSide(color: tokens.hairlineStrong, width: 0.75),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: const Size(0, 28),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7)),
+                        ),
+                        child: const TText('Regenerate',
+                            style: TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Scope selector: Targeted vs Broad
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TText(
+                      'Inspection Scope',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: tokens.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      st.scope == 'broad'
+                          ? tl(context,
+                              'Inspect all HTTPS except banking, OS auth, and bypass list.')
+                          : '${tl(context, 'Targeted: decrypt only hosts in your URL rules')} (${st.targetedHosts.length})',
+                      style: TextStyle(fontSize: 10.5, color: tokens.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: tokens.subtlePillBg,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(color: tokens.hairline, width: 0.75),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final sc in const ['targeted', 'broad'])
+                      InkWell(
+                        key: Key('settings-mitm-scope-$sc'),
+                        borderRadius: BorderRadius.circular(5),
+                        onTap: busy || st.scope == sc
+                            ? null
+                            : () => _runMitmAction(
+                                  () => widget.coreManager
+                                      .updateMitmConfig(scope: sc),
+                                ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: st.scope == sc
+                                ? tokens.cardBg
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: st.scope == sc
+                                  ? tokens.hairlineStrong
+                                  : Colors.transparent,
+                              width: 0.75,
+                            ),
+                          ),
+                          child: TText(
+                            sc == 'targeted' ? 'Targeted' : 'Broad',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: st.scope == sc
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                              color: st.scope == sc
+                                  ? tokens.textPrimary
+                                  : tokens.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (st.hasUnanchoredRules && st.scope == 'targeted')
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                tl(context,
+                    'Some URL rules have no host prefix (e.g. /tracking). Switch to Broad scope or include a host so Targeted mode can decrypt them.'),
+                style: TextStyle(fontSize: 10.5, color: tokens.amber),
+              ),
+            ),
+          const SizedBox(height: 6),
+          // Auto-splice + query redaction toggles
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TText(
+                      'Auto-Splice incompatible apps',
+                      style: TextStyle(fontSize: 12, color: tokens.textPrimary),
+                    ),
+                    TText(
+                      'Automatically splices cert-pinned apps per app & host (protects REJECT rules).',
+                      style: TextStyle(fontSize: 10.5, color: tokens.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: st.autoSplice,
+                onChanged: busy
+                    ? null
+                    : (v) => _runMitmAction(
+                          () => widget.coreManager
+                              .updateMitmConfig(autoSplice: v),
+                        ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TText(
+                      'Redact URL queries in logs',
+                      style: TextStyle(fontSize: 12, color: tokens.textPrimary),
+                    ),
+                    TText(
+                      'Masks ?query=… in logs to keep tokens and search terms private.',
+                      style: TextStyle(fontSize: 10.5, color: tokens.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: st.redactUrlQuery,
+                onChanged: busy
+                    ? null
+                    : (v) => _runMitmAction(
+                          () => widget.coreManager
+                              .updateMitmConfig(redactUrlQuery: v),
+                        ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Live Auto-Spliced & Incompatible Apps drawer
+          InkWell(
+            key: const Key('settings-mitm-autosplice-toggle'),
+            borderRadius: BorderRadius.circular(7),
+            onTap: () {
+              final next = !_showAutoSplices;
+              setState(() => _showAutoSplices = next);
+              if (next) _refreshMitmTelemetry();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  LuxIcon(
+                    _showAutoSplices
+                        ? LuxGlyph.chevronDown
+                        : LuxGlyph.chevronRight,
+                    size: 12,
+                    color: tokens.textMuted,
+                  ),
+                  const SizedBox(width: 6),
+                  TText(
+                    'Auto-Spliced & Incompatible Apps',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: tokens.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: (st.activeAutoSpliceCount > 0
+                              ? tokens.amber
+                              : tokens.textMuted)
+                          .withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      '${st.activeAutoSpliceCount}',
+                      style: luxMonoStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: st.activeAutoSpliceCount > 0
+                            ? tokens.amber
+                            : tokens.textMuted,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (_showAutoSplices &&
+                      (_mitmTelemetry?.activeAutoSplices.isNotEmpty ?? false))
+                    TextButton(
+                      onPressed: () async {
+                        await widget.coreManager.clearMitmTelemetry();
+                        await _refreshMitmTelemetry();
+                        final updated = await widget.coreManager.getMitmStatus();
+                        if (mounted) setState(() => _mitmStatus = updated);
+                      },
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const TText('Clear all',
+                          style: TextStyle(fontSize: 11)),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (_showAutoSplices) _mitmTelemetryList(tokens),
+        ],
+      ),
+    );
+  }
+
+  Widget _mitmTelemetryList(LuxTokens tokens) {
+    final items = _mitmTelemetry?.activeAutoSplices ?? const [];
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(18, 4, 4, 2),
+        child: TText(
+          'No apps currently auto-spliced. Incompatible or certificate-pinned apps appear here automatically.',
+          style: TextStyle(fontSize: 10.5, color: tokens.textMuted),
+        ),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      decoration: BoxDecoration(
+        color: tokens.subtlePillBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: tokens.hairline, width: 0.75),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) Container(height: 0.75, color: tokens.hairline),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${items[i].process.isNotEmpty ? '${items[i].process} · ' : ''}${items[i].host}',
+                          style: luxMonoStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: tokens.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${items[i].fails} fails · ${items[i].spliceHits} spliced · ${(items[i].ttlRemainingSeconds / 60).ceil()}m left',
+                          style: luxMonoStyle(
+                              fontSize: 10, color: tokens.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await widget.coreManager
+                          .clearMitmTelemetry(host: items[i].host);
+                      await _refreshMitmTelemetry();
+                      final updated = await widget.coreManager.getMitmStatus();
+                      if (mounted) setState(() => _mitmStatus = updated);
+                    },
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 24),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const TText('Clear', style: TextStyle(fontSize: 10.5)),
+                  ),
+                  TextButton(
+                    onPressed: () => _runMitmAction(
+                      () => widget.coreManager
+                          .updateMitmBypass(items[i].host, action: 'add'),
+                      successMessage: 'Added to MITM permanent bypass',
+                    ),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 24),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child:
+                        const TText('Bypass', style: TextStyle(fontSize: 10.5)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

@@ -65,16 +65,24 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
 
   List<String> _proxyNames = ['DIRECT', 'PROXY', 'REJECT'];
   Map<String, String> _proxyNameToId = {};
+  MitmStatus? _mitmStatus;
+  bool _enablingMitm = false;
 
   static const _ruleTypes = [
     'DOMAIN',
     'DOMAIN-SUFFIX',
     'DOMAIN-KEYWORD',
     'DOMAIN-REGEX',
+    'URL-PREFIX',
+    'URL-KEYWORD',
+    'URL-REGEX',
     'IP-CIDR',
     'PROCESS',
     'DNS-MAP',
   ];
+
+  static bool _isUrlRuleType(String t) =>
+      t == 'URL-PREFIX' || t == 'URL-KEYWORD' || t == 'URL-REGEX';
 
   @override
   void initState() {
@@ -105,11 +113,15 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
       final groups = await widget.coreManager.getRuleGroups();
       final proxyList = await widget.coreManager.getProxyList();
 
-      // Diagnostics are advisory; a failure must not block the list.
+      // Diagnostics & MITM status are advisory; a failure must not block the list.
       Map<String, RuleShadow> shadows = {};
       try {
         final diag = await widget.coreManager.getRuleDiagnostics();
         shadows = diag.shadowById;
+      } catch (_) {}
+      MitmStatus? mitmStatus;
+      try {
+        mitmStatus = await widget.coreManager.getMitmStatus();
       } catch (_) {}
 
       if (!mounted) return;
@@ -117,6 +129,7 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
         _rules = rules;
         _groups = groups;
         _shadows = shadows;
+        _mitmStatus = mitmStatus ?? _mitmStatus;
         _proxyNames = [
           'DIRECT',
           'PROXY',
@@ -406,6 +419,12 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
         return 'example';
       case 'DOMAIN-REGEX':
         return r'^ads\..*\.com$';
+      case 'URL-PREFIX':
+        return 'https://youtube.com/shorts/';
+      case 'URL-KEYWORD':
+        return 'youtube.com/live  (or /tracking)';
+      case 'URL-REGEX':
+        return r'^https://api\.example\.com/v[12]/';
       case 'IP-CIDR':
         return '10.0.0.0/8';
       case 'PROCESS':
@@ -440,11 +459,15 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
 
     final visibleCount = _rules.where(_matchesSearch).length;
     final brokenCount = _rules.where((r) => r.isBroken).length;
+    final hasActiveUrlRules =
+        _rules.any((r) => !r.disabled && !r.isBroken && _isUrlRuleType(r.ruleType));
 
     return Column(
       children: [
         _toolbar(tokens, visibleCount, brokenCount),
         Container(height: 0.75, color: tokens.hairline),
+        if (hasActiveUrlRules && _mitmStatus != null && !_mitmStatus!.active)
+          _mitmNoticeBanner(tokens),
         if (_search.isNotEmpty) _createFromSearchBanner(tokens, visibleCount),
         Expanded(
           child: _rules.isEmpty
@@ -462,6 +485,83 @@ class _RulesPageState extends State<RulesPage> with WindowListener {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _mitmNoticeBanner(LuxTokens tokens) {
+    final st = _mitmStatus!;
+    final needsCA = !st.caTrusted;
+    return Container(
+      key: const Key('rules-mitm-notice-banner'),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: tokens.amber.withValues(alpha: 0.11),
+        border: Border(bottom: BorderSide(color: tokens.hairline, width: 0.75)),
+      ),
+      child: Row(
+        children: [
+          LuxIcon(LuxGlyph.shieldAlert, size: 14, color: tokens.amber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TText(
+              needsCA
+                  ? 'HTTPS URL rules need the local Lux MITM CA trusted to inspect HTTPS paths.'
+                  : 'HTTPS URL rules are paused because HTTPS Inspection (MITM) is turned off.',
+              style: TextStyle(fontSize: 11.5, color: tokens.textPrimary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            height: 26,
+            child: FilledButton(
+              key: const Key('rules-mitm-enable-btn'),
+              onPressed: _enablingMitm
+                  ? null
+                  : () async {
+                      final errPrefix = tl(context, 'HTTPS Inspection error');
+                      setState(() => _enablingMitm = true);
+                      try {
+                        if (needsCA) {
+                          await widget.coreManager.installMitmCA();
+                        }
+                        final updated = await widget.coreManager
+                            .updateMitmConfig(enabled: true);
+                        if (mounted) {
+                          setState(() => _mitmStatus = updated);
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          _error('$errPrefix: $e');
+                        }
+                      } finally {
+                        if (mounted) setState(() => _enablingMitm = false);
+                      }
+                    },
+              style: FilledButton.styleFrom(
+                backgroundColor: tokens.amber,
+                foregroundColor: Colors.black87,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: const Size(0, 26),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6)),
+              ),
+              child: _enablingMitm
+                  ? const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 1.6, color: Colors.black87),
+                    )
+                  : TText(
+                      needsCA ? 'Install CA & Enable' : 'Enable MITM',
+                      style: const TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

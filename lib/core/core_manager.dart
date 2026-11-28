@@ -1584,6 +1584,8 @@ class CoreManager {
     raw['localServer'] = ls;
 
     raw['bypassCidrs'] = setting.bypassCidrs;
+    raw['sendAppIdentity'] = setting.sendAppIdentity;
+    raw['appIdentitySecret'] = setting.appIdentitySecret;
 
     if (setting.blockQuic != null) raw['blockQuic'] = setting.blockQuic;
     if (setting.shouldFindProcess != null) raw['shouldFindProcess'] = setting.shouldFindProcess;
@@ -1679,5 +1681,85 @@ class CoreManager {
   /// Close all active connections.
   Future<void> closeAllConnections() async {
     await dio.delete('$baseHttpUrl/connection');
+  }
+
+  // ── HTTPS Inspection (MITM) API ───────────────────────────────────────────
+
+  Future<MitmStatus> getMitmStatus() async {
+    final res = await dio.get('$baseHttpUrl/mitm/status');
+    return MitmStatus.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<MitmStatus> updateMitmConfig({
+    bool? enabled,
+    String? scope,
+    bool? autoSplice,
+    bool? protectRejectRules,
+    bool? redactUrlQuery,
+    List<String>? bypassDomains,
+  }) async {
+    final payload = <String, dynamic>{
+      if (enabled != null) 'enabled': enabled,
+      if (scope != null) 'scope': scope,
+      if (autoSplice != null) 'autoSplice': autoSplice,
+      if (protectRejectRules != null) 'protectRejectRules': protectRejectRules,
+      if (redactUrlQuery != null) 'redactUrlQuery': redactUrlQuery,
+      if (bypassDomains != null) ...{
+        'bypassDomains': bypassDomains,
+        'hasBypassDomains': true,
+      },
+    };
+    final res = await dio.post('$baseHttpUrl/mitm/config', data: payload);
+    return MitmStatus.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<MitmStatus> installMitmCA() async {
+    final res = await dio.post(
+      '$baseHttpUrl/mitm/ca/install',
+      options: Options(receiveTimeout: const Duration(seconds: 30)),
+    );
+    return MitmStatus.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<MitmStatus> uninstallMitmCA() async {
+    final res = await dio.post(
+      '$baseHttpUrl/mitm/ca/uninstall',
+      options: Options(receiveTimeout: const Duration(seconds: 30)),
+    );
+    return MitmStatus.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<MitmStatus> regenerateMitmCA({bool reinstall = false}) async {
+    final res = await dio.post(
+      '$baseHttpUrl/mitm/ca/regenerate',
+      data: {'reinstall': reinstall},
+      options: Options(receiveTimeout: const Duration(seconds: 30)),
+    );
+    return MitmStatus.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<MitmTelemetry> getMitmTelemetry() async {
+    final res = await dio.get('$baseHttpUrl/mitm/telemetry');
+    return MitmTelemetry.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<int> clearMitmTelemetry({String? host}) async {
+    final q = (host != null && host.isNotEmpty)
+        ? '?host=${Uri.encodeQueryComponent(host)}'
+        : '';
+    final res = await dio.delete('$baseHttpUrl/mitm/telemetry$q');
+    if (res.data is Map && res.data['cleared'] is num) {
+      return (res.data['cleared'] as num).toInt();
+    }
+    return 0;
+  }
+
+  Future<MitmStatus> updateMitmBypass(String host,
+      {String action = 'add'}) async {
+    final res = await dio.post(
+      '$baseHttpUrl/mitm/bypass',
+      data: {'host': host, 'action': action},
+    );
+    return MitmStatus.fromJson(res.data as Map<String, dynamic>);
   }
 }

@@ -70,6 +70,9 @@ class LogEntry {
     if (m.contains('[PROXY_RESET]')) {
       return const LogBadge('TLS DROP', LogBadgeKind.amber);
     }
+    if (m.contains('[AUTO_SPLICE]')) {
+      return const LogBadge('AUTO-SPLICE', LogBadgeKind.amber);
+    }
     if (isProxyDenied) {
       if (m.contains('[HTTP 403]') || m.contains('HTTP 403')) {
         return const LogBadge('403 DENY', LogBadgeKind.danger);
@@ -108,22 +111,46 @@ class LogEntry {
     if (m.contains('[DIAL_FAIL]')) {
       return const LogBadge('DIAL FAIL', LogBadgeKind.danger);
     }
+    if (m.contains('[MITM]')) {
+      return const LogBadge('MITM', LogBadgeKind.cobalt);
+    }
     if (m.contains('[net-switch]')) {
       return const LogBadge('SWITCH', LogBadgeKind.cobalt);
     }
     return null;
   }
 
-  /// Extracts a clean hostname or IP from denial/failure/connection log lines
+  /// Extracts a clean URL (stripped of redacted `?…` suffix) from MITM / HTTP
+  /// log lines so users can create 1-click `URL-PREFIX` rules directly from logs.
+  String? get extractedUrl {
+    final m = RegExp(r'(?:https?|wss?)://[^\s\]]+', caseSensitive: false)
+        .firstMatch(message);
+    if (m == null) return null;
+    var raw = m.group(0)!.trim();
+    if (raw.endsWith('?…')) {
+      raw = raw.substring(0, raw.length - 2);
+    } else if (raw.endsWith('?...')) {
+      raw = raw.substring(0, raw.length - 4);
+    }
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !_isUsableHost(uri.host)) return null;
+    return raw;
+  }
+
+  /// Extracts a clean hostname or IP from denial/failure/MITM log lines
   /// so users can create a 1-click bypass/routing rule directly from the log.
   String? get extractedHost {
-    if (!isProxyDenied && !isRuleBlocked && !message.contains('[DIAL_FAIL]')) {
+    if (!isProxyDenied &&
+        !isRuleBlocked &&
+        !message.contains('[DIAL_FAIL]') &&
+        !message.contains('[MITM]') &&
+        !message.contains('[AUTO_SPLICE]')) {
       return null;
     }
 
-    // 1. Check full http(s):// URL first (plain HTTP listener denials).
+    // 1. Check full http(s):// or ws(s):// URL first.
     final urlMatch =
-        RegExp(r'https?://([^/\s:]+)(?::\d+)?', caseSensitive: false)
+        RegExp(r'(?:https?|wss?)://([^/\s:]+)(?::\d+)?', caseSensitive: false)
             .firstMatch(message);
     if (urlMatch != null) {
       final h = urlMatch.group(1)?.trim() ?? '';
@@ -558,8 +585,32 @@ class _LogPageState extends State<LogPage> {
     );
   }
 
+  Future<void> _createUrlRuleFromLog(
+      String rawUrl, String policy, String policyLabel) async {
+    final raw = 'URL-PREFIX,$rawUrl,$policy';
+    try {
+      await widget.coreManager.addCustomizedRules([raw]);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${tl(context, 'Rule added')}: $rawUrl → $policyLabel'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${tl(context, 'Could not add rule')}: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Widget _quickRuleMenu(BuildContext context, LuxTokens tokens, LogEntry e) {
     final host = e.extractedHost;
+    final fullUrl = e.extractedUrl;
     if (host == null || host.isEmpty) return const SizedBox.shrink();
     return Tooltip(
       message: tl(context, 'Create rule for this host'),
@@ -577,9 +628,38 @@ class _LogPageState extends State<LogPage> {
             );
             return;
           }
+          if (pair.$1 == '__url_reject__' && fullUrl != null) {
+            _createUrlRuleFromLog(fullUrl, 'REJECT', 'REJECT');
+            return;
+          }
+          if (pair.$1 == '__url_direct__' && fullUrl != null) {
+            _createUrlRuleFromLog(fullUrl, 'DIRECT', 'DIRECT');
+            return;
+          }
           _createRuleFromLog(e, pair.$1, pair.$2);
         },
         itemBuilder: (ctx) => [
+          if (fullUrl != null) ...[
+            PopupMenuItem(
+              value: ('__url_reject__', 'REJECT'),
+              height: 34,
+              child: Text(
+                '${tl(ctx, 'Block URL')} · $fullUrl',
+                style: TextStyle(fontSize: 11.5, color: tokens.danger),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            PopupMenuItem(
+              value: ('__url_direct__', 'DIRECT'),
+              height: 34,
+              child: Text(
+                '${tl(ctx, 'Direct URL')} · $fullUrl',
+                style: TextStyle(fontSize: 11.5, color: tokens.emerald),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const PopupMenuDivider(height: 6),
+          ],
           PopupMenuItem(
             value: ('DIRECT', 'DIRECT'),
             height: 34,

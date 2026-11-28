@@ -1087,6 +1087,8 @@ class Setting {
   final String autoModeUrl;
   final bool? sensitiveInfoMode;
   final List<String> bypassCidrs;
+  final bool sendAppIdentity;
+  final String appIdentitySecret;
 
   const Setting({
     this.mode = ProxyMode.mixed,
@@ -1105,6 +1107,8 @@ class Setting {
     this.autoModeUrl = 'https://google.com',
     this.sensitiveInfoMode,
     this.bypassCidrs = const [],
+    this.sendAppIdentity = true,
+    this.appIdentitySecret = '',
   });
 
   Setting.fromJson(Map<String, dynamic> json)
@@ -1127,7 +1131,9 @@ class Setting {
                 ?.map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty)
                 .toList() ??
-            const [];
+            const [],
+        sendAppIdentity = json['sendAppIdentity'] as bool? ?? true,
+        appIdentitySecret = json['appIdentitySecret'] as String? ?? '';
 
   Map<String, dynamic> toJson() => {
         'mode': mode == ProxyMode.tun ? 'tun' : mode == ProxyMode.system ? 'system' : 'mixed',
@@ -1150,6 +1156,8 @@ class Setting {
         },
         if (sensitiveInfoMode != null) 'sensitiveInfoMode': sensitiveInfoMode,
         'bypassCidrs': bypassCidrs,
+        'sendAppIdentity': sendAppIdentity,
+        'appIdentitySecret': appIdentitySecret,
       };
 
   Setting copyWith({
@@ -1169,6 +1177,8 @@ class Setting {
     String? autoModeUrl,
     bool? sensitiveInfoMode,
     List<String>? bypassCidrs,
+    bool? sendAppIdentity,
+    String? appIdentitySecret,
   }) =>
       Setting(
         mode: mode ?? this.mode,
@@ -1187,6 +1197,8 @@ class Setting {
         autoModeUrl: autoModeUrl ?? this.autoModeUrl,
         sensitiveInfoMode: sensitiveInfoMode ?? this.sensitiveInfoMode,
         bypassCidrs: bypassCidrs ?? this.bypassCidrs,
+        sendAppIdentity: sendAppIdentity ?? this.sendAppIdentity,
+        appIdentitySecret: appIdentitySecret ?? this.appIdentitySecret,
       );
 
   static ProxyMode _parseMode(String s) {
@@ -1394,5 +1406,139 @@ class CertCheckResult {
         sha256: json['sha256'] as String? ?? '',
         pem: json['pem'] as String? ?? '',
         error: json['error'] as String? ?? '',
+      );
+}
+
+/// Snapshot of Lux's opt-in local HTTPS Inspection (MITM) engine from GET /mitm/status.
+class MitmStatus {
+  final bool enabled;
+  final bool active;
+  final String scope; // 'targeted' | 'broad'
+  final bool autoSplice;
+  final bool protectRejectRules;
+  final bool redactUrlQuery;
+  final List<String> bypassDomains;
+  final bool caExists;
+  final bool caTrusted;
+  final String caSubject;
+  final String caFingerprint;
+  final String caNotAfter;
+  final List<String> targetedHosts;
+  final List<String> protectedRejectHosts;
+  final bool hasUnanchoredRules;
+  final int activeAutoSpliceCount;
+
+  const MitmStatus({
+    this.enabled = false,
+    this.active = false,
+    this.scope = 'targeted',
+    this.autoSplice = true,
+    this.protectRejectRules = true,
+    this.redactUrlQuery = true,
+    this.bypassDomains = const [],
+    this.caExists = false,
+    this.caTrusted = false,
+    this.caSubject = '',
+    this.caFingerprint = '',
+    this.caNotAfter = '',
+    this.targetedHosts = const [],
+    this.protectedRejectHosts = const [],
+    this.hasUnanchoredRules = false,
+    this.activeAutoSpliceCount = 0,
+  });
+
+  factory MitmStatus.fromJson(Map<String, dynamic> json) => MitmStatus(
+        enabled: json['enabled'] as bool? ?? false,
+        active: json['active'] as bool? ?? false,
+        scope: (json['scope'] as String?) == 'broad' ? 'broad' : 'targeted',
+        autoSplice: json['autoSplice'] as bool? ?? true,
+        protectRejectRules: json['protectRejectRules'] as bool? ?? true,
+        redactUrlQuery: json['redactUrlQuery'] as bool? ?? true,
+        bypassDomains: ((json['bypassDomains'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        caExists: json['caExists'] as bool? ?? false,
+        caTrusted: json['caTrusted'] as bool? ?? false,
+        caSubject: json['caSubject'] as String? ?? '',
+        caFingerprint: json['caFingerprint'] as String? ?? '',
+        caNotAfter: json['caNotAfter'] as String? ?? '',
+        targetedHosts: ((json['targetedHosts'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        protectedRejectHosts:
+            ((json['protectedRejectHosts'] as List?) ?? const [])
+                .map((e) => e.toString())
+                .toList(),
+        hasUnanchoredRules: json['hasUnanchoredRules'] as bool? ?? false,
+        activeAutoSpliceCount:
+            (json['activeAutoSpliceCount'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class MitmActiveAutoSplice {
+  final String host;
+  final String sni;
+  final String process;
+  final int fails;
+  final int spliceHits;
+  final int ttlRemainingSeconds;
+  final String lastError;
+  final String activatedAt;
+  final String expiresAt;
+
+  const MitmActiveAutoSplice({
+    required this.host,
+    this.sni = '',
+    this.process = '',
+    this.fails = 0,
+    this.spliceHits = 0,
+    this.ttlRemainingSeconds = 0,
+    this.lastError = '',
+    this.activatedAt = '',
+    this.expiresAt = '',
+  });
+
+  factory MitmActiveAutoSplice.fromJson(Map<String, dynamic> json) =>
+      MitmActiveAutoSplice(
+        host: json['host'] as String? ?? '',
+        sni: json['sni'] as String? ?? '',
+        process: json['process'] as String? ?? '',
+        fails: (json['fails'] as num?)?.toInt() ?? 0,
+        spliceHits: (json['spliceHits'] as num?)?.toInt() ?? 0,
+        ttlRemainingSeconds:
+            (json['ttlRemainingSeconds'] as num?)?.toInt() ?? 0,
+        lastError: json['lastError'] as String? ?? '',
+        activatedAt: json['activatedAt'] as String? ?? '',
+        expiresAt: json['expiresAt'] as String? ?? '',
+      );
+}
+
+class MitmTelemetry {
+  final bool enabled;
+  final int threshold;
+  final int windowSeconds;
+  final int ttlSeconds;
+  final int protectedCount;
+  final List<MitmActiveAutoSplice> activeAutoSplices;
+
+  const MitmTelemetry({
+    this.enabled = true,
+    this.threshold = 2,
+    this.windowSeconds = 60,
+    this.ttlSeconds = 7200,
+    this.protectedCount = 0,
+    this.activeAutoSplices = const [],
+  });
+
+  factory MitmTelemetry.fromJson(Map<String, dynamic> json) => MitmTelemetry(
+        enabled: json['enabled'] as bool? ?? true,
+        threshold: (json['threshold'] as num?)?.toInt() ?? 2,
+        windowSeconds: (json['windowSeconds'] as num?)?.toInt() ?? 60,
+        ttlSeconds: (json['ttlSeconds'] as num?)?.toInt() ?? 7200,
+        protectedCount: (json['protectedCount'] as num?)?.toInt() ?? 0,
+        activeAutoSplices: ((json['activeAutoSplices'] as List?) ?? const [])
+            .map((e) =>
+                MitmActiveAutoSplice.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
